@@ -1,0 +1,2 @@
+-- Initial schema migration.
+-- Add database objects here as the domain model is introduced.
