@@ -25,6 +25,9 @@ public record GammaMarketDto(
         Boolean active,
         Boolean closed,
 
+        @JsonProperty("acceptingOrders")
+        Boolean acceptingOrders,
+
         @JsonProperty("clobTokenIds")
         JsonNode clobTokenIds,
 
@@ -42,6 +45,14 @@ public record GammaMarketDto(
         return Boolean.TRUE.equals(active) && !Boolean.TRUE.equals(closed);
     }
 
+    public boolean acceptsOrders() {
+        return Boolean.TRUE.equals(acceptingOrders);
+    }
+
+    public boolean endsAfter(Instant instant) {
+        return endDate != null && endDate.isAfter(instant);
+    }
+
     public boolean looksLikeBitcoinMarket() {
         String q = question == null ? "" : question.toLowerCase();
         String s = slug == null ? "" : slug.toLowerCase();
@@ -57,12 +68,14 @@ public record GammaMarketDto(
         String s = slug == null ? "" : slug.toLowerCase();
 
         boolean mentionsBitcoin = q.contains("bitcoin")
-            || q.contains("btc")
-            || s.contains("bitcoin")
-            || s.contains("btc");
+                || q.contains("btc")
+                || s.contains("bitcoin")
+                || s.contains("btc");
 
         boolean mentionsUpDown = q.contains("up or down")
-            || s.contains("up-or-down");
+                || s.contains("up-or-down")
+                || s.contains("updown");
+
         return mentionsBitcoin && mentionsUpDown;
     }
 

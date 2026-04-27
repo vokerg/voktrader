@@ -7,7 +7,9 @@ import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -83,42 +85,47 @@ public class GammaClient {
                 .concatMap(page -> findActiveBitcoinUpDownMarkets(pageSize, page * pageSize));
     }
 
-   public Flux<GammaMarketDto> searchBitcoinUpDownMarkets() {
-    return gammaWebClient.get()
-            .uri(uriBuilder -> uriBuilder
-                    .path("/public-search")
-                    .queryParam("q", "bitcoin up or down")
-                    .queryParam("events_status", "active")
-                    .queryParam("limit_per_type", 10)
-                    .queryParam("page", 1)
-                    .queryParam("keep_closed_markets", 0)
-                    .queryParam("search_profiles", false)
-                    .queryParam("cache", false)
-                    .build())
-            .retrieve()
-            .bodyToMono(String.class)
-            .doOnSubscribe(s -> log.info("Searching public-search for bitcoin up or down"))
-            .flatMapMany(rawJson -> {
-                try {
-                    JsonNode root = objectMapper.readTree(rawJson);
-                    return extractMarketsFromPublicSearch(root);
-                } catch (Exception e) {
-                    log.error("Failed to parse public-search response: {}", rawJson, e);
-                    return Flux.empty();
-                }
-            })
-            .filter(GammaMarketDto::isActiveOpenMarket)
-            .filter(market -> market.tokenIds(objectMapper).size() >= 2)
-            .doOnNext(market -> log.info(
-                    "Search found market: id={} slug={} question={} endDate={} tokens={}",
-                    market.id(),
-                    market.slug(),
-                    market.question(),
-                    market.endDate(),
-                    market.tokenIds(objectMapper)
-            ))
-            .doOnError(e -> log.error("Failed to search bitcoin up/down markets", e));
-}
+    public Flux<GammaMarketDto> searchBitcoinUpDownMarkets() {
+        Instant minEndTime = Instant.now().plusSeconds(60);
+
+        return gammaWebClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/public-search")
+                        .queryParam("q", "bitcoin up or down")
+                        .queryParam("events_status", "active")
+                        .queryParam("limit_per_type", 10)
+                        .queryParam("page", 1)
+                        .queryParam("keep_closed_markets", 0)
+                        .queryParam("search_profiles", false)
+                        .queryParam("cache", false)
+                        .build())
+                .retrieve()
+                .bodyToMono(String.class)
+                .doOnSubscribe(s -> log.info("Searching public-search for bitcoin up or down"))
+                .flatMapMany(rawJson -> {
+                    try {
+                        JsonNode root = objectMapper.readTree(rawJson);
+                        return extractMarketsFromPublicSearch(root);
+                    } catch (Exception e) {
+                        log.error("Failed to parse public-search response: {}", rawJson, e);
+                        return Flux.empty();
+                    }
+                })
+                .filter(GammaMarketDto::isActiveOpenMarket)
+                .filter(GammaMarketDto::acceptsOrders)
+                .filter(market -> market.endsAfter(minEndTime))
+                .filter(market -> market.tokenIds(objectMapper).size() >= 2)
+                .sort(Comparator.comparing(GammaMarketDto::endDate))
+                .doOnNext(market -> log.info(
+                        "Search found future market: id={} slug={} question={} endDate={} acceptingOrders={} tokens={}",
+                        market.id(),
+                        market.slug(),
+                        market.question(),
+                        market.endDate(),
+                        market.acceptingOrders(),
+                        market.tokenIds(objectMapper)))
+                .doOnError(e -> log.error("Failed to search bitcoin up/down markets", e));
+    }
 
     private Flux<GammaMarketDto> extractMarketsFromPublicSearch(JsonNode root) {
         List<GammaMarketDto> result = new ArrayList<>();
@@ -148,13 +155,14 @@ public class GammaClient {
                 GammaMarketDto market = objectMapper.convertValue(marketNode, GammaMarketDto.class);
 
                 log.info(
-                        "Nested market candidate: question={} slug={} active={} closed={} acceptingOrders={} clobTokenIds={}",
+                        "Nested market candidate: question={} slug={} active={} closed={} acceptingOrders={} endDate={} tokens={}",
                         market.question(),
                         market.slug(),
                         market.active(),
                         market.closed(),
-                        marketNode.path("acceptingOrders").asText(null),
-                        marketNode.path("clobTokenIds"));
+                        market.acceptingOrders(),
+                        market.endDate(),
+                        market.tokenIds(objectMapper));
 
                 result.add(market);
             }
