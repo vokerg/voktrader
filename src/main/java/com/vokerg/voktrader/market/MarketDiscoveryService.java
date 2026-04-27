@@ -23,10 +23,10 @@ public class MarketDiscoveryService {
     }
 
     public List<MarketEntity> discoverActiveBtcMarkets() {
-        return gammaClient.findActiveBtcMarkets()
-                .stream()
+        return gammaClient.findActiveBitcoinMarketsFirstPages(3, 100)
                 .map(mapper::toMarketEntity)
                 .map(marketRepository::save)
-                .toList();
+                .collectList()
+                .block();
     }
 }

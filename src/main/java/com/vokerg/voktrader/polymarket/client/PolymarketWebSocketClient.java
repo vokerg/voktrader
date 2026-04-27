@@ -143,4 +143,9 @@ public class PolymarketWebSocketClient {
             boolean customFeatureEnabled
     ) {
     }
+
+    public void subscribeToMarket(String polymarketMarketId) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'subscribeToMarket'");
+    }
 }
