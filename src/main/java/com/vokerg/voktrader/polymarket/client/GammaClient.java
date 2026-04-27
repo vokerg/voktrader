@@ -22,6 +22,10 @@ import reactor.core.publisher.Flux;
 @RequiredArgsConstructor
 public class GammaClient {
 
+    private static final String HIGHLIGHT = "\u001B[1;36m";
+    private static final String RESET = "\u001B[0m";
+    private static final String FOUND_MARKET_MARKER = "\uD83D\uDFE2";
+
     @Qualifier("gammaWebClient")
     private final WebClient gammaWebClient;
 
@@ -50,12 +54,7 @@ public class GammaClient {
                     var tokenIds = market.tokenIds(objectMapper);
                     return tokenIds.size() >= 2;
                 })
-                .doOnNext(market -> log.info(
-                        "Found BTC-ish market: id={} slug={} question={} tokens={}",
-                        market.id(),
-                        market.slug(),
-                        market.question(),
-                        market.tokenIds(objectMapper)));
+                .doOnNext(market -> logFoundMarket("BTC-ish market", market));
     }
 
     public Flux<GammaMarketDto> findActiveBitcoinMarketsFirstPages(int pages, int pageSize) {
@@ -71,13 +70,7 @@ public class GammaClient {
                     var tokenIds = market.tokenIds(objectMapper);
                     return tokenIds.size() >= 2;
                 })
-                .doOnNext(market -> log.info(
-                        "Found BTC Up/Down market: id={} slug={} question={} endDate={} tokens={}",
-                        market.id(),
-                        market.slug(),
-                        market.question(),
-                        market.endDate(),
-                        market.tokenIds(objectMapper)));
+                .doOnNext(market -> logFoundMarket("BTC Up/Down market", market));
     }
 
     public Flux<GammaMarketDto> findActiveBitcoinUpDownMarketsFirstPages(int pages, int pageSize) {
@@ -116,15 +109,23 @@ public class GammaClient {
                 .filter(market -> market.endsAfter(minEndTime))
                 .filter(market -> market.tokenIds(objectMapper).size() >= 2)
                 .sort(Comparator.comparing(GammaMarketDto::endDate))
-                .doOnNext(market -> log.info(
-                        "Search found future market: id={} slug={} question={} endDate={} acceptingOrders={} tokens={}",
-                        market.id(),
-                        market.slug(),
-                        market.question(),
-                        market.endDate(),
-                        market.acceptingOrders(),
-                        market.tokenIds(objectMapper)))
+                .doOnNext(market -> logFoundMarket("future search market", market))
                 .doOnError(e -> log.error("Failed to search bitcoin up/down markets", e));
+    }
+
+    private void logFoundMarket(String label, GammaMarketDto market) {
+        log.info(
+                "{}{} FOUND {}: id={} slug={} question={} endDate={} acceptingOrders={} tokens={}{}",
+                HIGHLIGHT,
+                FOUND_MARKET_MARKER,
+                label,
+                market.id(),
+                market.slug(),
+                market.question(),
+                market.endDate(),
+                market.acceptingOrders(),
+                market.tokenIds(objectMapper),
+                RESET);
     }
 
     private Flux<GammaMarketDto> extractMarketsFromPublicSearch(JsonNode root) {
