@@ -16,7 +16,7 @@ import java.util.Map;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class PolymarketSmokeRunner implements CommandLineRunner {
+public class PolymarketSmokeRunner {// implements CommandLineRunner {
 
     private final GammaClient gammaClient;
     private final ClobClient clobClient;
@@ -25,7 +25,7 @@ public class PolymarketSmokeRunner implements CommandLineRunner {
 
     private Disposable wsSubscription;
 
-    @Override
+    //@Override
     public void run(String... args) {
         var market = gammaClient.searchBitcoinUpDownMarkets()
                 .next()
