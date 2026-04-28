@@ -2,6 +2,7 @@ package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.config.MarketSelectionProperties;
 import com.vokerg.voktrader.market.TrackedMarketState;
+import com.vokerg.voktrader.paper.FakeSignalService;
 import com.vokerg.voktrader.pricing.LatestPriceState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,19 +20,23 @@ public class SimpleSignalLogger {
 
     private static final BigDecimal MAX_ASK = new BigDecimal("0.25");
     private static final BigDecimal MAX_SPREAD = new BigDecimal("0.03");
+    private static final BigDecimal FAKE_SIZE_USD = new BigDecimal("1.00");
+    private static final String RULE_NAME = "simple-down-cheap-tight-spread";
 
     private final LatestPriceState latestPriceState;
     private final MarketSelectionProperties marketSelectionProperties;
     private final TrackedMarketState trackedMarketState;
+    private final FakeSignalService fakeSignalService;
 
     private boolean alreadyLoggedDownSignal = false;
 
     @Scheduled(fixedRate = 1000)
     public void checkForSignal() {
-        if (!isInsideTradingWindow()) {
+        if (alreadyLoggedDownSignal) {
             return;
         }
-        if (alreadyLoggedDownSignal) {
+
+        if (!isInsideTradingWindow()) {
             return;
         }
 
@@ -48,19 +53,23 @@ public class SimpleSignalLogger {
             return;
         }
 
-        alreadyLoggedDownSignal = true;
+        var market = trackedMarketState.currentMarket().orElse(null);
 
-        Duration remaining = trackedMarketState.currentEndDate()
-                .map(endDate -> Duration.between(Instant.now(), endDate))
-                .orElse(null);
+        if (market == null) {
+            return;
+        }
 
-        log.info(
-                "FAKE SIGNAL: BUY outcome={} tokenId={} entryAsk={} spread={} fakeSizeUsd=1.00 remaining={}",
-                down.outcome(),
-                down.tokenId(),
-                down.ask(),
-                down.spread(),
-                remaining);
+        var created = fakeSignalService.createBuySignal(
+                market,
+                down,
+                FAKE_SIZE_USD,
+                RULE_NAME,
+                "Down ask <= " + MAX_ASK + " and spread <= " + MAX_SPREAD
+        );
+
+        if (created.isPresent()) {
+            alreadyLoggedDownSignal = true;
+        }
     }
 
     private boolean isInsideTradingWindow() {

@@ -15,7 +15,10 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 @Slf4j
 @Component
@@ -171,4 +174,28 @@ public class GammaClient {
 
         return Flux.fromIterable(result);
     }
+
+    public Mono<GammaMarketDto> getMarketBySlug(String slug) {
+    log.info("Fetching market by slug: {}", slug);
+
+    return gammaWebClient.get()
+            .uri("/markets/slug/{slug}", slug)
+            .retrieve()
+            .bodyToMono(GammaMarketDto.class)
+            .doOnNext(market -> log.info(
+                    "Slug market candidate: id={} slug={} question={} active={} closed={} acceptingOrders={} endDate={} tokens={}",
+                    market.id(),
+                    market.slug(),
+                    market.question(),
+                    market.active(),
+                    market.closed(),
+                    market.acceptingOrders(),
+                    market.endDate(),
+                    market.clobTokenIds()
+            ))
+            .onErrorResume(WebClientResponseException.NotFound.class, e -> {
+                log.debug("No market found for slug={}", slug);
+                return Mono.empty();
+            });
+}
 }

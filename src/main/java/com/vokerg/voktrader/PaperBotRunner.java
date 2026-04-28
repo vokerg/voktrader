@@ -8,15 +8,19 @@ import com.vokerg.voktrader.polymarket.client.PolymarketWebSocketClient;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.polymarket.dto.MarketWsMessageDto;
 import com.vokerg.voktrader.pricing.LatestPriceState;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 import reactor.core.Disposable;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,11 +44,7 @@ public class PaperBotRunner implements CommandLineRunner {
     public void run(String... args) {
         log.info("PaperBotRunner started");
 
-        GammaMarketDto market = gammaClient.searchBitcoinUpDownMarkets()
-                .filter(this::matchesConfiguredInterval)
-                .filter(this::hasEnoughTimeRemainingForSetup)
-                .next()
-                .block();
+        GammaMarketDto market = findConfiguredMarket().block();
 
         if (market == null) {
             log.warn(
@@ -71,11 +71,17 @@ public class PaperBotRunner implements CommandLineRunner {
 
         Map<String, String> outcomeByTokenId = buildOutcomeMap(tokenIds, outcomes);
 
+        Duration remaining = market.endDate() == null
+                ? null
+                : Duration.between(Instant.now(), market.endDate());
+
         log.info(
-                "Tracking market id={} question={} endDate={} tokenOutcomeMap={}",
+                "Tracking market id={} slug={} question={} endDate={} remaining={} tokenOutcomeMap={}",
                 market.id(),
+                market.slug(),
                 market.question(),
                 market.endDate(),
+                remaining,
                 outcomeByTokenId);
 
         seedStateFromRestOrderBooks(outcomeByTokenId);
@@ -87,10 +93,84 @@ public class PaperBotRunner implements CommandLineRunner {
         log.info("PaperBotRunner subscribed to market data");
     }
 
+    private Mono<GammaMarketDto> findConfiguredMarket() {
+        String interval = marketSelectionProperties.intervalOrDefault();
+
+        return Flux.fromIterable(candidateSlugs(interval))
+                .concatMap(slug -> gammaClient.getMarketBySlug(slug)
+                        .onErrorResume(error -> {
+                            log.debug("Failed slug lookup for slug={}", slug, error);
+                            return Mono.empty();
+                        }))
+                .filter(GammaMarketDto::isActiveOpenMarket)
+                .filter(GammaMarketDto::acceptsOrders)
+                .filter(market -> market.endsAfter(Instant.now()))
+                .filter(this::matchesConfiguredInterval)
+                .filter(this::hasEnoughTimeRemainingForSetup)
+                .next()
+                .switchIfEmpty(Mono.defer(this::findConfiguredMarketFromSearchFallback));
+    }
+
+    private Mono<GammaMarketDto> findConfiguredMarketFromSearchFallback() {
+        String searchQuery = searchQueryForConfiguredInterval();
+
+        log.warn(
+                "No suitable market found by deterministic slug lookup. Falling back to public-search query={}",
+                searchQuery);
+
+        return gammaClient.searchBitcoinUpDownMarkets()
+                .filter(this::matchesConfiguredInterval)
+                .filter(this::hasEnoughTimeRemainingForSetup)
+                .next();
+    }
+
+    private List<String> candidateSlugs(String interval) {
+        long stepSeconds = intervalStepSeconds(interval);
+
+        long nowEpoch = Instant.now().getEpochSecond();
+        long currentStartEpoch = (nowEpoch / stepSeconds) * stepSeconds;
+
+        List<String> slugs = new ArrayList<>();
+
+        /*
+         * Current window plus next few windows.
+         *
+         * Current matters when the market is already live.
+         * Future windows matter when the current market is too close to expiry.
+         */
+        for (int i = 0; i <= 6; i++) {
+            long startEpoch = currentStartEpoch + (i * stepSeconds);
+            slugs.add("btc-updown-" + interval + "-" + startEpoch);
+        }
+
+        log.info("Candidate slugs for interval={}: {}", interval, slugs);
+
+        return slugs;
+    }
+
+    private long intervalStepSeconds(String interval) {
+        return switch (interval) {
+            case "5m" -> 5 * 60L;
+            case "15m" -> 15 * 60L;
+            case "4h" -> 4 * 60 * 60L;
+            default -> throw new IllegalArgumentException("Unsupported interval: " + interval);
+        };
+    }
+
+    private String searchQueryForConfiguredInterval() {
+        return switch (marketSelectionProperties.intervalOrDefault()) {
+            case "15m" -> "btc updown 15m";
+            case "5m" -> "btc updown 5m";
+            case "4h" -> "btc updown 4h";
+            default -> "bitcoin up or down";
+        };
+    }
+
     private Map<String, String> buildOutcomeMap(List<String> tokenIds, List<String> outcomes) {
         Map<String, String> result = new HashMap<>();
 
         int count = Math.min(tokenIds.size(), outcomes.size());
+
         for (int i = 0; i < count; i++) {
             result.put(tokenIds.get(i), outcomes.get(i));
         }
@@ -102,12 +182,8 @@ public class PaperBotRunner implements CommandLineRunner {
         String interval = marketSelectionProperties.intervalOrDefault();
 
         String slug = market.slug() == null ? "" : market.slug().toLowerCase();
-        String question = market.question() == null ? "" : market.question().toLowerCase();
 
-        boolean matchesSlug = slug.contains("-" + interval + "-");
-        boolean matchesQuestion = question.contains(interval);
-
-        boolean matches = matchesSlug || matchesQuestion;
+        boolean matches = slug.contains("updown-" + interval + "-");
 
         if (!matches) {
             log.debug(
@@ -131,8 +207,9 @@ public class PaperBotRunner implements CommandLineRunner {
 
         if (!hasEnoughTime) {
             log.info(
-                    "Skipping market too close to expiry: question={} remaining={} minRemaining={}",
+                    "Skipping market too close to expiry: question={} slug={} remaining={} minRemaining={}",
                     market.question(),
+                    market.slug(),
                     remaining,
                     marketSelectionProperties.minRemaining());
         }
@@ -206,6 +283,14 @@ public class PaperBotRunner implements CommandLineRunner {
                     "Market resolved winningAssetId={} winningOutcome={}",
                     message.winningAssetId(),
                     message.winningOutcome());
+        }
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        if (webSocketSubscription != null && !webSocketSubscription.isDisposed()) {
+            webSocketSubscription.dispose();
+            log.info("PaperBotRunner WebSocket subscription disposed");
         }
     }
 }
