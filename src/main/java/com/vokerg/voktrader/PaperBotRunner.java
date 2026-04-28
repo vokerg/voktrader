@@ -2,6 +2,7 @@ package com.vokerg.voktrader;
 
 import com.vokerg.voktrader.config.MarketSelectionProperties;
 import com.vokerg.voktrader.market.TrackedMarketState;
+import com.vokerg.voktrader.paper.FakeSignalService;
 import com.vokerg.voktrader.polymarket.client.ClobClient;
 import com.vokerg.voktrader.polymarket.client.GammaClient;
 import com.vokerg.voktrader.polymarket.client.PolymarketWebSocketClient;
@@ -37,6 +38,7 @@ public class PaperBotRunner implements CommandLineRunner {
     private final LatestPriceState latestPriceState;
     private final MarketSelectionProperties marketSelectionProperties;
     private final TrackedMarketState trackedMarketState;
+    private final FakeSignalService fakeSignalService;
 
     private Disposable webSocketSubscription;
 
@@ -283,6 +285,14 @@ public class PaperBotRunner implements CommandLineRunner {
                     "Market resolved winningAssetId={} winningOutcome={}",
                     message.winningAssetId(),
                     message.winningOutcome());
+
+            var market = trackedMarketState.currentMarket().orElse(null);
+
+            if (market != null && message.winningOutcome() != null) {
+                this.fakeSignalService.resolveMarket(
+                        market.id(),
+                        message.winningOutcome());
+            }
         }
     }
 

@@ -13,6 +13,11 @@ public record FakeSignal(
         BigDecimal fakeShares,
         String ruleName,
         String reason,
-        Instant createdAt
+        Instant createdAt,
+        Instant marketEndDate,
+        FakeSignalStatus status,
+        Instant resolvedAt,
+        String winningOutcome,
+        BigDecimal fakePnl
 ) {
 }
