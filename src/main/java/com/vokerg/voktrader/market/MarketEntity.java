@@ -45,6 +45,14 @@ public class MarketEntity {
 
     private boolean acceptingOrders;
 
+    private boolean resolved;
+
+    private String winningOutcome;
+
+    private String winningAssetId;
+
+    private Instant resolvedAt;
+
     private Instant firstSeenAt;
 
     private Instant lastSeenAt;
@@ -115,6 +123,38 @@ public class MarketEntity {
 
     public void setAcceptingOrders(boolean acceptingOrders) {
         this.acceptingOrders = acceptingOrders;
+    }
+
+    public boolean isResolved() {
+        return resolved;
+    }
+
+    public void setResolved(boolean resolved) {
+        this.resolved = resolved;
+    }
+
+    public String getWinningOutcome() {
+        return winningOutcome;
+    }
+
+    public void setWinningOutcome(String winningOutcome) {
+        this.winningOutcome = winningOutcome;
+    }
+
+    public String getWinningAssetId() {
+        return winningAssetId;
+    }
+
+    public void setWinningAssetId(String winningAssetId) {
+        this.winningAssetId = winningAssetId;
+    }
+
+    public Instant getResolvedAt() {
+        return resolvedAt;
+    }
+
+    public void setResolvedAt(Instant resolvedAt) {
+        this.resolvedAt = resolvedAt;
     }
 
     public Instant getFirstSeenAt() {

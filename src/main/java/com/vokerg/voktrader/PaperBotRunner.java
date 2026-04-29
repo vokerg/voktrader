@@ -436,6 +436,11 @@ public class PaperBotRunner implements CommandLineRunner {
 
         trackedMarketState.markResolved(message.winningOutcome());
 
+        marketPersistenceService.markResolved(
+                market.id(),
+                message.winningOutcome(),
+                message.winningAssetId());
+
         fakeSignalService.resolveMarket(
                 market.id(),
                 message.winningOutcome());

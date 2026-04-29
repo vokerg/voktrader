@@ -36,4 +36,36 @@ public class MarketPersistenceService {
 
         return marketRepository.save(entity);
     }
+
+    @Transactional
+    public void markResolved(
+            String polymarketMarketId,
+            String winningOutcome,
+            String winningAssetId
+    ) {
+        if (polymarketMarketId == null || polymarketMarketId.isBlank()) {
+            return;
+        }
+
+        MarketEntity entity = marketRepository.findByPolymarketMarketId(polymarketMarketId)
+                .orElseGet(() -> {
+                    MarketEntity created = new MarketEntity();
+                    created.setPolymarketMarketId(polymarketMarketId);
+                    created.setFirstSeenAt(Instant.now());
+                    return created;
+                });
+
+        Instant now = Instant.now();
+
+        entity.setResolved(true);
+        entity.setClosed(true);
+        entity.setActive(false);
+        entity.setAcceptingOrders(false);
+        entity.setWinningOutcome(winningOutcome);
+        entity.setWinningAssetId(winningAssetId);
+        entity.setResolvedAt(now);
+        entity.setLastSeenAt(now);
+
+        marketRepository.save(entity);
+    }
 }
