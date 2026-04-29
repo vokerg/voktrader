@@ -104,6 +104,60 @@ public class FakeSignalService {
     }
 
     @Transactional
+    public Optional<FakeSignalEntity> sellOpenSignal(
+            Long signalId,
+            OutcomePrice outcomePrice,
+            String reason
+    ) {
+        if (signalId == null || outcomePrice == null) {
+            return Optional.empty();
+        }
+
+        BigDecimal exitPrice = outcomePrice.bid();
+
+        if (exitPrice == null || exitPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            return Optional.empty();
+        }
+
+        FakeSignalEntity signal = fakeSignalRepository
+                .findByIdAndStatus(signalId, FakeSignalStatus.OPEN)
+                .orElse(null);
+
+        if (signal == null) {
+            return Optional.empty();
+        }
+
+        if (!signal.getTokenId().equals(outcomePrice.tokenId())) {
+            log.warn(
+                    "Refusing to sell fake signal id={} because token mismatch: signalToken={} priceToken={}",
+                    signal.getId(),
+                    signal.getTokenId(),
+                    outcomePrice.tokenId()
+            );
+            return Optional.empty();
+        }
+
+        signal.sell(exitPrice, reason, Instant.now());
+
+        log.info(
+                "FAKE SIGNAL SOLD: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} exitPrice={} fakeSizeUsd={} fakeShares={} fakePnl={} reason={}",
+                signal.getId(),
+                signal.getRuleName(),
+                signal.getMarketId(),
+                signal.getOutcome(),
+                signal.getTokenId(),
+                signal.getEntryPrice(),
+                signal.getExitPrice(),
+                signal.getFakeSizeUsd(),
+                signal.getFakeShares(),
+                signal.getFakePnl(),
+                signal.getExitReason()
+        );
+
+        return Optional.of(signal);
+    }
+
+    @Transactional
     public void resolveMarket(String marketId, String winningOutcome) {
         if (marketId == null || winningOutcome == null) {
             return;
@@ -145,5 +199,17 @@ public class FakeSignalService {
     @Transactional(readOnly = true)
     public List<FakeSignalEntity> openSignals() {
         return fakeSignalRepository.findByStatus(FakeSignalStatus.OPEN);
+    }
+
+    @Transactional(readOnly = true)
+    public List<FakeSignalEntity> openSignals(String ruleName) {
+        if (ruleName == null || ruleName.isBlank()) {
+            return openSignals();
+        }
+
+        return fakeSignalRepository.findByStatusAndRuleName(
+                FakeSignalStatus.OPEN,
+                ruleName
+        );
     }
 }

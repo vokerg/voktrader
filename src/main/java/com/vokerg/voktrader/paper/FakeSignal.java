@@ -18,6 +18,9 @@ public record FakeSignal(
         FakeSignalStatus status,
         Instant resolvedAt,
         String winningOutcome,
-        BigDecimal fakePnl
+        BigDecimal fakePnl,
+        BigDecimal exitPrice,
+        BigDecimal exitValueUsd,
+        String exitReason
 ) {
 }

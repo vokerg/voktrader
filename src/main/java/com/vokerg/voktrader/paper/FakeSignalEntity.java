@@ -1,6 +1,15 @@
 package com.vokerg.voktrader.paper;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 
@@ -69,6 +78,15 @@ public class FakeSignalEntity {
     @Column(name = "fake_pnl", precision = 19, scale = 8)
     private BigDecimal fakePnl;
 
+    @Column(name = "exit_price", precision = 19, scale = 8)
+    private BigDecimal exitPrice;
+
+    @Column(name = "exit_value_usd", precision = 19, scale = 8)
+    private BigDecimal exitValueUsd;
+
+    @Column(name = "exit_reason", length = 1000)
+    private String exitReason;
+
     protected FakeSignalEntity() {
     }
 
@@ -103,7 +121,24 @@ public class FakeSignalEntity {
         return entity;
     }
 
+    public void sell(BigDecimal exitPrice, String exitReason, Instant soldAt) {
+        if (status != FakeSignalStatus.OPEN) {
+            throw new IllegalStateException("Only OPEN fake signals can be sold");
+        }
+
+        this.exitPrice = exitPrice;
+        this.exitValueUsd = fakeShares.multiply(exitPrice);
+        this.fakePnl = exitValueUsd.subtract(fakeSizeUsd);
+        this.exitReason = exitReason;
+        this.resolvedAt = soldAt;
+        this.status = FakeSignalStatus.SOLD;
+    }
+
     public void resolve(String winningOutcome, Instant resolvedAt) {
+        if (status != FakeSignalStatus.OPEN) {
+            throw new IllegalStateException("Only OPEN fake signals can be resolved");
+        }
+
         this.winningOutcome = winningOutcome;
         this.resolvedAt = resolvedAt;
 
@@ -184,5 +219,17 @@ public class FakeSignalEntity {
 
     public BigDecimal getFakePnl() {
         return fakePnl;
+    }
+
+    public BigDecimal getExitPrice() {
+        return exitPrice;
+    }
+
+    public BigDecimal getExitValueUsd() {
+        return exitValueUsd;
+    }
+
+    public String getExitReason() {
+        return exitReason;
     }
 }
