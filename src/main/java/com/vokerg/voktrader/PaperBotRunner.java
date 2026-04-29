@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
@@ -47,6 +48,7 @@ public class PaperBotRunner implements CommandLineRunner {
     private final MarketResolutionService marketResolutionService;
 
     private final AtomicBoolean rolloverInProgress = new AtomicBoolean(false);
+    private final Map<String, Disposable> resolutionOnlySubscriptions = new ConcurrentHashMap<>();
 
     private Disposable webSocketSubscription;
 
@@ -202,7 +204,7 @@ public class PaperBotRunner implements CommandLineRunner {
 
         GammaMarketDto oldMarket = trackedMarketState.currentMarket().orElse(null);
 
-        disposeWebSocketSubscription();
+        keepCurrentWebSocketForResolution(marketId);
         marketPersistenceService.markStopped(marketId);
         trackedMarketState.clearIfCurrent(marketId);
         latestPriceState.clear();
@@ -525,6 +527,7 @@ public class PaperBotRunner implements CommandLineRunner {
                     LogColors.TRADE,
                     resolvedMarketId,
                     LogColors.RESET);
+            disposeResolutionOnlySubscription(resolvedMarketId);
             return;
         }
 
@@ -553,8 +556,39 @@ public class PaperBotRunner implements CommandLineRunner {
         webSocketSubscription = null;
     }
 
+    private void keepCurrentWebSocketForResolution(String marketId) {
+        if (webSocketSubscription == null || webSocketSubscription.isDisposed()) {
+            webSocketSubscription = null;
+            return;
+        }
+
+        resolutionOnlySubscriptions.put(marketId, webSocketSubscription);
+        webSocketSubscription = null;
+
+        log.info(
+                "{}Keeping expired market WebSocket alive for resolution only: marketId={}{}",
+                LogColors.MARKET,
+                marketId,
+                LogColors.RESET);
+    }
+
+    private void disposeResolutionOnlySubscription(String marketId) {
+        Disposable subscription = resolutionOnlySubscriptions.remove(marketId);
+        if (subscription != null && !subscription.isDisposed()) {
+            subscription.dispose();
+            log.info("Disposed resolution-only WebSocket subscription for marketId={}", marketId);
+        }
+    }
+
     @PreDestroy
     public void shutdown() {
         disposeWebSocketSubscription();
+        resolutionOnlySubscriptions.forEach((marketId, subscription) -> {
+            if (subscription != null && !subscription.isDisposed()) {
+                subscription.dispose();
+                log.info("Disposed resolution-only WebSocket subscription for marketId={}", marketId);
+            }
+        });
+        resolutionOnlySubscriptions.clear();
     }
 }
