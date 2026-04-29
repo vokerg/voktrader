@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.pricing;
 
+import com.vokerg.voktrader.common.LogColors;
 import com.vokerg.voktrader.market.TrackedMarketState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +42,8 @@ public class PriceSnapshotLogger {
         String remaining = formatRemaining(remainingDuration);
 
         log.info(
-                "SNAPSHOT marketId={} remaining={} | Up {}/{} spread={} | Down {}/{} spread={}",
+                "{}SNAPSHOT marketId={} remaining={} | Up {}/{} spread={} | Down {}/{} spread={}{}",
+                LogColors.SNAPSHOT,
                 marketId,
                 remaining,
                 up.bid(),
@@ -49,7 +51,8 @@ public class PriceSnapshotLogger {
                 up.spread(),
                 down.bid(),
                 down.ask(),
-                down.spread()
+                down.spread(),
+                LogColors.RESET
         );
 
         priceSnapshotService.saveSnapshot(marketId, remainingDuration, up, down, capturedAt);

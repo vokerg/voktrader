@@ -1,5 +1,6 @@
 package com.vokerg.voktrader;
 
+import com.vokerg.voktrader.common.LogColors;
 import com.vokerg.voktrader.config.MarketSelectionProperties;
 import com.vokerg.voktrader.market.MarketPersistenceService;
 import com.vokerg.voktrader.market.TrackedMarketState;
@@ -83,7 +84,7 @@ public class PaperBotRunner implements CommandLineRunner {
             return;
         }
 
-        log.info("Looking for next market, reason={}", reason);
+        log.info("{}Looking for next market, reason={}{}", LogColors.MARKET, reason, LogColors.RESET);
 
         AtomicBoolean foundMarket = new AtomicBoolean(false);
 
@@ -105,14 +106,20 @@ public class PaperBotRunner implements CommandLineRunner {
                 .doFinally(signalType -> rolloverInProgress.set(false))
                 .subscribe(
                         market -> log.info(
-                                "Rollover complete: now tracking marketId={} slug={} question={}",
+                                "{}Rollover complete: now tracking marketId={} slug={} question={}{}",
+                                LogColors.MARKET,
                                 market.id(),
                                 market.slug(),
-                                market.question()),
+                                market.question(),
+                                LogColors.RESET),
                         error -> log.error("Rollover subscription failed", error),
                         () -> {
                             if (!foundMarket.get()) {
-                                log.warn("No next market found during rollover, reason={}", reason);
+                                log.warn(
+                                        "{}No next market found during rollover, reason={}{}",
+                                        LogColors.MARKET,
+                                        reason,
+                                        LogColors.RESET);
                             }
                         });
     }
@@ -152,17 +159,21 @@ public class PaperBotRunner implements CommandLineRunner {
                 : Duration.between(Instant.now(), market.endDate());
 
         log.info(
-                "Tracking market id={} slug={} question={} endDate={} remaining={} tokenOutcomeMap={}",
+                "{}Tracking market id={} slug={} question={} endDate={} remaining={} tokenOutcomeMap={}{}",
+                LogColors.MARKET,
                 market.id(),
                 market.slug(),
                 market.question(),
                 market.endDate(),
                 remaining,
-                outcomeByTokenId);
+                outcomeByTokenId,
+                LogColors.RESET);
         log.info(
-                "Persisted tracked market dbId={} polymarketMarketId={}",
+                "{}Persisted tracked market dbId={} polymarketMarketId={}{}",
+                LogColors.MARKET,
                 savedMarket.getId(),
-                savedMarket.getPolymarketMarketId());
+                savedMarket.getPolymarketMarketId(),
+                LogColors.RESET);
 
         seedStateFromRestOrderBooks(outcomeByTokenId);
 
@@ -171,9 +182,11 @@ public class PaperBotRunner implements CommandLineRunner {
                 message -> handleMarketMessage(message, outcomeByTokenId));
 
         log.info(
-                "PaperBotRunner subscribed to market data for marketId={} slug={}",
+                "{}PaperBotRunner subscribed to market data for marketId={} slug={}{}",
+                LogColors.MARKET,
                 market.id(),
-                market.slug());
+                market.slug(),
+                LogColors.RESET);
     }
 
     private Mono<GammaMarketDto> findConfiguredMarket() {
@@ -199,8 +212,10 @@ public class PaperBotRunner implements CommandLineRunner {
         String searchQuery = searchQueryForConfiguredInterval();
 
         log.warn(
-                "No suitable market found by deterministic slug lookup. Falling back to public-search query={}",
-                searchQuery);
+                "{}No suitable market found by deterministic slug lookup. Falling back to public-search query={}{}",
+                LogColors.MARKET,
+                searchQuery,
+                LogColors.RESET);
 
         /*
          * Current GammaClient in the public repo exposes searchBitcoinUpDownMarkets()
@@ -233,9 +248,11 @@ public class PaperBotRunner implements CommandLineRunner {
 
         if (sameId || sameSlug) {
             log.info(
-                    "Skipping already resolved current market during rollover: id={} slug={}",
+                    "{}Skipping already resolved current market during rollover: id={} slug={}{}",
+                    LogColors.MARKET,
                     candidate.id(),
-                    candidate.slug());
+                    candidate.slug(),
+                    LogColors.RESET);
             return false;
         }
 
@@ -261,7 +278,7 @@ public class PaperBotRunner implements CommandLineRunner {
             slugs.add("btc-updown-" + interval + "-" + startEpoch);
         }
 
-        log.info("Candidate slugs for interval={}: {}", interval, slugs);
+        log.info("{}Candidate slugs for interval={}: {}{}", LogColors.MARKET, interval, slugs, LogColors.RESET);
 
         return slugs;
     }
@@ -324,11 +341,13 @@ public class PaperBotRunner implements CommandLineRunner {
 
         if (!hasEnoughTime) {
             log.info(
-                    "Skipping market too close to expiry: question={} slug={} remaining={} minRemaining={}",
+                    "{}Skipping market too close to expiry: question={} slug={} remaining={} minRemaining={}{}",
+                    LogColors.MARKET,
                     market.question(),
                     market.slug(),
                     remaining,
-                    marketSelectionProperties.minRemaining());
+                    marketSelectionProperties.minRemaining(),
+                    LogColors.RESET);
         }
 
         return hasEnoughTime;
@@ -340,7 +359,12 @@ public class PaperBotRunner implements CommandLineRunner {
                 var book = clobClient.getOrderBook(tokenId).block();
 
                 if (book == null) {
-                    log.warn("No REST order book returned for outcome={} tokenId={}", outcome, tokenId);
+                    log.warn(
+                            "{}No REST order book returned for outcome={} tokenId={}{}",
+                            LogColors.MARKET,
+                            outcome,
+                            tokenId,
+                            LogColors.RESET);
                     return;
                 }
 
@@ -351,13 +375,21 @@ public class PaperBotRunner implements CommandLineRunner {
                         book.bestAsk().orElse(null));
 
                 log.info(
-                        "Seeded state from REST outcome={} bid={} ask={} spread={}",
+                        "{}Seeded state from REST outcome={} bid={} ask={} spread={}{}",
+                        LogColors.MARKET,
                         outcome,
                         book.bestBid().orElse(null),
                         book.bestAsk().orElse(null),
-                        book.spread().orElse(null));
+                        book.spread().orElse(null),
+                        LogColors.RESET);
             } catch (Exception e) {
-                log.warn("Failed to seed REST book for outcome={} tokenId={}", outcome, tokenId, e);
+                log.warn(
+                        "{}Failed to seed REST book for outcome={} tokenId={}{}",
+                        LogColors.MARKET,
+                        outcome,
+                        tokenId,
+                        LogColors.RESET,
+                        e);
             }
         });
     }
@@ -407,30 +439,39 @@ public class PaperBotRunner implements CommandLineRunner {
 
     private void handleMarketResolved(MarketWsMessageDto message) {
         log.info(
-                "Market resolved winningAssetId={} winningOutcome={}",
+                "{}Market resolved winningAssetId={} winningOutcome={}{}",
+                LogColors.TRADE,
                 message.winningAssetId(),
-                message.winningOutcome());
+                message.winningOutcome(),
+                LogColors.RESET);
 
         GammaMarketDto market = trackedMarketState.currentMarket().orElse(null);
 
         if (market == null) {
-            log.warn("Received market_resolved but no current market is tracked");
+            log.warn(
+                    "{}Received market_resolved but no current market is tracked{}",
+                    LogColors.TRADE,
+                    LogColors.RESET);
             return;
         }
 
         if (trackedMarketState.isResolved()) {
             log.info(
-                    "Ignoring duplicate market_resolved for marketId={} slug={}",
+                    "{}Ignoring duplicate market_resolved for marketId={} slug={}{}",
+                    LogColors.TRADE,
                     market.id(),
-                    market.slug());
+                    market.slug(),
+                    LogColors.RESET);
             return;
         }
 
         if (message.winningOutcome() == null || message.winningOutcome().isBlank()) {
             log.warn(
-                    "Received market_resolved without winningOutcome for marketId={} slug={}",
+                    "{}Received market_resolved without winningOutcome for marketId={} slug={}{}",
+                    LogColors.TRADE,
                     market.id(),
-                    market.slug());
+                    market.slug(),
+                    LogColors.RESET);
             return;
         }
 

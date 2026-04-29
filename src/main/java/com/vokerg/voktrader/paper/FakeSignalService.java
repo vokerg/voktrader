@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.paper;
 
+import com.vokerg.voktrader.common.LogColors;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.OutcomePrice;
 import lombok.RequiredArgsConstructor;
@@ -87,7 +88,8 @@ public class FakeSignalService {
                 : Duration.between(Instant.now(), market.endDate());
 
         log.info(
-                "FAKE SIGNAL SAVED: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} fakeSizeUsd={} fakeShares={} remaining={} reason={}",
+                "{}FAKE SIGNAL SAVED: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} fakeSizeUsd={} fakeShares={} remaining={} reason={}{}",
+                LogColors.TRADE,
                 saved.getId(),
                 saved.getRuleName(),
                 saved.getMarketId(),
@@ -97,7 +99,8 @@ public class FakeSignalService {
                 saved.getFakeSizeUsd(),
                 saved.getFakeShares(),
                 remaining,
-                saved.getReason()
+                saved.getReason(),
+                LogColors.RESET
         );
 
         return Optional.of(saved);
@@ -129,10 +132,12 @@ public class FakeSignalService {
 
         if (!signal.getTokenId().equals(outcomePrice.tokenId())) {
             log.warn(
-                    "Refusing to sell fake signal id={} because token mismatch: signalToken={} priceToken={}",
+                    "{}Refusing to sell fake signal id={} because token mismatch: signalToken={} priceToken={}{}",
+                    LogColors.TRADE,
                     signal.getId(),
                     signal.getTokenId(),
-                    outcomePrice.tokenId()
+                    outcomePrice.tokenId(),
+                    LogColors.RESET
             );
             return Optional.empty();
         }
@@ -140,7 +145,8 @@ public class FakeSignalService {
         signal.sell(exitPrice, reason, Instant.now());
 
         log.info(
-                "FAKE SIGNAL SOLD: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} exitPrice={} fakeSizeUsd={} fakeShares={} fakePnl={} reason={}",
+                "{}FAKE SIGNAL SOLD: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} exitPrice={} fakeSizeUsd={} fakeShares={} fakePnl={} reason={}{}",
+                LogColors.TRADE,
                 signal.getId(),
                 signal.getRuleName(),
                 signal.getMarketId(),
@@ -151,7 +157,8 @@ public class FakeSignalService {
                 signal.getFakeSizeUsd(),
                 signal.getFakeShares(),
                 signal.getFakePnl(),
-                signal.getExitReason()
+                signal.getExitReason(),
+                LogColors.RESET
         );
 
         return Optional.of(signal);
@@ -169,7 +176,11 @@ public class FakeSignalService {
         );
 
         if (openSignals.isEmpty()) {
-            log.info("No OPEN fake signals to resolve for marketId={}", marketId);
+            log.info(
+                    "{}No OPEN fake signals to resolve for marketId={}{}",
+                    LogColors.TRADE,
+                    marketId,
+                    LogColors.RESET);
             return;
         }
 
@@ -177,7 +188,8 @@ public class FakeSignalService {
             signal.resolve(winningOutcome, Instant.now());
 
             log.info(
-                    "FAKE SIGNAL RESOLVED: id={} marketId={} outcome={} winningOutcome={} status={} entryPrice={} fakeSizeUsd={} fakeShares={} fakePnl={}",
+                    "{}FAKE SIGNAL RESOLVED: id={} marketId={} outcome={} winningOutcome={} status={} entryPrice={} fakeSizeUsd={} fakeShares={} fakePnl={}{}",
+                    LogColors.TRADE,
                     signal.getId(),
                     signal.getMarketId(),
                     signal.getOutcome(),
@@ -186,7 +198,8 @@ public class FakeSignalService {
                     signal.getEntryPrice(),
                     signal.getFakeSizeUsd(),
                     signal.getFakeShares(),
-                    signal.getFakePnl()
+                    signal.getFakePnl(),
+                    LogColors.RESET
             );
         }
     }

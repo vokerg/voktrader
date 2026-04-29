@@ -3,6 +3,7 @@ package com.vokerg.voktrader.polymarket.client;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import com.vokerg.voktrader.common.LogColors;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,8 +26,6 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class GammaClient {
 
-    private static final String HIGHLIGHT = "\u001B[1;36m";
-    private static final String RESET = "\u001B[0m";
     private static final String FOUND_MARKET_MARKER = "\uD83D\uDFE2";
 
     @Qualifier("gammaWebClient")
@@ -45,7 +44,12 @@ public class GammaClient {
                         .build())
                 .retrieve()
                 .bodyToFlux(GammaMarketDto.class)
-                .doOnSubscribe(s -> log.info("Fetching active markets limit={} offset={}", limit, offset))
+                .doOnSubscribe(s -> log.info(
+                        "{}Fetching active markets limit={} offset={}{}",
+                        LogColors.MARKET,
+                        limit,
+                        offset,
+                        LogColors.RESET))
                 .doOnError(e -> log.error("Failed to fetch active markets", e));
     }
 
@@ -97,7 +101,10 @@ public class GammaClient {
                         .build())
                 .retrieve()
                 .bodyToMono(String.class)
-                .doOnSubscribe(s -> log.info("Searching public-search for bitcoin up or down"))
+                .doOnSubscribe(s -> log.info(
+                        "{}Searching public-search for bitcoin up or down{}",
+                        LogColors.MARKET,
+                        LogColors.RESET))
                 .flatMapMany(rawJson -> {
                     try {
                         JsonNode root = objectMapper.readTree(rawJson);
@@ -119,7 +126,7 @@ public class GammaClient {
     private void logFoundMarket(String label, GammaMarketDto market) {
         log.info(
                 "{}{} FOUND {}: id={} slug={} question={} endDate={} acceptingOrders={} tokens={}{}",
-                HIGHLIGHT,
+                LogColors.MARKET,
                 FOUND_MARKET_MARKER,
                 label,
                 market.id(),
@@ -128,7 +135,7 @@ public class GammaClient {
                 market.endDate(),
                 market.acceptingOrders(),
                 market.tokenIds(objectMapper),
-                RESET);
+                LogColors.RESET);
     }
 
     private Flux<GammaMarketDto> extractMarketsFromPublicSearch(JsonNode root) {
@@ -137,17 +144,22 @@ public class GammaClient {
         JsonNode events = root.path("events");
 
         if (!events.isArray()) {
-            log.warn("public-search response had no events array");
+            log.warn(
+                    "{}public-search response had no events array{}",
+                    LogColors.MARKET,
+                    LogColors.RESET);
             return Flux.empty();
         }
 
         for (JsonNode event : events) {
             log.info(
-                    "Search event: title={} slug={} active={} closed={}",
+                    "{}Search event: title={} slug={} active={} closed={}{}",
+                    LogColors.MARKET,
                     event.path("title").asText(null),
                     event.path("slug").asText(null),
                     event.path("active").asText(null),
-                    event.path("closed").asText(null));
+                    event.path("closed").asText(null),
+                    LogColors.RESET);
 
             JsonNode markets = event.path("markets");
 
@@ -159,14 +171,16 @@ public class GammaClient {
                 GammaMarketDto market = objectMapper.convertValue(marketNode, GammaMarketDto.class);
 
                 log.info(
-                        "Nested market candidate: question={} slug={} active={} closed={} acceptingOrders={} endDate={} tokens={}",
+                        "{}Nested market candidate: question={} slug={} active={} closed={} acceptingOrders={} endDate={} tokens={}{}",
+                        LogColors.MARKET,
                         market.question(),
                         market.slug(),
                         market.active(),
                         market.closed(),
                         market.acceptingOrders(),
                         market.endDate(),
-                        market.tokenIds(objectMapper));
+                        market.tokenIds(objectMapper),
+                        LogColors.RESET);
 
                 result.add(market);
             }
@@ -176,26 +190,28 @@ public class GammaClient {
     }
 
     public Mono<GammaMarketDto> getMarketBySlug(String slug) {
-    log.info("Fetching market by slug: {}", slug);
+        log.info("{}Fetching market by slug: {}{}", LogColors.MARKET, slug, LogColors.RESET);
 
-    return gammaWebClient.get()
-            .uri("/markets/slug/{slug}", slug)
-            .retrieve()
-            .bodyToMono(GammaMarketDto.class)
-            .doOnNext(market -> log.info(
-                    "Slug market candidate: id={} slug={} question={} active={} closed={} acceptingOrders={} endDate={} tokens={}",
-                    market.id(),
-                    market.slug(),
-                    market.question(),
-                    market.active(),
-                    market.closed(),
-                    market.acceptingOrders(),
-                    market.endDate(),
-                    market.clobTokenIds()
-            ))
-            .onErrorResume(WebClientResponseException.NotFound.class, e -> {
-                log.debug("No market found for slug={}", slug);
-                return Mono.empty();
-            });
-}
+        return gammaWebClient.get()
+                .uri("/markets/slug/{slug}", slug)
+                .retrieve()
+                .bodyToMono(GammaMarketDto.class)
+                .doOnNext(market -> log.info(
+                        "{}Slug market candidate: id={} slug={} question={} active={} closed={} acceptingOrders={} endDate={} tokens={}{}",
+                        LogColors.MARKET,
+                        market.id(),
+                        market.slug(),
+                        market.question(),
+                        market.active(),
+                        market.closed(),
+                        market.acceptingOrders(),
+                        market.endDate(),
+                        market.clobTokenIds(),
+                        LogColors.RESET
+                ))
+                .onErrorResume(WebClientResponseException.NotFound.class, e -> {
+                    log.debug("No market found for slug={}", slug);
+                    return Mono.empty();
+                });
+    }
 }
