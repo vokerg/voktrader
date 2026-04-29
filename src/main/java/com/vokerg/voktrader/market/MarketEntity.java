@@ -45,7 +45,7 @@ public class MarketEntity {
 
     private boolean acceptingOrders;
 
-    private boolean resolved;
+    private Boolean resolved;
 
     private String winningOutcome;
 
@@ -126,7 +126,7 @@ public class MarketEntity {
     }
 
     public boolean isResolved() {
-        return resolved;
+        return Boolean.TRUE.equals(resolved);
     }
 
     public void setResolved(boolean resolved) {
