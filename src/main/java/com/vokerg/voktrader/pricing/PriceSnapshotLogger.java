@@ -16,6 +16,7 @@ public class PriceSnapshotLogger {
 
     private final LatestPriceState latestPriceState;
     private final TrackedMarketState trackedMarketState;
+    private final PriceSnapshotService priceSnapshotService;
 
     @Scheduled(fixedRate = 2000)
     public void logSnapshot() {
@@ -27,10 +28,12 @@ public class PriceSnapshotLogger {
         }
 
         var market = trackedMarketState.currentMarket().orElse(null);
+        Instant capturedAt = Instant.now();
         String marketId = market == null ? null : market.id();
-        String remaining = market == null
+        Duration remainingDuration = market == null || market.endDate() == null
                 ? null
-                : formatRemaining(Duration.between(Instant.now(), market.endDate()));
+                : Duration.between(capturedAt, market.endDate());
+        String remaining = formatRemaining(remainingDuration);
 
         log.info(
                 "SNAPSHOT marketId={} remaining={} | Up {}/{} spread={} | Down {}/{} spread={}",
@@ -43,6 +46,8 @@ public class PriceSnapshotLogger {
                 down.ask(),
                 down.spread()
         );
+
+        priceSnapshotService.saveSnapshot(marketId, remainingDuration, up, down, capturedAt);
     }
 
     private String formatRemaining(Duration remaining) {
