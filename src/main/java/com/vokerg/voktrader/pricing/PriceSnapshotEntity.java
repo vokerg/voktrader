@@ -1,11 +1,15 @@
 package com.vokerg.voktrader.pricing;
 
+import com.vokerg.voktrader.market.MarketEntity;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.Column;
 import java.math.BigDecimal;
 import java.time.Instant;
 
@@ -16,6 +20,10 @@ public class PriceSnapshotEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "market_entity_id")
+    private MarketEntity market;
 
     private Long marketId;
     private Long remainingSeconds;
@@ -44,6 +52,7 @@ public class PriceSnapshotEntity {
     }
 
     public static PriceSnapshotEntity snapshot(
+            MarketEntity market,
             Long marketId,
             Long remainingSeconds,
             OutcomePrice up,
@@ -51,6 +60,7 @@ public class PriceSnapshotEntity {
             Instant capturedAt
     ) {
         PriceSnapshotEntity entity = new PriceSnapshotEntity();
+        entity.market = market;
         entity.marketId = marketId;
         entity.remainingSeconds = remainingSeconds;
         entity.upBid = up.bid();
@@ -65,6 +75,10 @@ public class PriceSnapshotEntity {
 
     public Long getId() {
         return id;
+    }
+
+    public MarketEntity getMarket() {
+        return market;
     }
 
     public Long getMarketId() {

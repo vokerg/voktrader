@@ -1,6 +1,7 @@
 package com.vokerg.voktrader;
 
 import com.vokerg.voktrader.config.MarketSelectionProperties;
+import com.vokerg.voktrader.market.MarketPersistenceService;
 import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.paper.FakeSignalService;
 import com.vokerg.voktrader.polymarket.client.ClobClient;
@@ -41,6 +42,7 @@ public class PaperBotRunner implements CommandLineRunner {
     private final LatestPriceState latestPriceState;
     private final MarketSelectionProperties marketSelectionProperties;
     private final TrackedMarketState trackedMarketState;
+    private final MarketPersistenceService marketPersistenceService;
     private final FakeSignalService fakeSignalService;
 
     private final AtomicBoolean rolloverInProgress = new AtomicBoolean(false);
@@ -129,6 +131,7 @@ public class PaperBotRunner implements CommandLineRunner {
         latestPriceState.clear();
 
         trackedMarketState.startTracking(market);
+        var savedMarket = marketPersistenceService.saveOrUpdate(market);
 
         List<String> tokenIds = market.tokenIds(objectMapper);
         List<String> outcomes = market.outcomeNames(objectMapper);
@@ -156,6 +159,10 @@ public class PaperBotRunner implements CommandLineRunner {
                 market.endDate(),
                 remaining,
                 outcomeByTokenId);
+        log.info(
+                "Persisted tracked market dbId={} polymarketMarketId={}",
+                savedMarket.getId(),
+                savedMarket.getPolymarketMarketId());
 
         seedStateFromRestOrderBooks(outcomeByTokenId);
 

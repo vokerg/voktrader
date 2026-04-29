@@ -1,5 +1,7 @@
 package com.vokerg.voktrader.pricing;
 
+import com.vokerg.voktrader.market.MarketEntity;
+import com.vokerg.voktrader.market.MarketRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -13,6 +15,7 @@ import java.time.Instant;
 public class PriceSnapshotService {
 
     private final PriceSnapshotRepository priceSnapshotRepository;
+    private final MarketRepository marketRepository;
 
     public void saveSnapshot(
             String marketId,
@@ -26,12 +29,21 @@ public class PriceSnapshotService {
         }
 
         priceSnapshotRepository.save(PriceSnapshotEntity.snapshot(
+                findMarket(marketId),
                 parseMarketId(marketId),
                 remaining == null ? null : remaining.getSeconds(),
                 up,
                 down,
                 capturedAt
         ));
+    }
+
+    private MarketEntity findMarket(String marketId) {
+        if (marketId == null || marketId.isBlank()) {
+            return null;
+        }
+
+        return marketRepository.findByPolymarketMarketId(marketId).orElse(null);
     }
 
     private Long parseMarketId(String marketId) {
