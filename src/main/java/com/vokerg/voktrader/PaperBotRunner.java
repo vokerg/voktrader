@@ -13,10 +13,12 @@ import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
@@ -25,6 +27,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Component
@@ -40,24 +43,92 @@ public class PaperBotRunner implements CommandLineRunner {
     private final TrackedMarketState trackedMarketState;
     private final FakeSignalService fakeSignalService;
 
+    private final AtomicBoolean rolloverInProgress = new AtomicBoolean(false);
+
     private Disposable webSocketSubscription;
 
     @Override
     public void run(String... args) {
         log.info("PaperBotRunner started");
+        rollToNextMarket("startup");
+    }
 
-        GammaMarketDto market = findConfiguredMarket().block();
-
-        if (market == null) {
-            log.warn(
-                    "No suitable BTC Up/Down market found for interval={} minRemaining={} maxRemaining={}",
-                    marketSelectionProperties.intervalOrDefault(),
-                    marketSelectionProperties.minRemaining(),
-                    marketSelectionProperties.maxRemaining());
+    /**
+     * Safety net.
+     *
+     * Normal rollover happens immediately from the market_resolved WS event.
+     * This scheduled method is here so the bot can recover if:
+     * - startup finds no market yet,
+     * - a rollover search temporarily finds nothing,
+     * - a WS message is missed,
+     * - the subscription dies and the current market is already marked resolved.
+     */
+    @Scheduled(initialDelay = 15_000, fixedDelay = 15_000)
+    public void ensureMarketIsTracked() {
+        if (trackedMarketState.currentMarket().isEmpty()) {
+            rollToNextMarket("no current market");
             return;
         }
 
-        trackedMarketState.setCurrentMarket(market);
+        if (trackedMarketState.isResolved()) {
+            rollToNextMarket("current market resolved");
+        }
+    }
+
+    private void rollToNextMarket(String reason) {
+        if (!rolloverInProgress.compareAndSet(false, true)) {
+            log.debug("Rollover already in progress, skipping reason={}", reason);
+            return;
+        }
+
+        log.info("Looking for next market, reason={}", reason);
+
+        AtomicBoolean foundMarket = new AtomicBoolean(false);
+
+        findConfiguredMarket()
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(market -> Mono.fromCallable(() -> {
+                    foundMarket.set(true);
+
+                    /*
+                     * This contains blocking calls through seedStateFromRestOrderBooks(...).
+                     * Force it onto boundedElastic no matter which thread discovered the market.
+                     */
+                    trackMarket(market);
+
+                    return market;
+                })
+                        .subscribeOn(Schedulers.boundedElastic()))
+                .doOnError(error -> log.error("Failed during market rollover", error))
+                .doFinally(signalType -> rolloverInProgress.set(false))
+                .subscribe(
+                        market -> log.info(
+                                "Rollover complete: now tracking marketId={} slug={} question={}",
+                                market.id(),
+                                market.slug(),
+                                market.question()),
+                        error -> log.error("Rollover subscription failed", error),
+                        () -> {
+                            if (!foundMarket.get()) {
+                                log.warn("No next market found during rollover, reason={}", reason);
+                            }
+                        });
+    }
+
+    private void trackMarket(GammaMarketDto market) {
+        if (market == null) {
+            return;
+        }
+
+        disposeWebSocketSubscription();
+
+        /*
+         * Important for rollover:
+         * Do not let old Up/Down prices leak into the new market.
+         */
+        latestPriceState.clear();
+
+        trackedMarketState.startTracking(market);
 
         List<String> tokenIds = market.tokenIds(objectMapper);
         List<String> outcomes = market.outcomeNames(objectMapper);
@@ -92,7 +163,10 @@ public class PaperBotRunner implements CommandLineRunner {
                 tokenIds,
                 message -> handleMarketMessage(message, outcomeByTokenId));
 
-        log.info("PaperBotRunner subscribed to market data");
+        log.info(
+                "PaperBotRunner subscribed to market data for marketId={} slug={}",
+                market.id(),
+                market.slug());
     }
 
     private Mono<GammaMarketDto> findConfiguredMarket() {
@@ -109,6 +183,7 @@ public class PaperBotRunner implements CommandLineRunner {
                 .filter(market -> market.endsAfter(Instant.now()))
                 .filter(this::matchesConfiguredInterval)
                 .filter(this::hasEnoughTimeRemainingForSetup)
+                .filter(this::isNotAlreadyResolvedCurrentMarket)
                 .next()
                 .switchIfEmpty(Mono.defer(this::findConfiguredMarketFromSearchFallback));
     }
@@ -120,15 +195,48 @@ public class PaperBotRunner implements CommandLineRunner {
                 "No suitable market found by deterministic slug lookup. Falling back to public-search query={}",
                 searchQuery);
 
+        /*
+         * Current GammaClient in the public repo exposes searchBitcoinUpDownMarkets()
+         * with no query argument, so keep this call simple.
+         */
         return gammaClient.searchBitcoinUpDownMarkets()
                 .filter(this::matchesConfiguredInterval)
                 .filter(this::hasEnoughTimeRemainingForSetup)
+                .filter(this::isNotAlreadyResolvedCurrentMarket)
                 .next();
+    }
+
+    private boolean isNotAlreadyResolvedCurrentMarket(GammaMarketDto candidate) {
+        if (candidate == null) {
+            return false;
+        }
+
+        if (!trackedMarketState.isResolved()) {
+            return true;
+        }
+
+        GammaMarketDto current = trackedMarketState.currentMarket().orElse(null);
+
+        if (current == null) {
+            return true;
+        }
+
+        boolean sameId = current.id() != null && current.id().equals(candidate.id());
+        boolean sameSlug = current.slug() != null && current.slug().equals(candidate.slug());
+
+        if (sameId || sameSlug) {
+            log.info(
+                    "Skipping already resolved current market during rollover: id={} slug={}",
+                    candidate.id(),
+                    candidate.slug());
+            return false;
+        }
+
+        return true;
     }
 
     private List<String> candidateSlugs(String interval) {
         long stepSeconds = intervalStepSeconds(interval);
-
         long nowEpoch = Instant.now().getEpochSecond();
         long currentStartEpoch = (nowEpoch / stepSeconds) * stepSeconds;
 
@@ -138,7 +246,8 @@ public class PaperBotRunner implements CommandLineRunner {
          * Current window plus next few windows.
          *
          * Current matters when the market is already live.
-         * Future windows matter when the current market is too close to expiry.
+         * Future windows matter when the current market is too close to expiry
+         * or has just resolved.
          */
         for (int i = 0; i <= 6; i++) {
             long startEpoch = currentStartEpoch + (i * stepSeconds);
@@ -182,7 +291,6 @@ public class PaperBotRunner implements CommandLineRunner {
 
     private boolean matchesConfiguredInterval(GammaMarketDto market) {
         String interval = marketSelectionProperties.intervalOrDefault();
-
         String slug = market.slug() == null ? "" : market.slug().toLowerCase();
 
         boolean matches = slug.contains("updown-" + interval + "-");
@@ -255,52 +363,92 @@ public class PaperBotRunner implements CommandLineRunner {
         }
 
         if (message.isBook() || message.isBestBidAsk()) {
-            String tokenId = message.assetId();
-            String outcome = outcomeByTokenId.get(tokenId);
-
-            if (outcome == null) {
-                log.debug("Ignoring WS message for unknown tokenId={}", tokenId);
-                return;
-            }
-
-            latestPriceState.update(
-                    tokenId,
-                    outcome,
-                    message.effectiveBestBid().orElse(null),
-                    message.effectiveBestAsk().orElse(null));
-
-            log.debug(
-                    "Updated state from WS event={} outcome={} bid={} ask={} spread={}",
-                    message.eventType(),
-                    outcome,
-                    message.effectiveBestBid().orElse(null),
-                    message.effectiveBestAsk().orElse(null),
-                    message.effectiveSpread().orElse(null));
-
+            handlePriceMessage(message, outcomeByTokenId);
             return;
         }
 
         if (message.isMarketResolved()) {
-            log.info(
-                    "Market resolved winningAssetId={} winningOutcome={}",
-                    message.winningAssetId(),
-                    message.winningOutcome());
-
-            var market = trackedMarketState.currentMarket().orElse(null);
-
-            if (market != null && message.winningOutcome() != null) {
-                this.fakeSignalService.resolveMarket(
-                        market.id(),
-                        message.winningOutcome());
-            }
+            handleMarketResolved(message);
         }
     }
 
-    @PreDestroy
-    public void shutdown() {
+    private void handlePriceMessage(
+            MarketWsMessageDto message,
+            Map<String, String> outcomeByTokenId) {
+        String tokenId = message.assetId();
+        String outcome = outcomeByTokenId.get(tokenId);
+
+        if (outcome == null) {
+            log.debug("Ignoring WS message for unknown tokenId={}", tokenId);
+            return;
+        }
+
+        latestPriceState.update(
+                tokenId,
+                outcome,
+                message.effectiveBestBid().orElse(null),
+                message.effectiveBestAsk().orElse(null));
+
+        log.debug(
+                "Updated state from WS event={} outcome={} bid={} ask={} spread={}",
+                message.eventType(),
+                outcome,
+                message.effectiveBestBid().orElse(null),
+                message.effectiveBestAsk().orElse(null),
+                message.effectiveSpread().orElse(null));
+    }
+
+    private void handleMarketResolved(MarketWsMessageDto message) {
+        log.info(
+                "Market resolved winningAssetId={} winningOutcome={}",
+                message.winningAssetId(),
+                message.winningOutcome());
+
+        GammaMarketDto market = trackedMarketState.currentMarket().orElse(null);
+
+        if (market == null) {
+            log.warn("Received market_resolved but no current market is tracked");
+            return;
+        }
+
+        if (trackedMarketState.isResolved()) {
+            log.info(
+                    "Ignoring duplicate market_resolved for marketId={} slug={}",
+                    market.id(),
+                    market.slug());
+            return;
+        }
+
+        if (message.winningOutcome() == null || message.winningOutcome().isBlank()) {
+            log.warn(
+                    "Received market_resolved without winningOutcome for marketId={} slug={}",
+                    market.id(),
+                    market.slug());
+            return;
+        }
+
+        trackedMarketState.markResolved(message.winningOutcome());
+
+        fakeSignalService.resolveMarket(
+                market.id(),
+                message.winningOutcome());
+
+        disposeWebSocketSubscription();
+
+        rollToNextMarket("market_resolved");
+    }
+
+    private void disposeWebSocketSubscription() {
         if (webSocketSubscription != null && !webSocketSubscription.isDisposed()) {
             webSocketSubscription.dispose();
             log.info("PaperBotRunner WebSocket subscription disposed");
         }
+
+        webSocketSubscription = null;
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        disposeWebSocketSubscription();
     }
 }

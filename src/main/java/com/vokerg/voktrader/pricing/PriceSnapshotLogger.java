@@ -20,6 +20,11 @@ public class PriceSnapshotLogger {
 
     @Scheduled(fixedRate = 2000)
     public void logSnapshot() {
+
+        if (trackedMarketState.isResolved()) {
+            return;
+}
+
         var up = latestPriceState.byOutcome("Up").orElse(null);
         var down = latestPriceState.byOutcome("Down").orElse(null);
 
