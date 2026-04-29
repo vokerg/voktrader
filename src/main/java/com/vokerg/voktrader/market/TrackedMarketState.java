@@ -35,6 +35,17 @@ public class TrackedMarketState {
         return currentMarket().map(GammaMarketDto::endDate);
     }
 
+    public boolean isCurrentMarket(String marketId) {
+        if (marketId == null || marketId.isBlank()) {
+            return false;
+        }
+
+        return currentMarket()
+                .map(GammaMarketDto::id)
+                .map(marketId::equals)
+                .orElse(false);
+    }
+
     public boolean isResolved() {
         TrackedMarketSnapshot current = snapshot.get();
         return current != null && current.resolved();
@@ -62,6 +73,20 @@ public class TrackedMarketState {
                     winningOutcome,
                     Instant.now()
             );
+        });
+    }
+
+    public void clearIfCurrent(String marketId) {
+        snapshot.updateAndGet(current -> {
+            if (current == null || current.market() == null) {
+                return current;
+            }
+
+            if (marketId != null && marketId.equals(current.market().id())) {
+                return null;
+            }
+
+            return current;
         });
     }
 

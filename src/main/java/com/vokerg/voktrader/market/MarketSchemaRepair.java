@@ -1,0 +1,46 @@
+package com.vokerg.voktrader.market;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+
+@Slf4j
+@Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class MarketSchemaRepair implements ApplicationRunner {
+
+    private final DataSource dataSource;
+    private final JdbcTemplate jdbcTemplate;
+
+    public MarketSchemaRepair(DataSource dataSource, JdbcTemplate jdbcTemplate) {
+        this.dataSource = dataSource;
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @Override
+    public void run(ApplicationArguments args) throws Exception {
+        try (Connection connection = dataSource.getConnection()) {
+            if (!connection.getMetaData().getURL().startsWith("jdbc:h2:")) {
+                return;
+            }
+        }
+
+        Long nextId = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(MAX(id), 0) + 1 FROM markets",
+                Long.class);
+
+        if (nextId == null) {
+            return;
+        }
+
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS markets ALTER COLUMN id RESTART WITH " + nextId);
+        log.info("Repaired H2 markets identity sequence: nextId={}", nextId);
+    }
+}

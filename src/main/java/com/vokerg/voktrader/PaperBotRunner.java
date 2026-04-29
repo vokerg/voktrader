@@ -4,13 +4,13 @@ import com.vokerg.voktrader.common.LogColors;
 import com.vokerg.voktrader.config.MarketSelectionProperties;
 import com.vokerg.voktrader.market.MarketPersistenceService;
 import com.vokerg.voktrader.market.TrackedMarketState;
-import com.vokerg.voktrader.paper.FakeSignalService;
 import com.vokerg.voktrader.polymarket.client.ClobClient;
 import com.vokerg.voktrader.polymarket.client.GammaClient;
 import com.vokerg.voktrader.polymarket.client.PolymarketWebSocketClient;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.polymarket.dto.MarketWsMessageDto;
 import com.vokerg.voktrader.pricing.LatestPriceState;
+import com.vokerg.voktrader.resolution.MarketResolutionService;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,7 +44,7 @@ public class PaperBotRunner implements CommandLineRunner {
     private final MarketSelectionProperties marketSelectionProperties;
     private final TrackedMarketState trackedMarketState;
     private final MarketPersistenceService marketPersistenceService;
-    private final FakeSignalService fakeSignalService;
+    private final MarketResolutionService marketResolutionService;
 
     private final AtomicBoolean rolloverInProgress = new AtomicBoolean(false);
 
@@ -78,7 +78,7 @@ public class PaperBotRunner implements CommandLineRunner {
         }
     }
 
-    private void rollToNextMarket(String reason) {
+    public void rollToNextMarket(String reason) {
         if (!rolloverInProgress.compareAndSet(false, true)) {
             log.debug("Rollover already in progress, skipping reason={}", reason);
             return;
@@ -179,13 +179,41 @@ public class PaperBotRunner implements CommandLineRunner {
 
         webSocketSubscription = webSocketClient.subscribeToMarketData(
                 tokenIds,
-                message -> handleMarketMessage(message, outcomeByTokenId));
+                message -> handleMarketMessage(message, market.id(), outcomeByTokenId));
 
         log.info(
                 "{}PaperBotRunner subscribed to market data for marketId={} slug={}{}",
                 LogColors.MARKET,
                 market.id(),
                 market.slug(),
+                LogColors.RESET);
+    }
+
+    public void stopCurrentMarketAndRoll(String marketId, String reason) {
+        if (!trackedMarketState.isCurrentMarket(marketId)) {
+            log.info(
+                    "{}Ignoring late event for non-current market: marketId={} reason={}{}",
+                    LogColors.MARKET,
+                    marketId,
+                    reason,
+                    LogColors.RESET);
+            return;
+        }
+
+        GammaMarketDto oldMarket = trackedMarketState.currentMarket().orElse(null);
+
+        disposeWebSocketSubscription();
+        marketPersistenceService.markStopped(marketId);
+        trackedMarketState.clearIfCurrent(marketId);
+        latestPriceState.clear();
+
+        rollToNextMarket(reason);
+
+        log.info(
+                "{}Current market rolled over due to expiry: oldMarketId={} oldSlug={}{}",
+                LogColors.MARKET,
+                marketId,
+                oldMarket == null ? null : oldMarket.slug(),
                 LogColors.RESET);
     }
 
@@ -396,8 +424,14 @@ public class PaperBotRunner implements CommandLineRunner {
 
     private void handleMarketMessage(
             MarketWsMessageDto message,
+            String subscriptionMarketId,
             Map<String, String> outcomeByTokenId) {
         if (message == null) {
+            return;
+        }
+
+        if (!message.isMarketResolved() && !trackedMarketState.isCurrentMarket(subscriptionMarketId)) {
+            log.debug("Ignoring late event for non-current market: marketId={} event={}", subscriptionMarketId, message.eventType());
             return;
         }
 
@@ -407,7 +441,7 @@ public class PaperBotRunner implements CommandLineRunner {
         }
 
         if (message.isMarketResolved()) {
-            handleMarketResolved(message);
+            handleMarketResolved(message, subscriptionMarketId);
         }
     }
 
@@ -437,7 +471,7 @@ public class PaperBotRunner implements CommandLineRunner {
                 message.effectiveSpread().orElse(null));
     }
 
-    private void handleMarketResolved(MarketWsMessageDto message) {
+    private void handleMarketResolved(MarketWsMessageDto message, String subscriptionMarketId) {
         log.info(
                 "{}Market resolved winningAssetId={} winningOutcome={}{}",
                 LogColors.TRADE,
@@ -446,16 +480,20 @@ public class PaperBotRunner implements CommandLineRunner {
                 LogColors.RESET);
 
         GammaMarketDto market = trackedMarketState.currentMarket().orElse(null);
+        String resolvedMarketId = firstPresent(
+                subscriptionMarketId,
+                message.market(),
+                market == null ? null : market.id());
 
-        if (market == null) {
+        if (resolvedMarketId == null || resolvedMarketId.isBlank()) {
             log.warn(
-                    "{}Received market_resolved but no current market is tracked{}",
+                    "{}Received market_resolved but could not determine market id{}",
                     LogColors.TRADE,
                     LogColors.RESET);
             return;
         }
 
-        if (trackedMarketState.isResolved()) {
+        if (market != null && trackedMarketState.isCurrentMarket(resolvedMarketId) && trackedMarketState.isResolved()) {
             log.info(
                     "{}Ignoring duplicate market_resolved for marketId={} slug={}{}",
                     LogColors.TRADE,
@@ -469,26 +507,41 @@ public class PaperBotRunner implements CommandLineRunner {
             log.warn(
                     "{}Received market_resolved without winningOutcome for marketId={} slug={}{}",
                     LogColors.TRADE,
-                    market.id(),
-                    market.slug(),
+                    resolvedMarketId,
+                    market == null ? null : market.slug(),
+                    LogColors.RESET);
+            return;
+        }
+
+        marketResolutionService.resolveMarket(
+                resolvedMarketId,
+                message.winningAssetId(),
+                message.winningOutcome(),
+                "websocket");
+
+        if (!trackedMarketState.isCurrentMarket(resolvedMarketId)) {
+            log.info(
+                    "{}Late resolution received: marketId={} source=websocket{}",
+                    LogColors.TRADE,
+                    resolvedMarketId,
                     LogColors.RESET);
             return;
         }
 
         trackedMarketState.markResolved(message.winningOutcome());
-
-        marketPersistenceService.markResolved(
-                market.id(),
-                message.winningOutcome(),
-                message.winningAssetId());
-
-        fakeSignalService.resolveMarket(
-                market.id(),
-                message.winningOutcome());
-
         disposeWebSocketSubscription();
 
         rollToNextMarket("market_resolved");
+    }
+
+    private String firstPresent(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     private void disposeWebSocketSubscription() {

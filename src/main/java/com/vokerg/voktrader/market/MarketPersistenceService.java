@@ -32,6 +32,13 @@ public class MarketPersistenceService {
         entity.setActive(Boolean.TRUE.equals(market.active()));
         entity.setClosed(Boolean.TRUE.equals(market.closed()));
         entity.setAcceptingOrders(Boolean.TRUE.equals(market.acceptingOrders()));
+        entity.setTrackingStatus(MarketTrackingStatus.TRACKING);
+        if (entity.getResolutionStatus() == null) {
+            entity.setResolutionStatus(MarketResolutionStatus.UNRESOLVED);
+        }
+        if (entity.getResolutionAttempts() == null) {
+            entity.setResolutionAttempts(0);
+        }
         entity.setLastSeenAt(now);
 
         return marketRepository.save(entity);
@@ -61,11 +68,47 @@ public class MarketPersistenceService {
         entity.setClosed(true);
         entity.setActive(false);
         entity.setAcceptingOrders(false);
+        entity.setTrackingStatus(MarketTrackingStatus.STOPPED);
+        entity.setResolutionStatus(MarketResolutionStatus.RESOLVED);
         entity.setWinningOutcome(winningOutcome);
         entity.setWinningAssetId(winningAssetId);
         entity.setResolvedAt(now);
         entity.setLastSeenAt(now);
 
         marketRepository.save(entity);
+    }
+
+    @Transactional
+    public void markStopped(String polymarketMarketId) {
+        if (polymarketMarketId == null || polymarketMarketId.isBlank()) {
+            return;
+        }
+
+        marketRepository.findByPolymarketMarketId(polymarketMarketId)
+                .ifPresent(entity -> {
+                    Instant now = Instant.now();
+                    entity.setTrackingStatus(MarketTrackingStatus.STOPPED);
+                    entity.setActive(false);
+                    entity.setAcceptingOrders(false);
+                    entity.setLastSeenAt(now);
+                    marketRepository.save(entity);
+                });
+    }
+
+    @Transactional
+    public void recordResolutionCheck(String polymarketMarketId, boolean failed) {
+        if (polymarketMarketId == null || polymarketMarketId.isBlank()) {
+            return;
+        }
+
+        marketRepository.findByPolymarketMarketId(polymarketMarketId)
+                .ifPresent(entity -> {
+                    entity.setLastResolutionCheckAt(Instant.now());
+                    entity.setResolutionAttempts((entity.getResolutionAttempts() == null ? 0 : entity.getResolutionAttempts()) + 1);
+                    if (failed) {
+                        entity.setResolutionStatus(MarketResolutionStatus.RESOLUTION_FAILED);
+                    }
+                    marketRepository.save(entity);
+                });
     }
 }

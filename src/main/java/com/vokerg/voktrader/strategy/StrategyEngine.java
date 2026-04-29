@@ -1,10 +1,13 @@
 package com.vokerg.voktrader.strategy;
 
+import com.vokerg.voktrader.market.TrackedMarketState;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+
+import java.time.Instant;
 
 @Slf4j
 @Component
@@ -13,6 +16,7 @@ public class StrategyEngine {
 
     private final StrategyRegistry strategyRegistry;
     private final StrategyProperties strategyProperties;
+    private final TrackedMarketState trackedMarketState;
 
     @PostConstruct
     void logConfiguration() {
@@ -26,6 +30,13 @@ public class StrategyEngine {
 
     @Scheduled(fixedRateString = "${voktrader.strategy.tick-ms:1000}")
     public void tick() {
+        if (trackedMarketState.currentEndDate()
+                .map(endDate -> !endDate.isAfter(Instant.now()))
+                .orElse(false)) {
+            log.debug("Skipping strategy tick because current market is expired");
+            return;
+        }
+
         TradingStrategy activeStrategy = strategyRegistry.activeStrategy();
 
         try {

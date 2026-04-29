@@ -214,4 +214,17 @@ public class GammaClient {
                     return Mono.empty();
                 });
     }
+
+    public Mono<GammaMarketDto> getMarketById(String id) {
+        log.info("{}Fetching market by id: {}{}", LogColors.MARKET, id, LogColors.RESET);
+
+        return gammaWebClient.get()
+                .uri("/markets/{id}", id)
+                .retrieve()
+                .bodyToMono(GammaMarketDto.class)
+                .onErrorResume(WebClientResponseException.NotFound.class, e -> {
+                    log.debug("No market found for id={}", id);
+                    return Mono.empty();
+                });
+    }
 }

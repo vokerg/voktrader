@@ -1,6 +1,8 @@
 package com.vokerg.voktrader.market;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -47,11 +49,21 @@ public class MarketEntity {
 
     private Boolean resolved;
 
+    @Enumerated(EnumType.STRING)
+    private MarketTrackingStatus trackingStatus;
+
+    @Enumerated(EnumType.STRING)
+    private MarketResolutionStatus resolutionStatus;
+
     private String winningOutcome;
 
     private String winningAssetId;
 
     private Instant resolvedAt;
+
+    private Instant lastResolutionCheckAt;
+
+    private Integer resolutionAttempts;
 
     private Instant firstSeenAt;
 
@@ -133,6 +145,22 @@ public class MarketEntity {
         this.resolved = resolved;
     }
 
+    public MarketTrackingStatus getTrackingStatus() {
+        return trackingStatus;
+    }
+
+    public void setTrackingStatus(MarketTrackingStatus trackingStatus) {
+        this.trackingStatus = trackingStatus;
+    }
+
+    public MarketResolutionStatus getResolutionStatus() {
+        return resolutionStatus;
+    }
+
+    public void setResolutionStatus(MarketResolutionStatus resolutionStatus) {
+        this.resolutionStatus = resolutionStatus;
+    }
+
     public String getWinningOutcome() {
         return winningOutcome;
     }
@@ -155,6 +183,22 @@ public class MarketEntity {
 
     public void setResolvedAt(Instant resolvedAt) {
         this.resolvedAt = resolvedAt;
+    }
+
+    public Instant getLastResolutionCheckAt() {
+        return lastResolutionCheckAt;
+    }
+
+    public void setLastResolutionCheckAt(Instant lastResolutionCheckAt) {
+        this.lastResolutionCheckAt = lastResolutionCheckAt;
+    }
+
+    public Integer getResolutionAttempts() {
+        return resolutionAttempts;
+    }
+
+    public void setResolutionAttempts(Integer resolutionAttempts) {
+        this.resolutionAttempts = resolutionAttempts;
     }
 
     public Instant getFirstSeenAt() {

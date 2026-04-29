@@ -8,7 +8,8 @@ import java.time.Duration;
 public record MarketSelectionProperties(
         String interval,
         Long minSecondsRemaining,
-        Long maxSecondsRemaining
+        Long maxSecondsRemaining,
+        Long expiryGraceSeconds
 ) {
     public String intervalOrDefault() {
         if (interval == null || interval.isBlank()) {
@@ -24,5 +25,9 @@ public record MarketSelectionProperties(
 
     public Duration maxRemaining() {
         return Duration.ofSeconds(maxSecondsRemaining == null ? 720 : maxSecondsRemaining);
+    }
+
+    public Duration expiryGrace() {
+        return Duration.ofSeconds(expiryGraceSeconds == null ? 15 : expiryGraceSeconds);
     }
 }
