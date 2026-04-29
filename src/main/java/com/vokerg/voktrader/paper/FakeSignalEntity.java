@@ -66,7 +66,7 @@ public class FakeSignalEntity {
     private Instant marketEndDate;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
+    @Column(name = "status", nullable = false, columnDefinition = "VARCHAR(20)")
     private FakeSignalStatus status;
 
     @Column(name = "resolved_at")
