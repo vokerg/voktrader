@@ -12,38 +12,38 @@ public class PaperTradeFeeCalculator {
     public static final int SHARE_SCALE = 8;
 
     public EntryFees calculateEntry(
-            BigDecimal fakeSizeUsd,
+            BigDecimal paperSizeUsd,
             BigDecimal entryPrice,
             BigDecimal feeRate
     ) {
         BigDecimal normalizedFeeRate = feeRate == null ? BigDecimal.ZERO : feeRate;
-        BigDecimal grossFakeShares = fakeSizeUsd.divide(
+        BigDecimal grossPaperShares = paperSizeUsd.divide(
                 entryPrice,
                 SHARE_SCALE,
                 RoundingMode.HALF_UP
         );
-        BigDecimal entryFeeUsd = fakeSizeUsd
+        BigDecimal entryFeeUsd = paperSizeUsd
                 .multiply(normalizedFeeRate)
                 .multiply(entryPrice)
                 .multiply(BigDecimal.ONE.subtract(entryPrice))
                 .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
-        BigDecimal netFakeShares = grossFakeShares.subtract(
+        BigDecimal netPaperShares = grossPaperShares.subtract(
                 entryFeeUsd.divide(entryPrice, SHARE_SCALE, RoundingMode.HALF_UP)
         );
 
         return new EntryFees(
                 normalizedFeeRate.setScale(MONEY_SCALE, RoundingMode.HALF_UP),
                 entryFeeUsd,
-                grossFakeShares,
-                netFakeShares.setScale(SHARE_SCALE, RoundingMode.HALF_UP)
+                grossPaperShares,
+                netPaperShares.setScale(SHARE_SCALE, RoundingMode.HALF_UP)
         );
     }
 
     public record EntryFees(
             BigDecimal feeRate,
             BigDecimal entryFeeUsd,
-            BigDecimal grossFakeShares,
-            BigDecimal netFakeShares
+            BigDecimal grossPaperShares,
+            BigDecimal netPaperShares
     ) {
     }
 }

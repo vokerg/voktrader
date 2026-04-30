@@ -19,8 +19,8 @@ class PaperTradeFeeCalculatorTest {
         );
 
         assertThat(fees.entryFeeUsd()).isEqualByComparingTo("0.00000000");
-        assertThat(fees.grossFakeShares()).isEqualByComparingTo("2.00000000");
-        assertThat(fees.netFakeShares()).isEqualByComparingTo("2.00000000");
+        assertThat(fees.grossPaperShares()).isEqualByComparingTo("2.00000000");
+        assertThat(fees.netPaperShares()).isEqualByComparingTo("2.00000000");
     }
 
     @Test

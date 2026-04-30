@@ -1,6 +1,6 @@
 package com.vokerg.voktrader.paper;
 
-public enum FakeSignalStatus {
+public enum SignalStatus {
     OPEN,
     SOLD,
     WON,

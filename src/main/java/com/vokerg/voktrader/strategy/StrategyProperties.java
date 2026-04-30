@@ -43,7 +43,7 @@ public record StrategyProperties(
     public record SimpleDownCheapTightSpread(
             BigDecimal maxAsk,
             BigDecimal maxSpread,
-            BigDecimal fakeSizeUsd
+            BigDecimal paperSizeUsd
     ) {
         public BigDecimal maxAskOrDefault() {
             return maxAsk == null ? new BigDecimal("0.25") : maxAsk;
@@ -53,8 +53,8 @@ public record StrategyProperties(
             return maxSpread == null ? new BigDecimal("0.03") : maxSpread;
         }
 
-        public BigDecimal fakeSizeUsdOrDefault() {
-            return fakeSizeUsd == null ? new BigDecimal("1.00") : fakeSizeUsd;
+        public BigDecimal paperSizeUsdOrDefault() {
+            return paperSizeUsd == null ? new BigDecimal("1.00") : paperSizeUsd;
         }
     }
 
@@ -63,7 +63,7 @@ public record StrategyProperties(
             BigDecimal buyBelowAsk,
             BigDecimal buyAboveAsk,
             BigDecimal maxSpread,
-            BigDecimal fakeSizeUsd,
+            BigDecimal paperSizeUsd,
             BigDecimal minProfitUsd
     ) {
         public String buyOutcomeOrDefault() {
@@ -85,8 +85,8 @@ public record StrategyProperties(
             return maxSpread == null ? new BigDecimal("0.03") : maxSpread;
         }
 
-        public BigDecimal fakeSizeUsdOrDefault() {
-            return fakeSizeUsd == null ? new BigDecimal("1.00") : fakeSizeUsd;
+        public BigDecimal paperSizeUsdOrDefault() {
+            return paperSizeUsd == null ? new BigDecimal("1.00") : paperSizeUsd;
         }
 
         public BigDecimal minProfitUsdOrDefault() {

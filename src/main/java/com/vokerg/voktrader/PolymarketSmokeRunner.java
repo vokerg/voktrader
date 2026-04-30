@@ -68,7 +68,7 @@ public class PolymarketSmokeRunner {// implements CommandLineRunner {
                 }
 
                 case "last_trade_price" -> {
-                    // Useful later, but not needed for fake-signal MVP.
+                    // Useful later, but not needed for the paper-signal MVP.
                 }
 
                 case "price_change" -> {

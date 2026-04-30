@@ -6,6 +6,6 @@ public record PerformanceSummary(
         long totalSignals,
         long won,
         long lost,
-        BigDecimal fakePnl
+        BigDecimal paperPnl
 ) {
 }

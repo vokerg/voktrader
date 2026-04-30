@@ -15,15 +15,15 @@ import java.time.Instant;
 
 @Entity
 @Table(
-        name = "fake_signals",
+        name = "signals",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "uk_fake_signal_market_token_rule",
-                        columnNames = {"market_id", "token_id", "rule_name"}
+                        name = "uk_signal_market_token_rule_type",
+                        columnNames = {"market_id", "token_id", "rule_name", "signal_type"}
                 )
         }
 )
-public class FakeSignalEntity {
+public class SignalEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -44,14 +44,18 @@ public class FakeSignalEntity {
     @Column(name = "token_id", nullable = false, length = 100)
     private String tokenId;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "signal_type", nullable = false, columnDefinition = "VARCHAR(20)")
+    private SignalType signalType;
+
     @Column(name = "entry_price", nullable = false, precision = 19, scale = 8)
     private BigDecimal entryPrice;
 
-    @Column(name = "fake_size_usd", nullable = false, precision = 19, scale = 8)
-    private BigDecimal fakeSizeUsd;
+    @Column(name = "paper_size_usd", nullable = false, precision = 19, scale = 8)
+    private BigDecimal paperSizeUsd;
 
-    @Column(name = "fake_shares", nullable = false, precision = 19, scale = 8)
-    private BigDecimal fakeShares;
+    @Column(name = "paper_shares", nullable = false, precision = 19, scale = 8)
+    private BigDecimal paperShares;
 
     @Column(name = "fee_rate", precision = 19, scale = 8)
     private BigDecimal feeRate;
@@ -59,11 +63,11 @@ public class FakeSignalEntity {
     @Column(name = "entry_fee_usd", precision = 19, scale = 8)
     private BigDecimal entryFeeUsd;
 
-    @Column(name = "gross_fake_shares", precision = 19, scale = 8)
-    private BigDecimal grossFakeShares;
+    @Column(name = "gross_paper_shares", precision = 19, scale = 8)
+    private BigDecimal grossPaperShares;
 
-    @Column(name = "net_fake_shares", precision = 19, scale = 8)
-    private BigDecimal netFakeShares;
+    @Column(name = "net_paper_shares", precision = 19, scale = 8)
+    private BigDecimal netPaperShares;
 
     @Column(name = "rule_name", nullable = false)
     private String ruleName;
@@ -79,7 +83,7 @@ public class FakeSignalEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, columnDefinition = "VARCHAR(20)")
-    private FakeSignalStatus status;
+    private SignalStatus status;
 
     @Column(name = "resolved_at")
     private Instant resolvedAt;
@@ -87,8 +91,8 @@ public class FakeSignalEntity {
     @Column(name = "winning_outcome")
     private String winningOutcome;
 
-    @Column(name = "fake_pnl", precision = 19, scale = 8)
-    private BigDecimal fakePnl;
+    @Column(name = "paper_pnl", precision = 19, scale = 8)
+    private BigDecimal paperPnl;
 
     @Column(name = "exit_price", precision = 19, scale = 8)
     private BigDecimal exitPrice;
@@ -99,63 +103,64 @@ public class FakeSignalEntity {
     @Column(name = "exit_reason", length = 1000)
     private String exitReason;
 
-    protected FakeSignalEntity() {
+    protected SignalEntity() {
     }
 
-    public static FakeSignalEntity openBuySignal(
+    public static SignalEntity openPaperBuySignal(
             String marketId,
             String marketSlug,
             String question,
             String outcome,
             String tokenId,
             BigDecimal entryPrice,
-            BigDecimal fakeSizeUsd,
-            BigDecimal grossFakeShares,
+            BigDecimal paperSizeUsd,
+            BigDecimal grossPaperShares,
             BigDecimal feeRate,
             BigDecimal entryFeeUsd,
-            BigDecimal netFakeShares,
+            BigDecimal netPaperShares,
             String ruleName,
             String reason,
             Instant createdAt,
             Instant marketEndDate
     ) {
-        FakeSignalEntity entity = new FakeSignalEntity();
+        SignalEntity entity = new SignalEntity();
         entity.marketId = marketId;
         entity.marketSlug = marketSlug;
         entity.question = question;
         entity.outcome = outcome;
         entity.tokenId = tokenId;
+        entity.signalType = SignalType.PAPER;
         entity.entryPrice = entryPrice;
-        entity.fakeSizeUsd = fakeSizeUsd;
-        entity.fakeShares = netFakeShares;
+        entity.paperSizeUsd = paperSizeUsd;
+        entity.paperShares = netPaperShares;
         entity.feeRate = feeRate;
         entity.entryFeeUsd = entryFeeUsd;
-        entity.grossFakeShares = grossFakeShares;
-        entity.netFakeShares = netFakeShares;
+        entity.grossPaperShares = grossPaperShares;
+        entity.netPaperShares = netPaperShares;
         entity.ruleName = ruleName;
         entity.reason = reason;
         entity.createdAt = createdAt;
         entity.marketEndDate = marketEndDate;
-        entity.status = FakeSignalStatus.OPEN;
+        entity.status = SignalStatus.OPEN;
         return entity;
     }
 
     public void sell(BigDecimal exitPrice, String exitReason, Instant soldAt) {
-        if (status != FakeSignalStatus.OPEN) {
-            throw new IllegalStateException("Only OPEN fake signals can be sold");
+        if (status != SignalStatus.OPEN) {
+            throw new IllegalStateException("Only OPEN signals can be sold");
         }
 
         this.exitPrice = exitPrice;
         this.exitValueUsd = sharesForPnl().multiply(exitPrice);
-        this.fakePnl = exitValueUsd.subtract(fakeSizeUsd);
+        this.paperPnl = exitValueUsd.subtract(paperSizeUsd);
         this.exitReason = exitReason;
         this.resolvedAt = soldAt;
-        this.status = FakeSignalStatus.SOLD;
+        this.status = SignalStatus.SOLD;
     }
 
     public void resolve(String winningOutcome, Instant resolvedAt) {
-        if (status != FakeSignalStatus.OPEN) {
-            throw new IllegalStateException("Only OPEN fake signals can be resolved");
+        if (status != SignalStatus.OPEN) {
+            throw new IllegalStateException("Only OPEN signals can be resolved");
         }
 
         this.winningOutcome = winningOutcome;
@@ -164,20 +169,20 @@ public class FakeSignalEntity {
         boolean won = this.outcome.equalsIgnoreCase(winningOutcome);
 
         if (won) {
-            this.status = FakeSignalStatus.WON;
-            this.fakePnl = sharesForPnl().subtract(fakeSizeUsd);
+            this.status = SignalStatus.WON;
+            this.paperPnl = sharesForPnl().subtract(paperSizeUsd);
         } else {
-            this.status = FakeSignalStatus.LOST;
-            this.fakePnl = fakeSizeUsd.negate();
+            this.status = SignalStatus.LOST;
+            this.paperPnl = paperSizeUsd.negate();
         }
     }
 
     private BigDecimal sharesForPnl() {
-        if (netFakeShares != null) {
-            return netFakeShares;
+        if (netPaperShares != null) {
+            return netPaperShares;
         }
 
-        return fakeShares;
+        return paperShares;
     }
 
     public Long getId() {
@@ -204,15 +209,19 @@ public class FakeSignalEntity {
         return tokenId;
     }
 
+    public SignalType getSignalType() {
+        return signalType;
+    }
+
     public BigDecimal getEntryPrice() {
         return entryPrice;
     }
 
-    public BigDecimal getFakeSizeUsd() {
-        return fakeSizeUsd;
+    public BigDecimal getPaperSizeUsd() {
+        return paperSizeUsd;
     }
 
-    public BigDecimal getFakeShares() {
+    public BigDecimal getPaperShares() {
         return sharesForPnl();
     }
 
@@ -224,11 +233,11 @@ public class FakeSignalEntity {
         return entryFeeUsd;
     }
 
-    public BigDecimal getGrossFakeShares() {
-        return grossFakeShares;
+    public BigDecimal getGrossPaperShares() {
+        return grossPaperShares;
     }
 
-    public BigDecimal getNetFakeShares() {
+    public BigDecimal getNetPaperShares() {
         return sharesForPnl();
     }
 
@@ -248,7 +257,7 @@ public class FakeSignalEntity {
         return marketEndDate;
     }
 
-    public FakeSignalStatus getStatus() {
+    public SignalStatus getStatus() {
         return status;
     }
 
@@ -260,8 +269,8 @@ public class FakeSignalEntity {
         return winningOutcome;
     }
 
-    public BigDecimal getFakePnl() {
-        return fakePnl;
+    public BigDecimal getPaperPnl() {
+        return paperPnl;
     }
 
     public BigDecimal getExitPrice() {

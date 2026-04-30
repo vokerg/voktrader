@@ -7,38 +7,38 @@ import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class FakeSignalEntityTest {
+class SignalEntityTest {
 
     private final PaperTradeFeeCalculator calculator = new PaperTradeFeeCalculator();
 
     @Test
     void winningTradePnlIsLowerAfterFee() {
-        FakeSignalEntity withoutFee = signalWithFeeRate(BigDecimal.ZERO);
-        FakeSignalEntity withFee = signalWithFeeRate(bd("0.02"));
+        SignalEntity withoutFee = signalWithFeeRate(BigDecimal.ZERO);
+        SignalEntity withFee = signalWithFeeRate(bd("0.02"));
 
         withoutFee.resolve("Yes", Instant.now());
         withFee.resolve("Yes", Instant.now());
 
-        assertThat(withFee.getFakePnl()).isLessThan(withoutFee.getFakePnl());
+        assertThat(withFee.getPaperPnl()).isLessThan(withoutFee.getPaperPnl());
     }
 
     @Test
-    void losingTradeRemainsFakeSizeLoss() {
-        FakeSignalEntity signal = signalWithFeeRate(bd("0.02"));
+    void losingTradeRemainsPaperSizeLoss() {
+        SignalEntity signal = signalWithFeeRate(bd("0.02"));
 
         signal.resolve("No", Instant.now());
 
-        assertThat(signal.getFakePnl()).isEqualByComparingTo("-1.00");
+        assertThat(signal.getPaperPnl()).isEqualByComparingTo("-1.00");
     }
 
-    private FakeSignalEntity signalWithFeeRate(BigDecimal feeRate) {
+    private SignalEntity signalWithFeeRate(BigDecimal feeRate) {
         PaperTradeFeeCalculator.EntryFees fees = calculator.calculateEntry(
                 bd("1.00"),
                 bd("0.50"),
                 feeRate
         );
 
-        return FakeSignalEntity.openBuySignal(
+        return SignalEntity.openPaperBuySignal(
                 "market-id",
                 "market-slug",
                 "Question?",
@@ -46,10 +46,10 @@ class FakeSignalEntityTest {
                 "token-id",
                 bd("0.50"),
                 bd("1.00"),
-                fees.grossFakeShares(),
+                fees.grossPaperShares(),
                 fees.feeRate(),
                 fees.entryFeeUsd(),
-                fees.netFakeShares(),
+                fees.netPaperShares(),
                 "rule",
                 "reason",
                 Instant.now(),

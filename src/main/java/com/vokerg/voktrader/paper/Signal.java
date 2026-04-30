@@ -3,26 +3,27 @@ package com.vokerg.voktrader.paper;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-public record FakeSignal(
+public record Signal(
         String marketId,
         String question,
         String outcome,
         String tokenId,
+        SignalType signalType,
         BigDecimal entryPrice,
-        BigDecimal fakeSizeUsd,
-        BigDecimal fakeShares,
+        BigDecimal paperSizeUsd,
+        BigDecimal paperShares,
         BigDecimal feeRate,
         BigDecimal entryFeeUsd,
-        BigDecimal grossFakeShares,
-        BigDecimal netFakeShares,
+        BigDecimal grossPaperShares,
+        BigDecimal netPaperShares,
         String ruleName,
         String reason,
         Instant createdAt,
         Instant marketEndDate,
-        FakeSignalStatus status,
+        SignalStatus status,
         Instant resolvedAt,
         String winningOutcome,
-        BigDecimal fakePnl,
+        BigDecimal paperPnl,
         BigDecimal exitPrice,
         BigDecimal exitValueUsd,
         String exitReason

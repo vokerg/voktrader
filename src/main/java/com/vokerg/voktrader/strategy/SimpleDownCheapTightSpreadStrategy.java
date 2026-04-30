@@ -1,7 +1,7 @@
 package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.market.TrackedMarketState;
-import com.vokerg.voktrader.paper.FakeSignalService;
+import com.vokerg.voktrader.paper.SignalService;
 import com.vokerg.voktrader.pricing.LatestPriceState;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -14,7 +14,7 @@ public class SimpleDownCheapTightSpreadStrategy implements TradingStrategy {
 
     private final LatestPriceState latestPriceState;
     private final TrackedMarketState trackedMarketState;
-    private final FakeSignalService fakeSignalService;
+    private final SignalService signalService;
     private final StrategyProperties strategyProperties;
     private final StrategyTimeWindow strategyTimeWindow;
 
@@ -49,10 +49,10 @@ public class SimpleDownCheapTightSpreadStrategy implements TradingStrategy {
             return;
         }
 
-        fakeSignalService.createBuySignal(
+        signalService.createPaperBuySignal(
                 market,
                 down,
-                config.fakeSizeUsdOrDefault(),
+                config.paperSizeUsdOrDefault(),
                 ID,
                 "Down ask <= " + config.maxAskOrDefault()
                         + " and spread <= " + config.maxSpreadOrDefault()

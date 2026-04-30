@@ -1,8 +1,8 @@
 package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.market.TrackedMarketState;
-import com.vokerg.voktrader.paper.FakeSignalEntity;
-import com.vokerg.voktrader.paper.FakeSignalService;
+import com.vokerg.voktrader.paper.SignalEntity;
+import com.vokerg.voktrader.paper.SignalService;
 import com.vokerg.voktrader.pricing.LatestPriceState;
 import com.vokerg.voktrader.pricing.OutcomePrice;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +20,7 @@ public class BuySellSmokeStrategy implements TradingStrategy {
 
     private final LatestPriceState latestPriceState;
     private final TrackedMarketState trackedMarketState;
-    private final FakeSignalService fakeSignalService;
+    private final SignalService signalService;
     private final StrategyProperties strategyProperties;
     private final StrategyTimeWindow strategyTimeWindow;
 
@@ -48,7 +48,7 @@ public class BuySellSmokeStrategy implements TradingStrategy {
 
         var config = strategyProperties.buySellSmokeOrDefault();
 
-        for (FakeSignalEntity signal : fakeSignalService.openSignals(ID)) {
+        for (SignalEntity signal : signalService.openPaperSignals(ID)) {
             if (!market.id().equals(signal.getMarketId())) {
                 continue;
             }
@@ -61,17 +61,17 @@ public class BuySellSmokeStrategy implements TradingStrategy {
                 continue;
             }
 
-            BigDecimal exitValueUsd = signal.getFakeShares().multiply(price.bid());
-            BigDecimal fakePnl = exitValueUsd.subtract(signal.getFakeSizeUsd());
+            BigDecimal exitValueUsd = signal.getPaperShares().multiply(price.bid());
+            BigDecimal paperPnl = exitValueUsd.subtract(signal.getPaperSizeUsd());
 
-            if (fakePnl.compareTo(config.minProfitUsdOrDefault()) < 0) {
+            if (paperPnl.compareTo(config.minProfitUsdOrDefault()) < 0) {
                 continue;
             }
 
-            fakeSignalService.sellOpenSignal(
+            signalService.sellOpenPaperSignal(
                     signal.getId(),
                     price,
-                    "bid produced fake pnl >= " + config.minProfitUsdOrDefault()
+                    "bid produced paper pnl >= " + config.minProfitUsdOrDefault()
             );
         }
     }
@@ -83,7 +83,7 @@ public class BuySellSmokeStrategy implements TradingStrategy {
             return;
         }
 
-        boolean alreadyHasOpenSignalForThisMarket = fakeSignalService.openSignals(ID)
+        boolean alreadyHasOpenSignalForThisMarket = signalService.openPaperSignals(ID)
                 .stream()
                 .anyMatch(signal -> market.id().equals(signal.getMarketId()));
 
@@ -99,10 +99,10 @@ public class BuySellSmokeStrategy implements TradingStrategy {
 
         var config = strategyProperties.buySellSmokeOrDefault();
 
-        fakeSignalService.createBuySignal(
+        signalService.createPaperBuySignal(
                 market,
                 candidate,
-                config.fakeSizeUsdOrDefault(),
+                config.paperSizeUsdOrDefault(),
                 ID,
                 "ask <= " + config.buyBelowAskOrDefault()
                         + " or ask >= " + config.buyAboveAskOrDefault()

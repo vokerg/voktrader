@@ -18,19 +18,19 @@ import java.util.Optional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class FakeSignalService {
+public class SignalService {
 
     private static final Duration FEE_FETCH_TIMEOUT = Duration.ofSeconds(5);
 
-    private final FakeSignalRepository fakeSignalRepository;
+    private final SignalRepository signalRepository;
     private final ClobClient clobClient;
     private final PaperTradeFeeCalculator paperTradeFeeCalculator;
 
     @Transactional
-    public Optional<FakeSignalEntity> createBuySignal(
+    public Optional<SignalEntity> createPaperBuySignal(
             GammaMarketDto market,
             OutcomePrice outcomePrice,
-            BigDecimal fakeSizeUsd,
+            BigDecimal paperSizeUsd,
             String ruleName,
             String reason
     ) {
@@ -48,14 +48,15 @@ public class FakeSignalService {
             return Optional.empty();
         }
 
-        if (fakeSizeUsd == null || fakeSizeUsd.compareTo(BigDecimal.ZERO) <= 0) {
+        if (paperSizeUsd == null || paperSizeUsd.compareTo(BigDecimal.ZERO) <= 0) {
             return Optional.empty();
         }
 
-        boolean alreadyExists = fakeSignalRepository.existsByMarketIdAndTokenIdAndRuleName(
+        boolean alreadyExists = signalRepository.existsByMarketIdAndTokenIdAndRuleNameAndSignalType(
                 market.id(),
                 outcomePrice.tokenId(),
-                ruleName
+                ruleName,
+                SignalType.PAPER
         );
 
         if (alreadyExists) {
@@ -64,37 +65,37 @@ public class FakeSignalService {
 
         BigDecimal feeRate = fetchFeeRate(market);
         PaperTradeFeeCalculator.EntryFees entryFees = paperTradeFeeCalculator.calculateEntry(
-                fakeSizeUsd,
+                paperSizeUsd,
                 entryPrice,
                 feeRate
         );
 
-        FakeSignalEntity signal = FakeSignalEntity.openBuySignal(
+        SignalEntity signal = SignalEntity.openPaperBuySignal(
                 market.id(),
                 market.slug(),
                 market.question(),
                 outcomePrice.outcome(),
                 outcomePrice.tokenId(),
                 entryPrice,
-                fakeSizeUsd,
-                entryFees.grossFakeShares(),
+                paperSizeUsd,
+                entryFees.grossPaperShares(),
                 entryFees.feeRate(),
                 entryFees.entryFeeUsd(),
-                entryFees.netFakeShares(),
+                entryFees.netPaperShares(),
                 ruleName,
                 reason,
                 Instant.now(),
                 market.endDate()
         );
 
-        FakeSignalEntity saved = fakeSignalRepository.save(signal);
+        SignalEntity saved = signalRepository.save(signal);
 
         Duration remaining = market.endDate() == null
                 ? null
                 : Duration.between(Instant.now(), market.endDate());
 
         log.info(
-                "{}FAKE SIGNAL SAVED: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} fakeSizeUsd={} fakeShares={} remaining={} reason={}{}",
+                "{}PAPER SIGNAL SAVED: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} paperSizeUsd={} paperShares={} remaining={} reason={}{}",
                 LogColors.TRADE,
                 saved.getId(),
                 saved.getRuleName(),
@@ -102,8 +103,8 @@ public class FakeSignalService {
                 saved.getOutcome(),
                 saved.getTokenId(),
                 saved.getEntryPrice(),
-                saved.getFakeSizeUsd(),
-                saved.getFakeShares(),
+                saved.getPaperSizeUsd(),
+                saved.getPaperShares(),
                 remaining,
                 saved.getReason(),
                 LogColors.RESET
@@ -135,7 +136,7 @@ public class FakeSignalService {
     }
 
     @Transactional
-    public Optional<FakeSignalEntity> sellOpenSignal(
+    public Optional<SignalEntity> sellOpenPaperSignal(
             Long signalId,
             OutcomePrice outcomePrice,
             String reason
@@ -150,8 +151,8 @@ public class FakeSignalService {
             return Optional.empty();
         }
 
-        FakeSignalEntity signal = fakeSignalRepository
-                .findByIdAndStatus(signalId, FakeSignalStatus.OPEN)
+        SignalEntity signal = signalRepository
+                .findByIdAndStatusAndSignalType(signalId, SignalStatus.OPEN, SignalType.PAPER)
                 .orElse(null);
 
         if (signal == null) {
@@ -160,7 +161,7 @@ public class FakeSignalService {
 
         if (!signal.getTokenId().equals(outcomePrice.tokenId())) {
             log.warn(
-                    "{}Refusing to sell fake signal id={} because token mismatch: signalToken={} priceToken={}{}",
+                    "{}Refusing to sell paper signal id={} because token mismatch: signalToken={} priceToken={}{}",
                     LogColors.TRADE,
                     signal.getId(),
                     signal.getTokenId(),
@@ -173,7 +174,7 @@ public class FakeSignalService {
         signal.sell(exitPrice, reason, Instant.now());
 
         log.info(
-                "{}FAKE SIGNAL SOLD: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} exitPrice={} fakeSizeUsd={} fakeShares={} fakePnl={} reason={}{}",
+                "{}PAPER SIGNAL SOLD: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} exitPrice={} paperSizeUsd={} paperShares={} paperPnl={} reason={}{}",
                 LogColors.TRADE,
                 signal.getId(),
                 signal.getRuleName(),
@@ -182,9 +183,9 @@ public class FakeSignalService {
                 signal.getTokenId(),
                 signal.getEntryPrice(),
                 signal.getExitPrice(),
-                signal.getFakeSizeUsd(),
-                signal.getFakeShares(),
-                signal.getFakePnl(),
+                signal.getPaperSizeUsd(),
+                signal.getPaperShares(),
+                signal.getPaperPnl(),
                 signal.getExitReason(),
                 LogColors.RESET
         );
@@ -198,25 +199,26 @@ public class FakeSignalService {
             return;
         }
 
-        List<FakeSignalEntity> openSignals = fakeSignalRepository.findByMarketIdAndStatus(
+        List<SignalEntity> openSignals = signalRepository.findByMarketIdAndStatusAndSignalType(
                 marketId,
-                FakeSignalStatus.OPEN
+                SignalStatus.OPEN,
+                SignalType.PAPER
         );
 
         if (openSignals.isEmpty()) {
             log.info(
-                    "{}No OPEN fake signals to resolve for marketId={}{}",
+                    "{}No OPEN paper signals to resolve for marketId={}{}",
                     LogColors.TRADE,
                     marketId,
                     LogColors.RESET);
             return;
         }
 
-        for (FakeSignalEntity signal : openSignals) {
+        for (SignalEntity signal : openSignals) {
             signal.resolve(winningOutcome, Instant.now());
 
             log.info(
-                    "{}FAKE SIGNAL RESOLVED: id={} marketId={} outcome={} winningOutcome={} status={} entryPrice={} fakeSizeUsd={} fakeShares={} fakePnl={}{}",
+                    "{}PAPER SIGNAL RESOLVED: id={} marketId={} outcome={} winningOutcome={} status={} entryPrice={} paperSizeUsd={} paperShares={} paperPnl={}{}",
                     LogColors.TRADE,
                     signal.getId(),
                     signal.getMarketId(),
@@ -224,33 +226,34 @@ public class FakeSignalService {
                     signal.getWinningOutcome(),
                     signal.getStatus(),
                     signal.getEntryPrice(),
-                    signal.getFakeSizeUsd(),
-                    signal.getFakeShares(),
-                    signal.getFakePnl(),
+                    signal.getPaperSizeUsd(),
+                    signal.getPaperShares(),
+                    signal.getPaperPnl(),
                     LogColors.RESET
             );
         }
     }
 
     @Transactional(readOnly = true)
-    public List<FakeSignalEntity> allSignals() {
-        return fakeSignalRepository.findAll();
+    public List<SignalEntity> allSignals() {
+        return signalRepository.findAll();
     }
 
     @Transactional(readOnly = true)
-    public List<FakeSignalEntity> openSignals() {
-        return fakeSignalRepository.findByStatus(FakeSignalStatus.OPEN);
+    public List<SignalEntity> openPaperSignals() {
+        return signalRepository.findByStatusAndSignalType(SignalStatus.OPEN, SignalType.PAPER);
     }
 
     @Transactional(readOnly = true)
-    public List<FakeSignalEntity> openSignals(String ruleName) {
+    public List<SignalEntity> openPaperSignals(String ruleName) {
         if (ruleName == null || ruleName.isBlank()) {
-            return openSignals();
+            return openPaperSignals();
         }
 
-        return fakeSignalRepository.findByStatusAndRuleName(
-                FakeSignalStatus.OPEN,
-                ruleName
+        return signalRepository.findByStatusAndRuleNameAndSignalType(
+                SignalStatus.OPEN,
+                ruleName,
+                SignalType.PAPER
         );
     }
 }

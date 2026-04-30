@@ -6,6 +6,6 @@ import org.springframework.stereotype.Service;
 public class ResolutionScoringService {
 
     public void scoreResolvedMarket(Long marketId) {
-        // TODO: find OPEN fake signals for market and mark WON or LOST.
+        // TODO: find OPEN paper signals for market and mark WON or LOST.
     }
 }
