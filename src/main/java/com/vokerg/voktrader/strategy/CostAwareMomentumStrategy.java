@@ -142,12 +142,17 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
                 continue;
             }
 
-            BigDecimal tenSecondMidMove = moveSince(signal.getTokenId(), MID_MOMENTUM_WINDOW, SampleValue.MID)
-                    .orElse(BigDecimal.ZERO);
+            Optional<BigDecimal> tenSecondMidMove = moveSince(signal.getTokenId(), MID_MOMENTUM_WINDOW, SampleValue.MID);
+            boolean heldLongEnoughForStop = hasHeldLongEnoughForStop(signal, config);
+            boolean actualMomentumReversal = tenSecondMidMove
+                    .map(move -> move.compareTo(new BigDecimal("-0.025")) < 0)
+                    .orElse(false);
+            boolean lossLimitHit = paperPnl.compareTo(config.maxLossUsdOrDefault().negate()) <= 0;
+            boolean stopMidHit = mid.compareTo(config.stopMidOrDefault()) < 0;
 
-            if (paperPnl.compareTo(config.maxLossUsdOrDefault().negate()) <= 0
-                    || mid.compareTo(config.stopMidOrDefault()) < 0
-                    || tenSecondMidMove.compareTo(new BigDecimal("-0.025")) < 0) {
+            if (heldLongEnoughForStop
+                    && actualMomentumReversal
+                    && (lossLimitHit || stopMidHit)) {
                 signalService.sellOpenPaperSignal(signal.getId(), price, "cost-aware momentum stop loss");
             }
         }
@@ -252,6 +257,16 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
                 && Duration.between(clock.instant(), market.endDate()).compareTo(
                 Duration.ofSeconds(config.forceDecisionSecondsOrDefault())
         ) < 0;
+    }
+
+    private boolean hasHeldLongEnoughForStop(
+            SignalEntity signal,
+            StrategyProperties.CostAwareMomentum config
+    ) {
+        return signal.getCreatedAt() != null
+                && Duration.between(signal.getCreatedAt(), clock.instant()).compareTo(
+                Duration.ofSeconds(config.minHoldSecondsOrDefault())
+        ) >= 0;
     }
 
     private BigDecimal mid(OutcomePrice price) {

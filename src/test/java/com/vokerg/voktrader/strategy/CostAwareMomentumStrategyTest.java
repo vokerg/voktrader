@@ -171,7 +171,13 @@ class CostAwareMomentumStrategyTest {
 
     @Test
     void sellsOnStopLoss() {
-        SignalEntity open = openSignal("up", "Up", "0.50", "2.00000000");
+        setOutcomePrices(
+                price("up", "Up", "0.59", "0.61"),
+                price("down", "Down", "0.39", "0.41")
+        );
+        strategy.tick();
+        clock.advance(Duration.ofSeconds(11));
+        SignalEntity open = openSignal("up", "Up", "0.50", "2.00000000", 12);
         when(signalService.openPaperSignals(CostAwareMomentumStrategy.ID)).thenReturn(List.of(open));
         OutcomePrice up = price("up", "Up", "0.45", "0.47");
         when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(up));
@@ -179,6 +185,36 @@ class CostAwareMomentumStrategyTest {
         strategy.tick();
 
         verify(signalService).sellOpenPaperSignal(open.getId(), up, "cost-aware momentum stop loss");
+    }
+
+    @Test
+    void doesNotStopLossBeforeMinimumHold() {
+        setOutcomePrices(
+                price("up", "Up", "0.59", "0.61"),
+                price("down", "Down", "0.39", "0.41")
+        );
+        strategy.tick();
+        clock.advance(Duration.ofSeconds(4));
+        SignalEntity open = openSignal("up", "Up", "0.50", "2.00000000", 4);
+        when(signalService.openPaperSignals(CostAwareMomentumStrategy.ID)).thenReturn(List.of(open));
+        OutcomePrice up = price("up", "Up", "0.45", "0.47");
+        when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(up));
+
+        strategy.tick();
+
+        verify(signalService, never()).sellOpenPaperSignal(any(), any(), any());
+    }
+
+    @Test
+    void doesNotStopLossWithoutActualMomentumReversal() {
+        SignalEntity open = openSignal("up", "Up", "0.50", "2.00000000", 12);
+        when(signalService.openPaperSignals(CostAwareMomentumStrategy.ID)).thenReturn(List.of(open));
+        OutcomePrice up = price("up", "Up", "0.45", "0.47");
+        when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(up));
+
+        strategy.tick();
+
+        verify(signalService, never()).sellOpenPaperSignal(any(), any(), any());
     }
 
     @Test
@@ -232,6 +268,16 @@ class CostAwareMomentumStrategyTest {
     }
 
     private SignalEntity openSignal(String tokenId, String outcome, String entryPrice, String paperShares) {
+        return openSignal(tokenId, outcome, entryPrice, paperShares, 5);
+    }
+
+    private SignalEntity openSignal(
+            String tokenId,
+            String outcome,
+            String entryPrice,
+            String paperShares,
+            long secondsAgo
+    ) {
         return SignalEntity.openPaperBuySignal(
                 market.id(),
                 market.slug(),
@@ -246,7 +292,7 @@ class CostAwareMomentumStrategyTest {
                 new BigDecimal(paperShares),
                 CostAwareMomentumStrategy.ID,
                 "test",
-                clock.instant().minusSeconds(5),
+                clock.instant().minusSeconds(secondsAgo),
                 market.endDate()
         );
     }
