@@ -1,6 +1,7 @@
 package com.vokerg.voktrader.paper;
 
 import com.vokerg.voktrader.common.LogColors;
+import com.vokerg.voktrader.polymarket.client.ClobClient;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.OutcomePrice;
 import lombok.RequiredArgsConstructor;
@@ -9,7 +10,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -20,9 +20,11 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class FakeSignalService {
 
-    private static final int SHARE_SCALE = 8;
+    private static final Duration FEE_FETCH_TIMEOUT = Duration.ofSeconds(5);
 
     private final FakeSignalRepository fakeSignalRepository;
+    private final ClobClient clobClient;
+    private final PaperTradeFeeCalculator paperTradeFeeCalculator;
 
     @Transactional
     public Optional<FakeSignalEntity> createBuySignal(
@@ -60,10 +62,11 @@ public class FakeSignalService {
             return Optional.empty();
         }
 
-        BigDecimal fakeShares = fakeSizeUsd.divide(
+        BigDecimal feeRate = fetchFeeRate(market);
+        PaperTradeFeeCalculator.EntryFees entryFees = paperTradeFeeCalculator.calculateEntry(
+                fakeSizeUsd,
                 entryPrice,
-                SHARE_SCALE,
-                RoundingMode.HALF_UP
+                feeRate
         );
 
         FakeSignalEntity signal = FakeSignalEntity.openBuySignal(
@@ -74,7 +77,10 @@ public class FakeSignalService {
                 outcomePrice.tokenId(),
                 entryPrice,
                 fakeSizeUsd,
-                fakeShares,
+                entryFees.grossFakeShares(),
+                entryFees.feeRate(),
+                entryFees.entryFeeUsd(),
+                entryFees.netFakeShares(),
                 ruleName,
                 reason,
                 Instant.now(),
@@ -104,6 +110,28 @@ public class FakeSignalService {
         );
 
         return Optional.of(saved);
+    }
+
+    private BigDecimal fetchFeeRate(GammaMarketDto market) {
+        if (market.conditionId() == null || market.conditionId().isBlank()) {
+            return BigDecimal.ZERO;
+        }
+
+        try {
+            return clobClient.getClobMarketInfo(market.conditionId())
+                    .map(info -> info.platformFeeRate())
+                    .block(FEE_FETCH_TIMEOUT);
+        } catch (Exception e) {
+            log.warn(
+                    "{}Could not fetch CLOB fee data for marketId={} conditionId={}; assuming zero paper fee{}",
+                    LogColors.TRADE,
+                    market.id(),
+                    market.conditionId(),
+                    LogColors.RESET,
+                    e
+            );
+            return BigDecimal.ZERO;
+        }
     }
 
     @Transactional

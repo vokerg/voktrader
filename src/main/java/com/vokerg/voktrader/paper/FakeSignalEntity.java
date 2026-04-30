@@ -53,6 +53,18 @@ public class FakeSignalEntity {
     @Column(name = "fake_shares", nullable = false, precision = 19, scale = 8)
     private BigDecimal fakeShares;
 
+    @Column(name = "fee_rate", precision = 19, scale = 8)
+    private BigDecimal feeRate;
+
+    @Column(name = "entry_fee_usd", precision = 19, scale = 8)
+    private BigDecimal entryFeeUsd;
+
+    @Column(name = "gross_fake_shares", precision = 19, scale = 8)
+    private BigDecimal grossFakeShares;
+
+    @Column(name = "net_fake_shares", precision = 19, scale = 8)
+    private BigDecimal netFakeShares;
+
     @Column(name = "rule_name", nullable = false)
     private String ruleName;
 
@@ -98,7 +110,10 @@ public class FakeSignalEntity {
             String tokenId,
             BigDecimal entryPrice,
             BigDecimal fakeSizeUsd,
-            BigDecimal fakeShares,
+            BigDecimal grossFakeShares,
+            BigDecimal feeRate,
+            BigDecimal entryFeeUsd,
+            BigDecimal netFakeShares,
             String ruleName,
             String reason,
             Instant createdAt,
@@ -112,7 +127,11 @@ public class FakeSignalEntity {
         entity.tokenId = tokenId;
         entity.entryPrice = entryPrice;
         entity.fakeSizeUsd = fakeSizeUsd;
-        entity.fakeShares = fakeShares;
+        entity.fakeShares = netFakeShares;
+        entity.feeRate = feeRate;
+        entity.entryFeeUsd = entryFeeUsd;
+        entity.grossFakeShares = grossFakeShares;
+        entity.netFakeShares = netFakeShares;
         entity.ruleName = ruleName;
         entity.reason = reason;
         entity.createdAt = createdAt;
@@ -127,7 +146,7 @@ public class FakeSignalEntity {
         }
 
         this.exitPrice = exitPrice;
-        this.exitValueUsd = fakeShares.multiply(exitPrice);
+        this.exitValueUsd = sharesForPnl().multiply(exitPrice);
         this.fakePnl = exitValueUsd.subtract(fakeSizeUsd);
         this.exitReason = exitReason;
         this.resolvedAt = soldAt;
@@ -146,11 +165,19 @@ public class FakeSignalEntity {
 
         if (won) {
             this.status = FakeSignalStatus.WON;
-            this.fakePnl = fakeShares.multiply(BigDecimal.ONE.subtract(entryPrice));
+            this.fakePnl = sharesForPnl().subtract(fakeSizeUsd);
         } else {
             this.status = FakeSignalStatus.LOST;
             this.fakePnl = fakeSizeUsd.negate();
         }
+    }
+
+    private BigDecimal sharesForPnl() {
+        if (netFakeShares != null) {
+            return netFakeShares;
+        }
+
+        return fakeShares;
     }
 
     public Long getId() {
@@ -186,7 +213,23 @@ public class FakeSignalEntity {
     }
 
     public BigDecimal getFakeShares() {
-        return fakeShares;
+        return sharesForPnl();
+    }
+
+    public BigDecimal getFeeRate() {
+        return feeRate;
+    }
+
+    public BigDecimal getEntryFeeUsd() {
+        return entryFeeUsd;
+    }
+
+    public BigDecimal getGrossFakeShares() {
+        return grossFakeShares;
+    }
+
+    public BigDecimal getNetFakeShares() {
+        return sharesForPnl();
     }
 
     public String getRuleName() {

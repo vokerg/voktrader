@@ -1,6 +1,7 @@
 package com.vokerg.voktrader.polymarket.client;
 
 import com.vokerg.voktrader.polymarket.dto.OrderBookDto;
+import com.vokerg.voktrader.polymarket.dto.ClobMarketInfoDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -33,5 +34,21 @@ public class ClobClient {
                         book.spread().orElse(null)
                 ))
                 .doOnError(e -> log.error("Failed to fetch order book tokenId={}", tokenId, e));
+    }
+
+    public Mono<ClobMarketInfoDto> getClobMarketInfo(String conditionId) {
+        return clobWebClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/clob-markets/{conditionId}")
+                        .build(conditionId))
+                .retrieve()
+                .bodyToMono(ClobMarketInfoDto.class)
+                .doOnSubscribe(s -> log.debug("Fetching CLOB market info conditionId={}", conditionId))
+                .doOnNext(info -> log.debug(
+                        "CLOB market info conditionId={} feeRate={}",
+                        conditionId,
+                        info.platformFeeRate()
+                ))
+                .doOnError(e -> log.error("Failed to fetch CLOB market info conditionId={}", conditionId, e));
     }
 }
