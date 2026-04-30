@@ -171,10 +171,16 @@ public class SignalService {
             return Optional.empty();
         }
 
-        signal.sell(exitPrice, reason, Instant.now());
+        BigDecimal exitFeeUsd = paperTradeFeeCalculator.calculateFee(
+                signal.getPaperShares(),
+                exitPrice,
+                signal.getFeeRate()
+        );
+
+        signal.sell(exitPrice, exitFeeUsd, reason, Instant.now());
 
         log.info(
-                "{}PAPER SIGNAL SOLD: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} exitPrice={} paperSizeUsd={} paperShares={} paperPnl={} reason={}{}",
+                "{}PAPER SIGNAL SOLD: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} exitPrice={} paperSizeUsd={} paperShares={} exitFeeUsd={} paperPnl={} reason={}{}",
                 LogColors.TRADE,
                 signal.getId(),
                 signal.getRuleName(),
@@ -185,6 +191,7 @@ public class SignalService {
                 signal.getExitPrice(),
                 signal.getPaperSizeUsd(),
                 signal.getPaperShares(),
+                signal.getExitFeeUsd(),
                 signal.getPaperPnl(),
                 signal.getExitReason(),
                 LogColors.RESET

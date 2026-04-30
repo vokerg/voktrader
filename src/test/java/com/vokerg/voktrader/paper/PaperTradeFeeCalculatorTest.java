@@ -27,9 +27,9 @@ class PaperTradeFeeCalculatorTest {
     void feeIsHighestNearFiftyCents() {
         BigDecimal feeRate = bd("0.02");
 
-        BigDecimal nearFive = calculator.calculateEntry(bd("1.00"), bd("0.05"), feeRate).entryFeeUsd();
-        BigDecimal nearFifty = calculator.calculateEntry(bd("1.00"), bd("0.50"), feeRate).entryFeeUsd();
-        BigDecimal nearNinetyFive = calculator.calculateEntry(bd("1.00"), bd("0.95"), feeRate).entryFeeUsd();
+        BigDecimal nearFive = calculator.calculateFee(bd("100"), bd("0.05"), feeRate);
+        BigDecimal nearFifty = calculator.calculateFee(bd("100"), bd("0.50"), feeRate);
+        BigDecimal nearNinetyFive = calculator.calculateFee(bd("100"), bd("0.95"), feeRate);
 
         assertThat(nearFifty).isGreaterThan(nearFive);
         assertThat(nearFifty).isGreaterThan(nearNinetyFive);
@@ -39,12 +39,34 @@ class PaperTradeFeeCalculatorTest {
     void feeIsLowerNearPriceExtremes() {
         BigDecimal feeRate = bd("0.02");
 
-        BigDecimal nearFive = calculator.calculateEntry(bd("1.00"), bd("0.05"), feeRate).entryFeeUsd();
-        BigDecimal nearFifty = calculator.calculateEntry(bd("1.00"), bd("0.50"), feeRate).entryFeeUsd();
-        BigDecimal nearNinetyFive = calculator.calculateEntry(bd("1.00"), bd("0.95"), feeRate).entryFeeUsd();
+        BigDecimal nearFive = calculator.calculateFee(bd("100"), bd("0.05"), feeRate);
+        BigDecimal nearFifty = calculator.calculateFee(bd("100"), bd("0.50"), feeRate);
+        BigDecimal nearNinetyFive = calculator.calculateFee(bd("100"), bd("0.95"), feeRate);
 
         assertThat(nearFive).isLessThan(nearFifty);
         assertThat(nearNinetyFive).isLessThan(nearFifty);
+    }
+
+    @Test
+    void cryptoFeeMatchesPolymarketDocsAtTwentyFiveCents() {
+        BigDecimal fee = calculator.calculateFee(
+                bd("100"),
+                bd("0.25"),
+                bd("0.072")
+        );
+
+        assertThat(fee).isEqualByComparingTo("1.35000000");
+    }
+
+    @Test
+    void cryptoFeeMatchesPolymarketDocsAtFiftyCents() {
+        BigDecimal fee = calculator.calculateFee(
+                bd("100"),
+                bd("0.50"),
+                bd("0.072")
+        );
+
+        assertThat(fee).isEqualByComparingTo("1.80000000");
     }
 
     private static BigDecimal bd(String value) {

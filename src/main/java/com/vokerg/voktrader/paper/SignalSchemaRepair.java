@@ -44,6 +44,8 @@ public class SignalSchemaRepair implements ApplicationRunner {
                     paper_shares NUMERIC(19, 8) NOT NULL,
                     fee_rate NUMERIC(19, 8),
                     entry_fee_usd NUMERIC(19, 8),
+                    exit_fee_usd NUMERIC(19, 8),
+                    total_fee_usd NUMERIC(19, 8),
                     gross_paper_shares NUMERIC(19, 8),
                     net_paper_shares NUMERIC(19, 8),
                     rule_name VARCHAR(255) NOT NULL,
@@ -128,6 +130,8 @@ public class SignalSchemaRepair implements ApplicationRunner {
         jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ALTER COLUMN status SET NOT NULL");
         jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ALTER COLUMN signal_type SET DATA TYPE VARCHAR(20)");
         jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ALTER COLUMN signal_type SET NOT NULL");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ADD COLUMN IF NOT EXISTS exit_fee_usd NUMERIC(19, 8)");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ADD COLUMN IF NOT EXISTS total_fee_usd NUMERIC(19, 8)");
     }
 
     private boolean tableExists(String tableName) {

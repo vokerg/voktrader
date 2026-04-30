@@ -63,6 +63,12 @@ public class SignalEntity {
     @Column(name = "entry_fee_usd", precision = 19, scale = 8)
     private BigDecimal entryFeeUsd;
 
+    @Column(name = "exit_fee_usd", precision = 19, scale = 8)
+    private BigDecimal exitFeeUsd;
+
+    @Column(name = "total_fee_usd", precision = 19, scale = 8)
+    private BigDecimal totalFeeUsd;
+
     @Column(name = "gross_paper_shares", precision = 19, scale = 8)
     private BigDecimal grossPaperShares;
 
@@ -145,14 +151,16 @@ public class SignalEntity {
         return entity;
     }
 
-    public void sell(BigDecimal exitPrice, String exitReason, Instant soldAt) {
+    public void sell(BigDecimal exitPrice, BigDecimal exitFeeUsd, String exitReason, Instant soldAt) {
         if (status != SignalStatus.OPEN) {
             throw new IllegalStateException("Only OPEN signals can be sold");
         }
 
         this.exitPrice = exitPrice;
         this.exitValueUsd = sharesForPnl().multiply(exitPrice);
-        this.paperPnl = exitValueUsd.subtract(paperSizeUsd);
+        this.exitFeeUsd = exitFeeUsd == null ? BigDecimal.ZERO : exitFeeUsd;
+        this.totalFeeUsd = entryFeeOrZero().add(this.exitFeeUsd);
+        this.paperPnl = exitValueUsd.subtract(this.exitFeeUsd).subtract(paperSizeUsd);
         this.exitReason = exitReason;
         this.resolvedAt = soldAt;
         this.status = SignalStatus.SOLD;
@@ -183,6 +191,10 @@ public class SignalEntity {
         }
 
         return paperShares;
+    }
+
+    private BigDecimal entryFeeOrZero() {
+        return entryFeeUsd == null ? BigDecimal.ZERO : entryFeeUsd;
     }
 
     public Long getId() {
@@ -231,6 +243,14 @@ public class SignalEntity {
 
     public BigDecimal getEntryFeeUsd() {
         return entryFeeUsd;
+    }
+
+    public BigDecimal getExitFeeUsd() {
+        return exitFeeUsd;
+    }
+
+    public BigDecimal getTotalFeeUsd() {
+        return totalFeeUsd;
     }
 
     public BigDecimal getGrossPaperShares() {

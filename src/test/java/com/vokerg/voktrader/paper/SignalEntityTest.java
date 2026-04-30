@@ -31,6 +31,17 @@ class SignalEntityTest {
         assertThat(signal.getPaperPnl()).isEqualByComparingTo("-1.00");
     }
 
+    @Test
+    void sellingTradeSubtractsExitFeeFromPnl() {
+        SignalEntity signal = signalWithFeeRate(bd("0.02"));
+
+        signal.sell(bd("0.60"), bd("0.01"), "test", Instant.now());
+
+        assertThat(signal.getExitFeeUsd()).isEqualByComparingTo("0.01");
+        assertThat(signal.getTotalFeeUsd()).isGreaterThan(signal.getEntryFeeUsd());
+        assertThat(signal.getPaperPnl()).isEqualByComparingTo("0.1780000000");
+    }
+
     private SignalEntity signalWithFeeRate(BigDecimal feeRate) {
         PaperTradeFeeCalculator.EntryFees fees = calculator.calculateEntry(
                 bd("1.00"),

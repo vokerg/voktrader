@@ -22,11 +22,7 @@ public class PaperTradeFeeCalculator {
                 SHARE_SCALE,
                 RoundingMode.HALF_UP
         );
-        BigDecimal entryFeeUsd = paperSizeUsd
-                .multiply(normalizedFeeRate)
-                .multiply(entryPrice)
-                .multiply(BigDecimal.ONE.subtract(entryPrice))
-                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+        BigDecimal entryFeeUsd = calculateFee(grossPaperShares, entryPrice, normalizedFeeRate);
         BigDecimal netPaperShares = grossPaperShares.subtract(
                 entryFeeUsd.divide(entryPrice, SHARE_SCALE, RoundingMode.HALF_UP)
         );
@@ -37,6 +33,35 @@ public class PaperTradeFeeCalculator {
                 grossPaperShares,
                 netPaperShares.setScale(SHARE_SCALE, RoundingMode.HALF_UP)
         );
+    }
+
+    public BigDecimal calculateFee(
+            BigDecimal shares,
+            BigDecimal price,
+            BigDecimal feeRate
+    ) {
+        BigDecimal normalizedFeeRate = feeRate == null ? BigDecimal.ZERO : feeRate;
+
+        return shares
+                .multiply(normalizedFeeRate)
+                .multiply(price)
+                .multiply(BigDecimal.ONE.subtract(price))
+                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+    }
+
+    public BigDecimal calculateExitPnl(
+            BigDecimal netPaperShares,
+            BigDecimal exitPrice,
+            BigDecimal paperSizeUsd,
+            BigDecimal feeRate
+    ) {
+        BigDecimal exitFeeUsd = calculateFee(netPaperShares, exitPrice, feeRate);
+
+        return netPaperShares
+                .multiply(exitPrice)
+                .subtract(exitFeeUsd)
+                .subtract(paperSizeUsd)
+                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
     }
 
     public record EntryFees(
