@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import uvicorn
 from fastapi import Depends, FastAPI, Header, HTTPException, status
@@ -12,10 +13,23 @@ from .idempotency import IdempotencyStore
 from .models import OrderCommand, OrderResponse
 from .polymarket_client import PolymarketExecutor
 
+logger = logging.getLogger("uvicorn.error")
+logger.setLevel(logging.INFO)
 settings = Settings()
 app = FastAPI(title="voktrader executor", version="0.3.0")
 idempotency_store = IdempotencyStore()
 executor = PolymarketExecutor(settings)
+
+
+@app.on_event("startup")
+def log_startup_config() -> None:
+    logger.info(
+        "EXECUTOR CONFIG: dryRun=%s host=%s maxOrderAmountUsd=%s requireFok=%s",
+        settings.executor_dry_run,
+        settings.polymarket_host,
+        settings.max_order_amount_usd,
+        settings.require_fok,
+    )
 
 
 async def require_auth(authorization: str | None = Header(default=None)) -> None:
@@ -35,8 +49,25 @@ def health() -> dict[str, object]:
 
 @app.post("/v1/orders", response_model=OrderResponse)
 def create_order(command: OrderCommand, _: None = Depends(require_auth)) -> OrderResponse:
+    effective_dry_run = command.dryRun or settings.executor_dry_run
+    logger.info(
+        "EXECUTOR ORDER RECEIVED: dryRun=%s strategy=%s marketId=%s outcome=%s tokenId=%s side=%s amountUsd=%s shares=%s limitPrice=%s tif=%s idempotencyKey=%s",
+        effective_dry_run,
+        command.strategyId,
+        command.marketId,
+        command.outcome,
+        command.tokenId,
+        command.side.value,
+        command.amountUsd,
+        command.shares,
+        command.limitPrice,
+        command.timeInForce,
+        command.idempotencyKey,
+    )
+
     cached = idempotency_store.get(command.idempotencyKey)
     if cached is not None:
+        log_response(command, cached, cached=True, dry_run=effective_dry_run)
         return cached
 
     try:
@@ -59,7 +90,31 @@ def create_order(command: OrderCommand, _: None = Depends(require_auth)) -> Orde
         )
 
     idempotency_store.put(command.idempotencyKey, response)
+    log_response(command, response, cached=False, dry_run=effective_dry_run)
     return response
+
+
+def log_response(command: OrderCommand, response: OrderResponse, *, cached: bool, dry_run: bool) -> None:
+    logger.info(
+        "EXECUTOR ORDER RESULT: accepted=%s filled=%s status=%s dryRun=%s cached=%s exchangeOrderId=%s strategy=%s marketId=%s outcome=%s tokenId=%s side=%s avgPrice=%s filledShares=%s filledAmountUsd=%s feeUsd=%s message=%s idempotencyKey=%s",
+        response.accepted,
+        response.filled,
+        response.status,
+        dry_run,
+        cached,
+        response.exchangeOrderId,
+        command.strategyId,
+        command.marketId,
+        command.outcome,
+        command.tokenId,
+        command.side.value,
+        response.averagePrice,
+        response.filledShares,
+        response.filledAmountUsd,
+        response.feeUsd,
+        response.message,
+        command.idempotencyKey,
+    )
 
 
 @app.exception_handler(Exception)
