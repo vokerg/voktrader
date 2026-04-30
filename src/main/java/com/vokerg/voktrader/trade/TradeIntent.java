@@ -1,0 +1,100 @@
+package com.vokerg.voktrader.trade;
+
+import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
+import com.vokerg.voktrader.pricing.OutcomePrice;
+
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Objects;
+
+public record TradeIntent(
+        String strategyId,
+        String ruleId,
+        String marketId,
+        String marketSlug,
+        String question,
+        String conditionId,
+        String tokenId,
+        String outcome,
+        TradeSide side,
+        BigDecimal amountUsd,
+        BigDecimal shares,
+        TradeOrderType orderType,
+        BigDecimal limitPrice,
+        BigDecimal observedBid,
+        BigDecimal observedAsk,
+        BigDecimal observedSpread,
+        BigDecimal observedMidpoint,
+        Instant priceUpdatedAt,
+        Long priceAgeMs,
+        Instant decisionAt,
+        Instant marketEndAt,
+        Long secondsToExpiryAtDecision,
+        String reason
+) {
+    public TradeIntent {
+        Objects.requireNonNull(strategyId, "strategyId is required");
+        Objects.requireNonNull(marketId, "marketId is required");
+        Objects.requireNonNull(tokenId, "tokenId is required");
+        Objects.requireNonNull(outcome, "outcome is required");
+        Objects.requireNonNull(side, "side is required");
+        decisionAt = decisionAt == null ? Instant.now() : decisionAt;
+        orderType = orderType == null ? TradeOrderType.FOK : orderType;
+    }
+
+    public BigDecimal expectedPrice() {
+        if (limitPrice != null) {
+            return limitPrice;
+        }
+        return side == TradeSide.BUY ? observedAsk : observedBid;
+    }
+
+    public static TradeIntent buy(
+            GammaMarketDto market,
+            OutcomePrice price,
+            BigDecimal amountUsd,
+            String strategyId,
+            String ruleId,
+            String reason
+    ) {
+        Instant now = Instant.now();
+        Instant updatedAt = price.updatedAt();
+        Long ageMs = updatedAt == null ? null : Duration.between(updatedAt, now).toMillis();
+        Long secondsToExpiry = market.endDate() == null ? null : Duration.between(now, market.endDate()).toSeconds();
+        BigDecimal midpoint = midpoint(price.bid(), price.ask());
+
+        return new TradeIntent(
+                strategyId,
+                ruleId,
+                market.id(),
+                market.slug(),
+                market.question(),
+                null,
+                price.tokenId(),
+                price.outcome(),
+                TradeSide.BUY,
+                amountUsd,
+                null,
+                TradeOrderType.FOK,
+                price.ask(),
+                price.bid(),
+                price.ask(),
+                price.spread(),
+                midpoint,
+                updatedAt,
+                ageMs,
+                now,
+                market.endDate(),
+                secondsToExpiry,
+                reason
+        );
+    }
+
+    private static BigDecimal midpoint(BigDecimal bid, BigDecimal ask) {
+        if (bid == null || ask == null) {
+            return null;
+        }
+        return bid.add(ask).divide(new BigDecimal("2"), 8, java.math.RoundingMode.HALF_UP);
+    }
+}

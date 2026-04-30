@@ -1,9 +1,9 @@
 package com.vokerg.voktrader.paper;
 
-import com.vokerg.voktrader.common.LogColors;
-import com.vokerg.voktrader.polymarket.client.ClobClient;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.trade.TradeLifecycleService;
+import com.vokerg.voktrader.trade.TradingProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -15,243 +15,20 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Compatibility adapter for existing resolution code.
+ *
+ * The old model treated a signal as the paper position. New code records real trade lifecycle rows in trades/* tables.
+ * Keep this class so existing MarketResolutionService can call signalService.resolveMarket(...) without knowing the new model yet.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class SignalService {
-
-    private static final Duration FEE_FETCH_TIMEOUT = Duration.ofSeconds(5);
-
+    private final TradeLifecycleService tradeLifecycleService;
     private final SignalRepository signalRepository;
-    private final ClobClient clobClient;
     private final PaperTradeFeeCalculator paperTradeFeeCalculator;
-
-    @Transactional
-    public Optional<SignalEntity> createPaperBuySignal(
-            GammaMarketDto market,
-            OutcomePrice outcomePrice,
-            BigDecimal paperSizeUsd,
-            String ruleName,
-            String reason
-    ) {
-        if (market == null || outcomePrice == null) {
-            return Optional.empty();
-        }
-
-        if (market.id() == null || outcomePrice.tokenId() == null || outcomePrice.outcome() == null) {
-            return Optional.empty();
-        }
-
-        BigDecimal entryPrice = outcomePrice.ask();
-
-        if (entryPrice == null || entryPrice.compareTo(BigDecimal.ZERO) <= 0) {
-            return Optional.empty();
-        }
-
-        if (paperSizeUsd == null || paperSizeUsd.compareTo(BigDecimal.ZERO) <= 0) {
-            return Optional.empty();
-        }
-
-        boolean alreadyExists = signalRepository.existsByMarketIdAndTokenIdAndRuleNameAndSignalType(
-                market.id(),
-                outcomePrice.tokenId(),
-                ruleName,
-                SignalType.PAPER
-        );
-
-        if (alreadyExists) {
-            return Optional.empty();
-        }
-
-        BigDecimal feeRate = fetchFeeRate(market);
-        Instant createdAt = Instant.now();
-        Long snapshotAgeMs = outcomePrice.updatedAt() == null
-                ? null
-                : Math.max(0, Duration.between(outcomePrice.updatedAt(), createdAt).toMillis());
-        PaperTradeFeeCalculator.EntryFees entryFees = paperTradeFeeCalculator.calculateEntry(
-                paperSizeUsd,
-                entryPrice,
-                feeRate
-        );
-
-        SignalEntity signal = SignalEntity.openPaperBuySignal(
-                market.id(),
-                market.slug(),
-                market.question(),
-                outcomePrice.outcome(),
-                outcomePrice.tokenId(),
-                entryPrice,
-                paperSizeUsd,
-                entryFees.grossPaperShares(),
-                entryFees.feeRate(),
-                entryFees.entryFeeUsd(),
-                entryFees.netPaperShares(),
-                outcomePrice.bid(),
-                outcomePrice.ask(),
-                outcomePrice.spread(),
-                outcomePrice.updatedAt(),
-                snapshotAgeMs,
-                ruleName,
-                reason,
-                createdAt,
-                market.endDate()
-        );
-
-        SignalEntity saved = signalRepository.save(signal);
-
-        Duration remaining = market.endDate() == null
-                ? null
-                : Duration.between(Instant.now(), market.endDate());
-
-        log.info(
-                "{}PAPER SIGNAL SAVED: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} sizeUsd={} shares={} decisionBid={} decisionAsk={} snapshotAgeMs={} remaining={} reason={}{}",
-                LogColors.TRADE,
-                saved.getId(),
-                saved.getRuleName(),
-                saved.getMarketId(),
-                saved.getOutcome(),
-                saved.getTokenId(),
-                saved.getEntryPrice(),
-                saved.getSizeUsd(),
-                saved.getShares(),
-                saved.getDecisionBid(),
-                saved.getDecisionAsk(),
-                saved.getSnapshotAgeMs(),
-                remaining,
-                saved.getReason(),
-                LogColors.RESET
-        );
-
-        return Optional.of(saved);
-    }
-
-    private BigDecimal fetchFeeRate(GammaMarketDto market) {
-        if (market.conditionId() == null || market.conditionId().isBlank()) {
-            return BigDecimal.ZERO;
-        }
-
-        try {
-            return clobClient.getClobMarketInfo(market.conditionId())
-                    .map(info -> info.platformFeeRate())
-                    .block(FEE_FETCH_TIMEOUT);
-        } catch (Exception e) {
-            log.warn(
-                    "{}Could not fetch CLOB fee data for marketId={} conditionId={}; assuming zero paper fee{}",
-                    LogColors.TRADE,
-                    market.id(),
-                    market.conditionId(),
-                    LogColors.RESET,
-                    e
-            );
-            return BigDecimal.ZERO;
-        }
-    }
-
-    @Transactional
-    public Optional<SignalEntity> sellOpenPaperSignal(
-            Long signalId,
-            OutcomePrice outcomePrice,
-            String reason
-    ) {
-        if (signalId == null || outcomePrice == null) {
-            return Optional.empty();
-        }
-
-        BigDecimal exitPrice = outcomePrice.bid();
-
-        if (exitPrice == null || exitPrice.compareTo(BigDecimal.ZERO) <= 0) {
-            return Optional.empty();
-        }
-
-        SignalEntity signal = signalRepository
-                .findByIdAndStatusAndSignalType(signalId, SignalStatus.OPEN, SignalType.PAPER)
-                .orElse(null);
-
-        if (signal == null) {
-            return Optional.empty();
-        }
-
-        if (!signal.getTokenId().equals(outcomePrice.tokenId())) {
-            log.warn(
-                    "{}Refusing to sell paper signal id={} because token mismatch: signalToken={} priceToken={}{}",
-                    LogColors.TRADE,
-                    signal.getId(),
-                    signal.getTokenId(),
-                    outcomePrice.tokenId(),
-                    LogColors.RESET
-            );
-            return Optional.empty();
-        }
-
-        BigDecimal exitFeeUsd = paperTradeFeeCalculator.calculateFee(
-                signal.getShares(),
-                exitPrice,
-                signal.getFeeRate()
-        );
-
-        signal.sell(exitPrice, exitFeeUsd, reason, Instant.now());
-
-        log.info(
-                "{}PAPER SIGNAL SOLD: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} exitPrice={} sizeUsd={} shares={} exitFeeUsd={} pnlUsd={} reason={}{}",
-                LogColors.TRADE,
-                signal.getId(),
-                signal.getRuleName(),
-                signal.getMarketId(),
-                signal.getOutcome(),
-                signal.getTokenId(),
-                signal.getEntryPrice(),
-                signal.getExitPrice(),
-                signal.getSizeUsd(),
-                signal.getShares(),
-                signal.getExitFeeUsd(),
-                signal.getPnlUsd(),
-                signal.getExitReason(),
-                LogColors.RESET
-        );
-
-        return Optional.of(signal);
-    }
-
-    @Transactional
-    public void resolveMarket(String marketId, String winningOutcome) {
-        if (marketId == null || winningOutcome == null) {
-            return;
-        }
-
-        List<SignalEntity> openSignals = signalRepository.findByMarketIdAndStatusAndSignalType(
-                marketId,
-                SignalStatus.OPEN,
-                SignalType.PAPER
-        );
-
-        if (openSignals.isEmpty()) {
-            log.info(
-                    "{}No OPEN paper signals to resolve for marketId={}{}",
-                    LogColors.TRADE,
-                    marketId,
-                    LogColors.RESET);
-            return;
-        }
-
-        for (SignalEntity signal : openSignals) {
-            signal.resolve(winningOutcome, Instant.now());
-
-            log.info(
-                    "{}PAPER SIGNAL RESOLVED: id={} marketId={} outcome={} winningOutcome={} status={} entryPrice={} sizeUsd={} shares={} pnlUsd={}{}",
-                    LogColors.TRADE,
-                    signal.getId(),
-                    signal.getMarketId(),
-                    signal.getOutcome(),
-                    signal.getWinningOutcome(),
-                    signal.getStatus(),
-                    signal.getEntryPrice(),
-                    signal.getSizeUsd(),
-                    signal.getShares(),
-                    signal.getPnlUsd(),
-                    LogColors.RESET
-            );
-        }
-    }
+    private final TradingProperties tradingProperties;
 
     @Transactional(readOnly = true)
     public List<SignalEntity> allSignals() {
@@ -274,5 +51,117 @@ public class SignalService {
                 ruleName,
                 SignalType.PAPER
         );
+    }
+
+    @Transactional
+    public Optional<SignalEntity> createPaperBuySignal(
+            GammaMarketDto market,
+            OutcomePrice price,
+            BigDecimal paperSizeUsd,
+            String ruleName,
+            String reason
+    ) {
+        if (market == null || market.id() == null || price == null || price.tokenId() == null) {
+            return Optional.empty();
+        }
+        if (price.ask() == null || price.ask().compareTo(BigDecimal.ZERO) <= 0 || paperSizeUsd == null) {
+            return Optional.empty();
+        }
+
+        boolean alreadyExists = signalRepository.existsByMarketIdAndTokenIdAndRuleNameAndSignalType(
+                market.id(),
+                price.tokenId(),
+                ruleName,
+                SignalType.PAPER
+        );
+        if (alreadyExists) {
+            return Optional.empty();
+        }
+
+        Instant now = Instant.now();
+        PaperTradeFeeCalculator.EntryFees fees = paperTradeFeeCalculator.calculateEntry(
+                paperSizeUsd,
+                price.ask(),
+                tradingProperties.getPaperFeeRate()
+        );
+
+        SignalEntity signal = SignalEntity.openPaperBuySignal(
+                market.id(),
+                market.slug(),
+                market.question(),
+                price.outcome(),
+                price.tokenId(),
+                price.ask(),
+                paperSizeUsd,
+                fees.grossPaperShares(),
+                fees.feeRate(),
+                fees.entryFeeUsd(),
+                fees.netPaperShares(),
+                price.bid(),
+                price.ask(),
+                price.spread(),
+                price.updatedAt(),
+                price.updatedAt() == null ? null : Duration.between(price.updatedAt(), now).toMillis(),
+                ruleName,
+                reason,
+                now,
+                market.endDate()
+        );
+
+        SignalEntity saved = signalRepository.save(signal);
+        log.info(
+                "PAPER SIGNAL OPENED: signalId={} rule={} marketId={} outcome={} tokenId={} price={} sizeUsd={} shares={} fee={} reason={}",
+                saved.getId(), ruleName, market.id(), price.outcome(), price.tokenId(), price.ask(), paperSizeUsd,
+                saved.getShares(), saved.getEntryFeeUsd(), reason);
+        return Optional.of(saved);
+    }
+
+    @Transactional
+    public Optional<SignalEntity> sellOpenPaperSignal(Long signalId, OutcomePrice price, String exitReason) {
+        if (signalId == null || price == null || price.bid() == null) {
+            return Optional.empty();
+        }
+
+        Optional<SignalEntity> found = signalRepository.findByIdAndStatusAndSignalType(
+                signalId,
+                SignalStatus.OPEN,
+                SignalType.PAPER
+        );
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+
+        SignalEntity signal = found.get();
+        if (!signal.getTokenId().equals(price.tokenId())) {
+            return Optional.empty();
+        }
+
+        BigDecimal exitFeeUsd = paperTradeFeeCalculator.calculateFee(
+                signal.getShares(),
+                price.bid(),
+                signal.getFeeRate()
+        );
+        signal.sell(price.bid(), exitFeeUsd, exitReason, Instant.now());
+        SignalEntity saved = signalRepository.save(signal);
+        log.info(
+                "PAPER SIGNAL SOLD: signalId={} rule={} marketId={} outcome={} tokenId={} exitPrice={} pnlUsd={} reason={}",
+                saved.getId(), saved.getRuleName(), saved.getMarketId(), saved.getOutcome(),
+                saved.getTokenId(), saved.getExitPrice(), saved.getPnlUsd(), exitReason);
+        return Optional.of(saved);
+    }
+
+    @Transactional
+    public void resolveMarket(String marketId, String winningOutcome) {
+        Instant now = Instant.now();
+        for (SignalEntity signal : signalRepository.findByMarketIdAndStatusAndSignalType(
+                marketId,
+                SignalStatus.OPEN,
+                SignalType.PAPER
+        )) {
+            signal.resolve(winningOutcome, now);
+            signalRepository.save(signal);
+        }
+
+        tradeLifecycleService.resolveMarket(marketId, winningOutcome);
     }
 }
