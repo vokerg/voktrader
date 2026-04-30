@@ -19,7 +19,7 @@ class SignalEntityTest {
         withoutFee.resolve("Yes", Instant.now());
         withFee.resolve("Yes", Instant.now());
 
-        assertThat(withFee.getPaperPnl()).isLessThan(withoutFee.getPaperPnl());
+        assertThat(withFee.getPnlUsd()).isLessThan(withoutFee.getPnlUsd());
     }
 
     @Test
@@ -28,7 +28,7 @@ class SignalEntityTest {
 
         signal.resolve("No", Instant.now());
 
-        assertThat(signal.getPaperPnl()).isEqualByComparingTo("-1.00");
+        assertThat(signal.getPnlUsd()).isEqualByComparingTo("-1.00");
     }
 
     @Test
@@ -39,7 +39,7 @@ class SignalEntityTest {
 
         assertThat(signal.getExitFeeUsd()).isEqualByComparingTo("0.01");
         assertThat(signal.getTotalFeeUsd()).isGreaterThan(signal.getEntryFeeUsd());
-        assertThat(signal.getPaperPnl()).isEqualByComparingTo("0.1780000000");
+        assertThat(signal.getPnlUsd()).isEqualByComparingTo("0.1780000000");
     }
 
     private SignalEntity signalWithFeeRate(BigDecimal feeRate) {
@@ -61,6 +61,11 @@ class SignalEntityTest {
                 fees.feeRate(),
                 fees.entryFeeUsd(),
                 fees.netPaperShares(),
+                bd("0.49"),
+                bd("0.50"),
+                bd("0.01"),
+                Instant.now(),
+                100L,
                 "rule",
                 "reason",
                 Instant.now(),

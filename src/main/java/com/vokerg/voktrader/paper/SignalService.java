@@ -64,6 +64,10 @@ public class SignalService {
         }
 
         BigDecimal feeRate = fetchFeeRate(market);
+        Instant createdAt = Instant.now();
+        Long snapshotAgeMs = outcomePrice.updatedAt() == null
+                ? null
+                : Math.max(0, Duration.between(outcomePrice.updatedAt(), createdAt).toMillis());
         PaperTradeFeeCalculator.EntryFees entryFees = paperTradeFeeCalculator.calculateEntry(
                 paperSizeUsd,
                 entryPrice,
@@ -82,9 +86,14 @@ public class SignalService {
                 entryFees.feeRate(),
                 entryFees.entryFeeUsd(),
                 entryFees.netPaperShares(),
+                outcomePrice.bid(),
+                outcomePrice.ask(),
+                outcomePrice.spread(),
+                outcomePrice.updatedAt(),
+                snapshotAgeMs,
                 ruleName,
                 reason,
-                Instant.now(),
+                createdAt,
                 market.endDate()
         );
 
@@ -95,7 +104,7 @@ public class SignalService {
                 : Duration.between(Instant.now(), market.endDate());
 
         log.info(
-                "{}PAPER SIGNAL SAVED: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} paperSizeUsd={} paperShares={} remaining={} reason={}{}",
+                "{}PAPER SIGNAL SAVED: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} sizeUsd={} shares={} decisionBid={} decisionAsk={} snapshotAgeMs={} remaining={} reason={}{}",
                 LogColors.TRADE,
                 saved.getId(),
                 saved.getRuleName(),
@@ -103,8 +112,11 @@ public class SignalService {
                 saved.getOutcome(),
                 saved.getTokenId(),
                 saved.getEntryPrice(),
-                saved.getPaperSizeUsd(),
-                saved.getPaperShares(),
+                saved.getSizeUsd(),
+                saved.getShares(),
+                saved.getDecisionBid(),
+                saved.getDecisionAsk(),
+                saved.getSnapshotAgeMs(),
                 remaining,
                 saved.getReason(),
                 LogColors.RESET
@@ -172,7 +184,7 @@ public class SignalService {
         }
 
         BigDecimal exitFeeUsd = paperTradeFeeCalculator.calculateFee(
-                signal.getPaperShares(),
+                signal.getShares(),
                 exitPrice,
                 signal.getFeeRate()
         );
@@ -180,7 +192,7 @@ public class SignalService {
         signal.sell(exitPrice, exitFeeUsd, reason, Instant.now());
 
         log.info(
-                "{}PAPER SIGNAL SOLD: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} exitPrice={} paperSizeUsd={} paperShares={} exitFeeUsd={} paperPnl={} reason={}{}",
+                "{}PAPER SIGNAL SOLD: id={} rule={} marketId={} outcome={} tokenId={} entryPrice={} exitPrice={} sizeUsd={} shares={} exitFeeUsd={} pnlUsd={} reason={}{}",
                 LogColors.TRADE,
                 signal.getId(),
                 signal.getRuleName(),
@@ -189,10 +201,10 @@ public class SignalService {
                 signal.getTokenId(),
                 signal.getEntryPrice(),
                 signal.getExitPrice(),
-                signal.getPaperSizeUsd(),
-                signal.getPaperShares(),
+                signal.getSizeUsd(),
+                signal.getShares(),
                 signal.getExitFeeUsd(),
-                signal.getPaperPnl(),
+                signal.getPnlUsd(),
                 signal.getExitReason(),
                 LogColors.RESET
         );
@@ -225,7 +237,7 @@ public class SignalService {
             signal.resolve(winningOutcome, Instant.now());
 
             log.info(
-                    "{}PAPER SIGNAL RESOLVED: id={} marketId={} outcome={} winningOutcome={} status={} entryPrice={} paperSizeUsd={} paperShares={} paperPnl={}{}",
+                    "{}PAPER SIGNAL RESOLVED: id={} marketId={} outcome={} winningOutcome={} status={} entryPrice={} sizeUsd={} shares={} pnlUsd={}{}",
                     LogColors.TRADE,
                     signal.getId(),
                     signal.getMarketId(),
@@ -233,9 +245,9 @@ public class SignalService {
                     signal.getWinningOutcome(),
                     signal.getStatus(),
                     signal.getEntryPrice(),
-                    signal.getPaperSizeUsd(),
-                    signal.getPaperShares(),
-                    signal.getPaperPnl(),
+                    signal.getSizeUsd(),
+                    signal.getShares(),
+                    signal.getPnlUsd(),
                     LogColors.RESET
             );
         }

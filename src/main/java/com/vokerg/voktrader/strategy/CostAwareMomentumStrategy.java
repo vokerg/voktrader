@@ -42,6 +42,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
     private final PaperTradeFeeCalculator paperTradeFeeCalculator;
     private final Clock clock;
     private final Map<String, Deque<PriceSample>> samplesByTokenId = new ConcurrentHashMap<>();
+    private final Map<String, BigDecimal> trailingPeakBidBySignal = new ConcurrentHashMap<>();
 
     @Autowired
     public CostAwareMomentumStrategy(
@@ -120,25 +121,30 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
 
             BigDecimal mid = mid(price);
             BigDecimal paperPnl = paperTradeFeeCalculator.calculateExitPnl(
-                    signal.getPaperShares(),
+                    signal.getShares(),
                     price.bid(),
-                    signal.getPaperSizeUsd(),
+                    signal.getSizeUsd(),
                     signal.getFeeRate()
             );
             boolean profitable = paperPnl.compareTo(BigDecimal.ZERO) > 0;
 
             if (isNearExpiry(market, config)) {
                 if (profitable) {
+                    trailingPeakBidBySignal.remove(trailingKey(signal));
                     signalService.sellOpenPaperSignal(signal.getId(), price, "near expiry profitable paper exit");
                 }
                 continue;
             }
 
             BigDecimal priceMove = price.bid().subtract(signal.getEntryPrice());
+            boolean takeProfitReached = paperPnl.compareTo(config.minProfitUsdOrDefault()) >= 0
+                    || priceMove.compareTo(config.minPriceMoveOrDefault()) >= 0;
 
-            if (paperPnl.compareTo(config.minProfitUsdOrDefault()) >= 0
-                    || priceMove.compareTo(config.minPriceMoveOrDefault()) >= 0) {
-                signalService.sellOpenPaperSignal(signal.getId(), price, "cost-aware momentum take profit");
+            if (takeProfitReached || trailingPeakBidBySignal.containsKey(trailingKey(signal))) {
+                if (shouldSellTrailingStop(signal, price.bid(), config)) {
+                    trailingPeakBidBySignal.remove(trailingKey(signal));
+                    signalService.sellOpenPaperSignal(signal.getId(), price, "cost-aware momentum trailing stop");
+                }
                 continue;
             }
 
@@ -153,6 +159,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             if (heldLongEnoughForStop
                     && actualMomentumReversal
                     && (lossLimitHit || stopMidHit)) {
+                trailingPeakBidBySignal.remove(trailingKey(signal));
                 signalService.sellOpenPaperSignal(signal.getId(), price, "cost-aware momentum stop loss");
             }
         }
@@ -267,6 +274,33 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
                 && Duration.between(signal.getCreatedAt(), clock.instant()).compareTo(
                 Duration.ofSeconds(config.minHoldSecondsOrDefault())
         ) >= 0;
+    }
+
+    private boolean shouldSellTrailingStop(
+            SignalEntity signal,
+            BigDecimal bid,
+            StrategyProperties.CostAwareMomentum config
+    ) {
+        String key = trailingKey(signal);
+        BigDecimal previousPeak = trailingPeakBidBySignal.get(key);
+
+        if (previousPeak == null) {
+            trailingPeakBidBySignal.put(key, bid);
+            return false;
+        }
+
+        BigDecimal newPeak = previousPeak.max(bid);
+        trailingPeakBidBySignal.put(key, newPeak);
+
+        return bid.compareTo(newPeak.subtract(config.trailingStopBidDropOrDefault())) <= 0;
+    }
+
+    private String trailingKey(SignalEntity signal) {
+        if (signal.getId() != null) {
+            return "id:" + signal.getId();
+        }
+
+        return "signal:" + signal.getMarketId() + ":" + signal.getTokenId() + ":" + signal.getRuleName();
     }
 
     private BigDecimal mid(OutcomePrice price) {

@@ -61,8 +61,8 @@ public class BuySellSmokeStrategy implements TradingStrategy {
                 continue;
             }
 
-            BigDecimal exitValueUsd = signal.getPaperShares().multiply(price.bid());
-            BigDecimal paperPnl = exitValueUsd.subtract(signal.getPaperSizeUsd());
+            BigDecimal exitValueUsd = signal.getShares().multiply(price.bid());
+            BigDecimal paperPnl = exitValueUsd.subtract(signal.getSizeUsd());
 
             if (paperPnl.compareTo(config.minProfitUsdOrDefault()) < 0) {
                 continue;

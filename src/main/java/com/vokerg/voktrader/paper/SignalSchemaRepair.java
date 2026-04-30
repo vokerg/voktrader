@@ -40,14 +40,19 @@ public class SignalSchemaRepair implements ApplicationRunner {
                     token_id VARCHAR(100) NOT NULL,
                     signal_type VARCHAR(20) NOT NULL,
                     entry_price NUMERIC(19, 8) NOT NULL,
-                    paper_size_usd NUMERIC(19, 8) NOT NULL,
-                    paper_shares NUMERIC(19, 8) NOT NULL,
+                    size_usd NUMERIC(19, 8) NOT NULL,
+                    shares NUMERIC(19, 8) NOT NULL,
+                    decision_bid NUMERIC(19, 8),
+                    decision_ask NUMERIC(19, 8),
+                    decision_spread NUMERIC(19, 8),
+                    decision_price_updated_at TIMESTAMP WITH TIME ZONE,
+                    snapshot_age_ms BIGINT,
                     fee_rate NUMERIC(19, 8),
                     entry_fee_usd NUMERIC(19, 8),
                     exit_fee_usd NUMERIC(19, 8),
                     total_fee_usd NUMERIC(19, 8),
-                    gross_paper_shares NUMERIC(19, 8),
-                    net_paper_shares NUMERIC(19, 8),
+                    gross_shares NUMERIC(19, 8),
+                    net_shares NUMERIC(19, 8),
                     rule_name VARCHAR(255) NOT NULL,
                     reason VARCHAR(1000),
                     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -55,7 +60,7 @@ public class SignalSchemaRepair implements ApplicationRunner {
                     status VARCHAR(20) NOT NULL,
                     resolved_at TIMESTAMP WITH TIME ZONE,
                     winning_outcome VARCHAR(255),
-                    paper_pnl NUMERIC(19, 8),
+                    pnl_usd NUMERIC(19, 8),
                     exit_price NUMERIC(19, 8),
                     exit_value_usd NUMERIC(19, 8),
                     exit_reason VARCHAR(1000)
@@ -71,12 +76,12 @@ public class SignalSchemaRepair implements ApplicationRunner {
                         token_id,
                         signal_type,
                         entry_price,
-                        paper_size_usd,
-                        paper_shares,
+                        size_usd,
+                        shares,
                         fee_rate,
                         entry_fee_usd,
-                        gross_paper_shares,
-                        net_paper_shares,
+                        gross_shares,
+                        net_shares,
                         rule_name,
                         reason,
                         created_at,
@@ -84,7 +89,7 @@ public class SignalSchemaRepair implements ApplicationRunner {
                         status,
                         resolved_at,
                         winning_outcome,
-                        paper_pnl,
+                        pnl_usd,
                         exit_price,
                         exit_value_usd,
                         exit_reason
@@ -130,8 +135,29 @@ public class SignalSchemaRepair implements ApplicationRunner {
         jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ALTER COLUMN status SET NOT NULL");
         jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ALTER COLUMN signal_type SET DATA TYPE VARCHAR(20)");
         jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ALTER COLUMN signal_type SET NOT NULL");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ADD COLUMN IF NOT EXISTS size_usd NUMERIC(19, 8)");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ADD COLUMN IF NOT EXISTS shares NUMERIC(19, 8)");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ADD COLUMN IF NOT EXISTS gross_shares NUMERIC(19, 8)");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ADD COLUMN IF NOT EXISTS net_shares NUMERIC(19, 8)");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ADD COLUMN IF NOT EXISTS pnl_usd NUMERIC(19, 8)");
         jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ADD COLUMN IF NOT EXISTS exit_fee_usd NUMERIC(19, 8)");
         jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ADD COLUMN IF NOT EXISTS total_fee_usd NUMERIC(19, 8)");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ADD COLUMN IF NOT EXISTS decision_bid NUMERIC(19, 8)");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ADD COLUMN IF NOT EXISTS decision_ask NUMERIC(19, 8)");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ADD COLUMN IF NOT EXISTS decision_spread NUMERIC(19, 8)");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ADD COLUMN IF NOT EXISTS decision_price_updated_at TIMESTAMP WITH TIME ZONE");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals ADD COLUMN IF NOT EXISTS snapshot_age_ms BIGINT");
+        jdbcTemplate.execute("UPDATE signals SET shares = net_shares WHERE shares IS NULL AND net_shares IS NOT NULL");
+        jdbcTemplate.execute("UPDATE signals SET size_usd = gross_shares * entry_price WHERE size_usd IS NULL AND gross_shares IS NOT NULL AND entry_price IS NOT NULL");
+        jdbcTemplate.execute("UPDATE signals SET size_usd = 1.00 WHERE size_usd IS NULL AND signal_type = 'PAPER'");
+        jdbcTemplate.execute("UPDATE signals SET gross_shares = size_usd / entry_price WHERE gross_shares IS NULL AND size_usd IS NOT NULL AND entry_price IS NOT NULL AND entry_price > 0");
+        jdbcTemplate.execute("UPDATE signals SET net_shares = gross_shares WHERE net_shares IS NULL AND gross_shares IS NOT NULL");
+        jdbcTemplate.execute("UPDATE signals SET shares = net_shares WHERE shares IS NULL AND net_shares IS NOT NULL");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals DROP COLUMN IF EXISTS paper_size_usd");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals DROP COLUMN IF EXISTS paper_shares");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals DROP COLUMN IF EXISTS gross_paper_shares");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals DROP COLUMN IF EXISTS net_paper_shares");
+        jdbcTemplate.execute("ALTER TABLE IF EXISTS signals DROP COLUMN IF EXISTS paper_pnl");
     }
 
     private boolean tableExists(String tableName) {

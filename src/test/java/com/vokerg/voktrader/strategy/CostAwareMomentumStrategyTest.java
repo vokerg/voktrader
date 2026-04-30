@@ -158,7 +158,7 @@ class CostAwareMomentumStrategyTest {
     }
 
     @Test
-    void sellsOnTakeProfit() {
+    void activatesTrailingStopInsteadOfSellingImmediatelyOnTakeProfit() {
         SignalEntity open = openSignal("up", "Up", "0.50", "2.00000000");
         when(signalService.openPaperSignals(CostAwareMomentumStrategy.ID)).thenReturn(List.of(open));
         OutcomePrice up = price("up", "Up", "0.56", "0.58");
@@ -166,7 +166,22 @@ class CostAwareMomentumStrategyTest {
 
         strategy.tick();
 
-        verify(signalService).sellOpenPaperSignal(open.getId(), up, "cost-aware momentum take profit");
+        verify(signalService, never()).sellOpenPaperSignal(any(), any(), any());
+    }
+
+    @Test
+    void sellsOnTrailingStopAfterTakeProfitPeakFalls() {
+        SignalEntity open = openSignal("up", "Up", "0.50", "2.00000000");
+        when(signalService.openPaperSignals(CostAwareMomentumStrategy.ID)).thenReturn(List.of(open));
+        when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(price("up", "Up", "0.58", "0.60")));
+        strategy.tick();
+
+        OutcomePrice trailingStop = price("up", "Up", "0.54", "0.56");
+        when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(trailingStop));
+
+        strategy.tick();
+
+        verify(signalService).sellOpenPaperSignal(open.getId(), trailingStop, "cost-aware momentum trailing stop");
     }
 
     @Test
@@ -290,6 +305,11 @@ class CostAwareMomentumStrategyTest {
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
                 new BigDecimal(paperShares),
+                new BigDecimal(entryPrice).subtract(new BigDecimal("0.01")),
+                new BigDecimal(entryPrice),
+                new BigDecimal("0.01"),
+                clock.instant().minusMillis(250),
+                250L,
                 CostAwareMomentumStrategy.ID,
                 "test",
                 clock.instant().minusSeconds(secondsAgo),

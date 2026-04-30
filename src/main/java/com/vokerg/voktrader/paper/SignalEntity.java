@@ -51,11 +51,26 @@ public class SignalEntity {
     @Column(name = "entry_price", nullable = false, precision = 19, scale = 8)
     private BigDecimal entryPrice;
 
-    @Column(name = "paper_size_usd", nullable = false, precision = 19, scale = 8)
-    private BigDecimal paperSizeUsd;
+    @Column(name = "size_usd", nullable = false, precision = 19, scale = 8)
+    private BigDecimal sizeUsd;
 
-    @Column(name = "paper_shares", nullable = false, precision = 19, scale = 8)
-    private BigDecimal paperShares;
+    @Column(name = "shares", nullable = false, precision = 19, scale = 8)
+    private BigDecimal shares;
+
+    @Column(name = "decision_bid", precision = 19, scale = 8)
+    private BigDecimal decisionBid;
+
+    @Column(name = "decision_ask", precision = 19, scale = 8)
+    private BigDecimal decisionAsk;
+
+    @Column(name = "decision_spread", precision = 19, scale = 8)
+    private BigDecimal decisionSpread;
+
+    @Column(name = "decision_price_updated_at")
+    private Instant decisionPriceUpdatedAt;
+
+    @Column(name = "snapshot_age_ms")
+    private Long snapshotAgeMs;
 
     @Column(name = "fee_rate", precision = 19, scale = 8)
     private BigDecimal feeRate;
@@ -69,11 +84,11 @@ public class SignalEntity {
     @Column(name = "total_fee_usd", precision = 19, scale = 8)
     private BigDecimal totalFeeUsd;
 
-    @Column(name = "gross_paper_shares", precision = 19, scale = 8)
-    private BigDecimal grossPaperShares;
+    @Column(name = "gross_shares", precision = 19, scale = 8)
+    private BigDecimal grossShares;
 
-    @Column(name = "net_paper_shares", precision = 19, scale = 8)
-    private BigDecimal netPaperShares;
+    @Column(name = "net_shares", precision = 19, scale = 8)
+    private BigDecimal netShares;
 
     @Column(name = "rule_name", nullable = false)
     private String ruleName;
@@ -97,8 +112,8 @@ public class SignalEntity {
     @Column(name = "winning_outcome")
     private String winningOutcome;
 
-    @Column(name = "paper_pnl", precision = 19, scale = 8)
-    private BigDecimal paperPnl;
+    @Column(name = "pnl_usd", precision = 19, scale = 8)
+    private BigDecimal pnlUsd;
 
     @Column(name = "exit_price", precision = 19, scale = 8)
     private BigDecimal exitPrice;
@@ -119,11 +134,16 @@ public class SignalEntity {
             String outcome,
             String tokenId,
             BigDecimal entryPrice,
-            BigDecimal paperSizeUsd,
-            BigDecimal grossPaperShares,
+            BigDecimal sizeUsd,
+            BigDecimal grossShares,
             BigDecimal feeRate,
             BigDecimal entryFeeUsd,
-            BigDecimal netPaperShares,
+            BigDecimal netShares,
+            BigDecimal decisionBid,
+            BigDecimal decisionAsk,
+            BigDecimal decisionSpread,
+            Instant decisionPriceUpdatedAt,
+            Long snapshotAgeMs,
             String ruleName,
             String reason,
             Instant createdAt,
@@ -137,12 +157,17 @@ public class SignalEntity {
         entity.tokenId = tokenId;
         entity.signalType = SignalType.PAPER;
         entity.entryPrice = entryPrice;
-        entity.paperSizeUsd = paperSizeUsd;
-        entity.paperShares = netPaperShares;
+        entity.sizeUsd = sizeUsd;
+        entity.shares = netShares;
+        entity.decisionBid = decisionBid;
+        entity.decisionAsk = decisionAsk;
+        entity.decisionSpread = decisionSpread;
+        entity.decisionPriceUpdatedAt = decisionPriceUpdatedAt;
+        entity.snapshotAgeMs = snapshotAgeMs;
         entity.feeRate = feeRate;
         entity.entryFeeUsd = entryFeeUsd;
-        entity.grossPaperShares = grossPaperShares;
-        entity.netPaperShares = netPaperShares;
+        entity.grossShares = grossShares;
+        entity.netShares = netShares;
         entity.ruleName = ruleName;
         entity.reason = reason;
         entity.createdAt = createdAt;
@@ -160,7 +185,7 @@ public class SignalEntity {
         this.exitValueUsd = sharesForPnl().multiply(exitPrice);
         this.exitFeeUsd = exitFeeUsd == null ? BigDecimal.ZERO : exitFeeUsd;
         this.totalFeeUsd = entryFeeOrZero().add(this.exitFeeUsd);
-        this.paperPnl = exitValueUsd.subtract(this.exitFeeUsd).subtract(paperSizeUsd);
+        this.pnlUsd = exitValueUsd.subtract(this.exitFeeUsd).subtract(sizeUsd);
         this.exitReason = exitReason;
         this.resolvedAt = soldAt;
         this.status = SignalStatus.SOLD;
@@ -178,19 +203,19 @@ public class SignalEntity {
 
         if (won) {
             this.status = SignalStatus.WON;
-            this.paperPnl = sharesForPnl().subtract(paperSizeUsd);
+            this.pnlUsd = sharesForPnl().subtract(sizeUsd);
         } else {
             this.status = SignalStatus.LOST;
-            this.paperPnl = paperSizeUsd.negate();
+            this.pnlUsd = sizeUsd.negate();
         }
     }
 
     private BigDecimal sharesForPnl() {
-        if (netPaperShares != null) {
-            return netPaperShares;
+        if (netShares != null) {
+            return netShares;
         }
 
-        return paperShares;
+        return shares;
     }
 
     private BigDecimal entryFeeOrZero() {
@@ -229,12 +254,32 @@ public class SignalEntity {
         return entryPrice;
     }
 
-    public BigDecimal getPaperSizeUsd() {
-        return paperSizeUsd;
+    public BigDecimal getSizeUsd() {
+        return sizeUsd;
     }
 
-    public BigDecimal getPaperShares() {
+    public BigDecimal getShares() {
         return sharesForPnl();
+    }
+
+    public BigDecimal getDecisionBid() {
+        return decisionBid;
+    }
+
+    public BigDecimal getDecisionAsk() {
+        return decisionAsk;
+    }
+
+    public BigDecimal getDecisionSpread() {
+        return decisionSpread;
+    }
+
+    public Instant getDecisionPriceUpdatedAt() {
+        return decisionPriceUpdatedAt;
+    }
+
+    public Long getSnapshotAgeMs() {
+        return snapshotAgeMs;
     }
 
     public BigDecimal getFeeRate() {
@@ -253,11 +298,11 @@ public class SignalEntity {
         return totalFeeUsd;
     }
 
-    public BigDecimal getGrossPaperShares() {
-        return grossPaperShares;
+    public BigDecimal getGrossShares() {
+        return grossShares;
     }
 
-    public BigDecimal getNetPaperShares() {
+    public BigDecimal getNetShares() {
         return sharesForPnl();
     }
 
@@ -289,8 +334,8 @@ public class SignalEntity {
         return winningOutcome;
     }
 
-    public BigDecimal getPaperPnl() {
-        return paperPnl;
+    public BigDecimal getPnlUsd() {
+        return pnlUsd;
     }
 
     public BigDecimal getExitPrice() {

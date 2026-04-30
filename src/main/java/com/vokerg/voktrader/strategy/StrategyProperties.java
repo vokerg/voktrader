@@ -43,7 +43,7 @@ public record StrategyProperties(
 
     public CostAwareMomentum costAwareMomentumOrDefault() {
         return costAwareMomentum == null
-                ? new CostAwareMomentum(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)
+                ? new CostAwareMomentum(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)
                 : costAwareMomentum;
     }
 
@@ -117,6 +117,7 @@ public record StrategyProperties(
             BigDecimal maxLossUsd,
             BigDecimal stopMid,
             Long minHoldSeconds,
+            BigDecimal trailingStopBidDrop,
             Long forceDecisionSeconds
     ) {
         public long maxDataAgeMsOrDefault() {
@@ -177,6 +178,10 @@ public record StrategyProperties(
 
         public long minHoldSecondsOrDefault() {
             return minHoldSeconds == null ? 10L : minHoldSeconds;
+        }
+
+        public BigDecimal trailingStopBidDropOrDefault() {
+            return trailingStopBidDrop == null ? new BigDecimal("0.03") : trailingStopBidDrop;
         }
 
         public long forceDecisionSecondsOrDefault() {
