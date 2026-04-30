@@ -1,12 +1,17 @@
 package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.market.TrackedMarketState;
-import com.vokerg.voktrader.paper.PaperTradeFeeCalculator;
-import com.vokerg.voktrader.paper.SignalEntity;
-import com.vokerg.voktrader.paper.SignalService;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.LatestPriceState;
 import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.trade.ExecutionRouter;
+import com.vokerg.voktrader.trade.PaperFeeCalculator;
+import com.vokerg.voktrader.trade.TradeEntity;
+import com.vokerg.voktrader.trade.TradeIntent;
+import com.vokerg.voktrader.trade.TradeRepository;
+import com.vokerg.voktrader.trade.TradeStatus;
+import com.vokerg.voktrader.trade.TradingProperties;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -22,6 +27,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @Component
 public class CostAwareMomentumStrategy implements TradingStrategy {
 
@@ -37,29 +43,35 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
     private final LatestPriceState latestPriceState;
     private final TrackedMarketState trackedMarketState;
     private final StrategyTimeWindow strategyTimeWindow;
-    private final SignalService signalService;
+    private final ExecutionRouter executionRouter;
+    private final TradeRepository tradeRepository;
     private final StrategyProperties strategyProperties;
-    private final PaperTradeFeeCalculator paperTradeFeeCalculator;
+    private final PaperFeeCalculator paperFeeCalculator;
+    private final TradingProperties tradingProperties;
     private final Clock clock;
     private final Map<String, Deque<PriceSample>> samplesByTokenId = new ConcurrentHashMap<>();
-    private final Map<String, BigDecimal> trailingPeakBidBySignal = new ConcurrentHashMap<>();
+    private final Map<String, BigDecimal> trailingPeakBidByTrade = new ConcurrentHashMap<>();
 
     @Autowired
     public CostAwareMomentumStrategy(
             LatestPriceState latestPriceState,
             TrackedMarketState trackedMarketState,
             StrategyTimeWindow strategyTimeWindow,
-            SignalService signalService,
+            ExecutionRouter executionRouter,
+            TradeRepository tradeRepository,
             StrategyProperties strategyProperties,
-            PaperTradeFeeCalculator paperTradeFeeCalculator
+            PaperFeeCalculator paperFeeCalculator,
+            TradingProperties tradingProperties
     ) {
         this(
                 latestPriceState,
                 trackedMarketState,
                 strategyTimeWindow,
-                signalService,
+                executionRouter,
+                tradeRepository,
                 strategyProperties,
-                paperTradeFeeCalculator,
+                paperFeeCalculator,
+                tradingProperties,
                 Clock.systemUTC()
         );
     }
@@ -68,17 +80,21 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             LatestPriceState latestPriceState,
             TrackedMarketState trackedMarketState,
             StrategyTimeWindow strategyTimeWindow,
-            SignalService signalService,
+            ExecutionRouter executionRouter,
+            TradeRepository tradeRepository,
             StrategyProperties strategyProperties,
-            PaperTradeFeeCalculator paperTradeFeeCalculator,
+            PaperFeeCalculator paperFeeCalculator,
+            TradingProperties tradingProperties,
             Clock clock
     ) {
         this.latestPriceState = latestPriceState;
         this.trackedMarketState = trackedMarketState;
         this.strategyTimeWindow = strategyTimeWindow;
-        this.signalService = signalService;
+        this.executionRouter = executionRouter;
+        this.tradeRepository = tradeRepository;
         this.strategyProperties = strategyProperties;
-        this.paperTradeFeeCalculator = paperTradeFeeCalculator;
+        this.paperFeeCalculator = paperFeeCalculator;
+        this.tradingProperties = tradingProperties;
         this.clock = clock;
     }
 
@@ -106,12 +122,12 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
 
         var config = strategyProperties.costAwareMomentumOrDefault();
 
-        for (SignalEntity signal : signalService.openPaperSignals(ID)) {
-            if (!market.id().equals(signal.getMarketId())) {
+        for (TradeEntity trade : tradeRepository.findByStrategyIdAndStatus(ID, TradeStatus.OPEN)) {
+            if (!market.id().equals(trade.getMarketId())) {
                 continue;
             }
 
-            OutcomePrice price = latestPriceState.byTokenId(signal.getTokenId()).orElse(null);
+            OutcomePrice price = latestPriceState.byTokenId(trade.getTokenId()).orElse(null);
 
             if (!hasCompletePrice(price)) {
                 continue;
@@ -120,36 +136,31 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             recordSample(price);
 
             BigDecimal mid = mid(price);
-            BigDecimal paperPnl = paperTradeFeeCalculator.calculateExitPnl(
-                    signal.getShares(),
-                    price.bid(),
-                    signal.getSizeUsd(),
-                    signal.getFeeRate()
-            );
+            BigDecimal paperPnl = calculateExitPnl(trade, price.bid());
             boolean profitable = paperPnl.compareTo(BigDecimal.ZERO) > 0;
 
             if (isNearExpiry(market, config)) {
                 if (profitable) {
-                    trailingPeakBidBySignal.remove(trailingKey(signal));
-                    signalService.sellOpenPaperSignal(signal.getId(), price, "near expiry profitable paper exit");
+                    trailingPeakBidByTrade.remove(trailingKey(trade));
+                    routeSell(market, trade, price, "near expiry profitable paper exit");
                 }
                 continue;
             }
 
-            BigDecimal priceMove = price.bid().subtract(signal.getEntryPrice());
+            BigDecimal priceMove = price.bid().subtract(trade.getEntryAvgPrice());
             boolean takeProfitReached = paperPnl.compareTo(config.minProfitUsdOrDefault()) >= 0
                     || priceMove.compareTo(config.minPriceMoveOrDefault()) >= 0;
 
-            if (takeProfitReached || trailingPeakBidBySignal.containsKey(trailingKey(signal))) {
-                if (shouldSellTrailingStop(signal, price.bid(), config)) {
-                    trailingPeakBidBySignal.remove(trailingKey(signal));
-                    signalService.sellOpenPaperSignal(signal.getId(), price, "cost-aware momentum trailing stop");
+            if (takeProfitReached || trailingPeakBidByTrade.containsKey(trailingKey(trade))) {
+                if (shouldSellTrailingStop(trade, price.bid(), config)) {
+                    trailingPeakBidByTrade.remove(trailingKey(trade));
+                    routeSell(market, trade, price, "cost-aware momentum trailing stop");
                 }
                 continue;
             }
 
-            Optional<BigDecimal> tenSecondMidMove = moveSince(signal.getTokenId(), MID_MOMENTUM_WINDOW, SampleValue.MID);
-            boolean heldLongEnoughForStop = hasHeldLongEnoughForStop(signal, config);
+            Optional<BigDecimal> tenSecondMidMove = moveSince(trade.getTokenId(), MID_MOMENTUM_WINDOW, SampleValue.MID);
+            boolean heldLongEnoughForStop = hasHeldLongEnoughForStop(trade, config);
             boolean actualMomentumReversal = tenSecondMidMove
                     .map(move -> move.compareTo(new BigDecimal("-0.025")) < 0)
                     .orElse(false);
@@ -159,8 +170,8 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             if (heldLongEnoughForStop
                     && actualMomentumReversal
                     && (lossLimitHit || stopMidHit)) {
-                trailingPeakBidBySignal.remove(trailingKey(signal));
-                signalService.sellOpenPaperSignal(signal.getId(), price, "cost-aware momentum stop loss");
+                trailingPeakBidByTrade.remove(trailingKey(trade));
+                routeSell(market, trade, price, "cost-aware momentum stop loss");
             }
         }
     }
@@ -223,21 +234,25 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             return;
         }
 
-        boolean alreadyHasOpenSignalForThisMarket = signalService.openPaperSignals(ID)
-                .stream()
-                .anyMatch(signal -> market.id().equals(signal.getMarketId()));
-
-        if (alreadyHasOpenSignalForThisMarket) {
+        if (tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(
+                ID,
+                market.id(),
+                TradeStatus.OPEN
+        ).isPresent()) {
             return;
         }
 
-        signalService.createPaperBuySignal(
+        var result = executionRouter.route(TradeIntent.buy(
                 market,
                 candidate,
                 config.paperSizeUsdOrDefault(),
                 ID,
+                "cost-aware-momentum",
                 "cost-aware momentum: stronger side with positive 10s move"
-        );
+        ));
+        log.info(
+                "TRADE INTENT ROUTED: accepted={} mode={} tradeId={} orderId={} tradeStatus={} orderStatus={} message={}",
+                result.accepted(), result.mode(), result.tradeId(), result.orderId(), result.tradeStatus(), result.orderStatus(), result.message());
     }
 
     private boolean hasCompletePrice(OutcomePrice price) {
@@ -267,40 +282,68 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
     }
 
     private boolean hasHeldLongEnoughForStop(
-            SignalEntity signal,
+            TradeEntity trade,
             StrategyProperties.CostAwareMomentum config
     ) {
-        return signal.getCreatedAt() != null
-                && Duration.between(signal.getCreatedAt(), clock.instant()).compareTo(
+        Instant heldSince = trade.getEntryCompletedAt() == null ? trade.getCreatedAt() : trade.getEntryCompletedAt();
+        return heldSince != null
+                && Duration.between(heldSince, clock.instant()).compareTo(
                 Duration.ofSeconds(config.minHoldSecondsOrDefault())
         ) >= 0;
     }
 
     private boolean shouldSellTrailingStop(
-            SignalEntity signal,
+            TradeEntity trade,
             BigDecimal bid,
             StrategyProperties.CostAwareMomentum config
     ) {
-        String key = trailingKey(signal);
-        BigDecimal previousPeak = trailingPeakBidBySignal.get(key);
+        String key = trailingKey(trade);
+        BigDecimal previousPeak = trailingPeakBidByTrade.get(key);
 
         if (previousPeak == null) {
-            trailingPeakBidBySignal.put(key, bid);
+            trailingPeakBidByTrade.put(key, bid);
             return false;
         }
 
         BigDecimal newPeak = previousPeak.max(bid);
-        trailingPeakBidBySignal.put(key, newPeak);
+        trailingPeakBidByTrade.put(key, newPeak);
 
         return bid.compareTo(newPeak.subtract(config.trailingStopBidDropOrDefault())) <= 0;
     }
 
-    private String trailingKey(SignalEntity signal) {
-        if (signal.getId() != null) {
-            return "id:" + signal.getId();
+    private String trailingKey(TradeEntity trade) {
+        if (trade.getId() != null) {
+            return "id:" + trade.getId();
         }
 
-        return "signal:" + signal.getMarketId() + ":" + signal.getTokenId() + ":" + signal.getRuleName();
+        return "trade:" + trade.getMarketId() + ":" + trade.getTokenId() + ":" + trade.getRuleId();
+    }
+
+    private BigDecimal calculateExitPnl(TradeEntity trade, BigDecimal exitPrice) {
+        BigDecimal shares = trade.getEntryFilledShares() == null ? BigDecimal.ZERO : trade.getEntryFilledShares();
+        BigDecimal exitFee = paperFeeCalculator.estimate(shares, exitPrice, tradingProperties.getPaperFeeRate());
+        BigDecimal entryFee = trade.getEntryFeeUsd() == null ? BigDecimal.ZERO : trade.getEntryFeeUsd();
+        BigDecimal entryCost = trade.getEntryFilledUsd() == null ? BigDecimal.ZERO : trade.getEntryFilledUsd();
+        return shares
+                .multiply(exitPrice)
+                .subtract(exitFee)
+                .subtract(entryCost)
+                .subtract(entryFee)
+                .setScale(8, RoundingMode.HALF_UP);
+    }
+
+    private void routeSell(GammaMarketDto market, TradeEntity trade, OutcomePrice price, String reason) {
+        var result = executionRouter.route(TradeIntent.sell(
+                market,
+                price,
+                trade.getEntryFilledShares(),
+                ID,
+                "cost-aware-momentum",
+                reason
+        ));
+        log.info(
+                "TRADE INTENT ROUTED: accepted={} mode={} tradeId={} orderId={} tradeStatus={} orderStatus={} message={}",
+                result.accepted(), result.mode(), result.tradeId(), result.orderId(), result.tradeStatus(), result.orderStatus(), result.message());
     }
 
     private BigDecimal mid(OutcomePrice price) {

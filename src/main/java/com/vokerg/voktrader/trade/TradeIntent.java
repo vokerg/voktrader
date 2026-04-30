@@ -91,6 +91,48 @@ public record TradeIntent(
         );
     }
 
+    public static TradeIntent sell(
+            GammaMarketDto market,
+            OutcomePrice price,
+            BigDecimal shares,
+            String strategyId,
+            String ruleId,
+            String reason
+    ) {
+        Instant now = Instant.now();
+        Instant updatedAt = price.updatedAt();
+        Long ageMs = updatedAt == null ? null : Duration.between(updatedAt, now).toMillis();
+        Long secondsToExpiry = market.endDate() == null ? null : Duration.between(now, market.endDate()).toSeconds();
+        BigDecimal midpoint = midpoint(price.bid(), price.ask());
+        BigDecimal amountUsd = price.bid() == null || shares == null ? null : shares.multiply(price.bid());
+
+        return new TradeIntent(
+                strategyId,
+                ruleId,
+                market.id(),
+                market.slug(),
+                market.question(),
+                null,
+                price.tokenId(),
+                price.outcome(),
+                TradeSide.SELL,
+                amountUsd,
+                shares,
+                TradeOrderType.FOK,
+                price.bid(),
+                price.bid(),
+                price.ask(),
+                price.spread(),
+                midpoint,
+                updatedAt,
+                ageMs,
+                now,
+                market.endDate(),
+                secondsToExpiry,
+                reason
+        );
+    }
+
     private static BigDecimal midpoint(BigDecimal bid, BigDecimal ask) {
         if (bid == null || ask == null) {
             return null;

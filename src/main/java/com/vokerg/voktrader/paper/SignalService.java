@@ -6,6 +6,7 @@ import com.vokerg.voktrader.trade.TradeLifecycleService;
 import com.vokerg.voktrader.trade.TradingProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,7 +23,14 @@ import java.util.Optional;
  * Keep this class so existing MarketResolutionService can call signalService.resolveMarket(...) without knowing the new model yet.
  */
 @Slf4j
+@Deprecated
 @Service
+@ConditionalOnProperty(
+        prefix = "voktrader.legacy.signals",
+        name = "enabled",
+        havingValue = "true",
+        matchIfMissing = false
+)
 @RequiredArgsConstructor
 public class SignalService {
     private final TradeLifecycleService tradeLifecycleService;

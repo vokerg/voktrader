@@ -1,12 +1,19 @@
 package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.market.TrackedMarketState;
-import com.vokerg.voktrader.paper.PaperTradeFeeCalculator;
-import com.vokerg.voktrader.paper.SignalEntity;
-import com.vokerg.voktrader.paper.SignalService;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.LatestPriceState;
 import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.trade.ExecutionMode;
+import com.vokerg.voktrader.trade.ExecutionRouter;
+import com.vokerg.voktrader.trade.PaperFeeCalculator;
+import com.vokerg.voktrader.trade.TradeEntity;
+import com.vokerg.voktrader.trade.TradeExecutionResult;
+import com.vokerg.voktrader.trade.TradeIntent;
+import com.vokerg.voktrader.trade.TradeOrderStatus;
+import com.vokerg.voktrader.trade.TradeRepository;
+import com.vokerg.voktrader.trade.TradeStatus;
+import com.vokerg.voktrader.trade.TradingProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +26,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -30,7 +36,8 @@ class CostAwareMomentumStrategyTest {
     private final LatestPriceState latestPriceState = mock(LatestPriceState.class);
     private final TrackedMarketState trackedMarketState = mock(TrackedMarketState.class);
     private final StrategyTimeWindow strategyTimeWindow = mock(StrategyTimeWindow.class);
-    private final SignalService signalService = mock(SignalService.class);
+    private final ExecutionRouter executionRouter = mock(ExecutionRouter.class);
+    private final TradeRepository tradeRepository = mock(TradeRepository.class);
     private final MutableClock clock = new MutableClock(Instant.parse("2026-04-30T10:00:00Z"));
     private CostAwareMomentumStrategy strategy;
     private GammaMarketDto market;
@@ -48,16 +55,31 @@ class CostAwareMomentumStrategyTest {
                 latestPriceState,
                 trackedMarketState,
                 strategyTimeWindow,
-                signalService,
+                executionRouter,
+                tradeRepository,
                 properties,
-                new PaperTradeFeeCalculator(),
+                new PaperFeeCalculator(),
+                new TradingProperties(),
                 clock
         );
         market = marketEndingIn(60);
 
         when(strategyTimeWindow.isInsideTradingWindow()).thenReturn(true);
         when(trackedMarketState.currentMarket()).thenReturn(Optional.of(market));
-        when(signalService.openPaperSignals(CostAwareMomentumStrategy.ID)).thenReturn(List.of());
+        when(tradeRepository.findByStrategyIdAndStatus(CostAwareMomentumStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of());
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(
+                CostAwareMomentumStrategy.ID,
+                market.id(),
+                TradeStatus.OPEN
+        )).thenReturn(Optional.empty());
+        when(executionRouter.route(any(TradeIntent.class))).thenReturn(TradeExecutionResult.accepted(
+                ExecutionMode.PAPER,
+                1L,
+                1L,
+                TradeStatus.OPEN,
+                TradeOrderStatus.FILLED,
+                "accepted"
+        ));
         when(latestPriceState.byOutcome("Up")).thenReturn(Optional.empty());
         when(latestPriceState.byOutcome("Down")).thenReturn(Optional.empty());
         when(latestPriceState.byTokenId(any())).thenReturn(Optional.empty());
@@ -71,7 +93,7 @@ class CostAwareMomentumStrategyTest {
 
         strategy.tick();
 
-        verify(signalService, never()).createPaperBuySignal(any(), any(), any(), any(), any());
+        verify(executionRouter, never()).route(any());
     }
 
     @Test
@@ -83,7 +105,7 @@ class CostAwareMomentumStrategyTest {
 
         strategy.tick();
 
-        verify(signalService, never()).createPaperBuySignal(any(), any(), any(), any(), any());
+        verify(executionRouter, never()).route(any());
     }
 
     @Test
@@ -97,7 +119,7 @@ class CostAwareMomentumStrategyTest {
 
         strategy.tick();
 
-        verify(signalService, never()).createPaperBuySignal(any(), any(), any(), any(), any());
+        verify(executionRouter, never()).route(any());
     }
 
     @Test
@@ -111,7 +133,7 @@ class CostAwareMomentumStrategyTest {
 
         strategy.tick();
 
-        verify(signalService, never()).createPaperBuySignal(any(), any(), any(), any(), any());
+        verify(executionRouter, never()).route(any());
     }
 
     @Test
@@ -123,7 +145,7 @@ class CostAwareMomentumStrategyTest {
 
         strategy.tick();
 
-        verify(signalService, never()).createPaperBuySignal(any(), any(), any(), any(), any());
+        verify(executionRouter, never()).route(any());
     }
 
     @Test
@@ -135,44 +157,42 @@ class CostAwareMomentumStrategyTest {
 
         strategy.tick();
 
-        verify(signalService).createPaperBuySignal(
-                eq(market),
-                eq(up),
-                eq(new BigDecimal("1.00")),
-                eq(CostAwareMomentumStrategy.ID),
-                any()
-        );
+        verify(executionRouter).route(any(TradeIntent.class));
     }
 
     @Test
-    void doesNotCreateDuplicateOpenPaperSignalsForSameMarket() {
-        SignalEntity open = openSignal("open-token", "Up", "0.50", "2.00000000");
-        when(signalService.openPaperSignals(CostAwareMomentumStrategy.ID)).thenReturn(List.of(open));
+    void doesNotCreateDuplicateOpenTradeForSameMarket() {
+        TradeEntity open = openTrade("open-token", "Up", "0.50", "2.00000000");
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(
+                CostAwareMomentumStrategy.ID,
+                market.id(),
+                TradeStatus.OPEN
+        )).thenReturn(Optional.of(open));
         seedMomentum();
         clock.advance(Duration.ofSeconds(11));
         setOutcomePrices(price("up", "Up", "0.59", "0.61"), price("down", "Down", "0.39", "0.41"));
 
         strategy.tick();
 
-        verify(signalService, never()).createPaperBuySignal(any(), any(), any(), any(), any());
+        verify(executionRouter, never()).route(any());
     }
 
     @Test
     void activatesTrailingStopInsteadOfSellingImmediatelyOnTakeProfit() {
-        SignalEntity open = openSignal("up", "Up", "0.50", "2.00000000");
-        when(signalService.openPaperSignals(CostAwareMomentumStrategy.ID)).thenReturn(List.of(open));
+        TradeEntity open = openTrade("up", "Up", "0.50", "2.00000000");
+        when(tradeRepository.findByStrategyIdAndStatus(CostAwareMomentumStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of(open));
         OutcomePrice up = price("up", "Up", "0.56", "0.58");
         when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(up));
 
         strategy.tick();
 
-        verify(signalService, never()).sellOpenPaperSignal(any(), any(), any());
+        verify(executionRouter, never()).route(any());
     }
 
     @Test
     void sellsOnTrailingStopAfterTakeProfitPeakFalls() {
-        SignalEntity open = openSignal("up", "Up", "0.50", "2.00000000");
-        when(signalService.openPaperSignals(CostAwareMomentumStrategy.ID)).thenReturn(List.of(open));
+        TradeEntity open = openTrade("up", "Up", "0.50", "2.00000000");
+        when(tradeRepository.findByStrategyIdAndStatus(CostAwareMomentumStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of(open));
         when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(price("up", "Up", "0.58", "0.60")));
         strategy.tick();
 
@@ -181,7 +201,7 @@ class CostAwareMomentumStrategyTest {
 
         strategy.tick();
 
-        verify(signalService).sellOpenPaperSignal(open.getId(), trailingStop, "cost-aware momentum trailing stop");
+        verify(executionRouter).route(any(TradeIntent.class));
     }
 
     @Test
@@ -192,14 +212,14 @@ class CostAwareMomentumStrategyTest {
         );
         strategy.tick();
         clock.advance(Duration.ofSeconds(11));
-        SignalEntity open = openSignal("up", "Up", "0.50", "2.00000000", 12);
-        when(signalService.openPaperSignals(CostAwareMomentumStrategy.ID)).thenReturn(List.of(open));
+        TradeEntity open = openTrade("up", "Up", "0.50", "2.00000000", 12);
+        when(tradeRepository.findByStrategyIdAndStatus(CostAwareMomentumStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of(open));
         OutcomePrice up = price("up", "Up", "0.45", "0.47");
         when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(up));
 
         strategy.tick();
 
-        verify(signalService).sellOpenPaperSignal(open.getId(), up, "cost-aware momentum stop loss");
+        verify(executionRouter).route(any(TradeIntent.class));
     }
 
     @Test
@@ -210,40 +230,40 @@ class CostAwareMomentumStrategyTest {
         );
         strategy.tick();
         clock.advance(Duration.ofSeconds(4));
-        SignalEntity open = openSignal("up", "Up", "0.50", "2.00000000", 4);
-        when(signalService.openPaperSignals(CostAwareMomentumStrategy.ID)).thenReturn(List.of(open));
+        TradeEntity open = openTrade("up", "Up", "0.50", "2.00000000", 4);
+        when(tradeRepository.findByStrategyIdAndStatus(CostAwareMomentumStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of(open));
         OutcomePrice up = price("up", "Up", "0.45", "0.47");
         when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(up));
 
         strategy.tick();
 
-        verify(signalService, never()).sellOpenPaperSignal(any(), any(), any());
+        verify(executionRouter, never()).route(any());
     }
 
     @Test
     void doesNotStopLossWithoutActualMomentumReversal() {
-        SignalEntity open = openSignal("up", "Up", "0.50", "2.00000000", 12);
-        when(signalService.openPaperSignals(CostAwareMomentumStrategy.ID)).thenReturn(List.of(open));
+        TradeEntity open = openTrade("up", "Up", "0.50", "2.00000000", 12);
+        when(tradeRepository.findByStrategyIdAndStatus(CostAwareMomentumStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of(open));
         OutcomePrice up = price("up", "Up", "0.45", "0.47");
         when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(up));
 
         strategy.tick();
 
-        verify(signalService, never()).sellOpenPaperSignal(any(), any(), any());
+        verify(executionRouter, never()).route(any());
     }
 
     @Test
     void holdsNearExpiryIfSellingWouldLockLoss() {
         market = marketEndingIn(10);
         when(trackedMarketState.currentMarket()).thenReturn(Optional.of(market));
-        SignalEntity open = openSignal("up", "Up", "0.50", "2.00000000");
-        when(signalService.openPaperSignals(CostAwareMomentumStrategy.ID)).thenReturn(List.of(open));
+        TradeEntity open = openTrade("up", "Up", "0.50", "2.00000000");
+        when(tradeRepository.findByStrategyIdAndStatus(CostAwareMomentumStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of(open));
         OutcomePrice up = price("up", "Up", "0.45", "0.47");
         when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(up));
 
         strategy.tick();
 
-        verify(signalService, never()).sellOpenPaperSignal(any(), any(), any());
+        verify(executionRouter, never()).route(any());
     }
 
     private void seedMomentum() {
@@ -282,39 +302,50 @@ class CostAwareMomentumStrategyTest {
         );
     }
 
-    private SignalEntity openSignal(String tokenId, String outcome, String entryPrice, String paperShares) {
-        return openSignal(tokenId, outcome, entryPrice, paperShares, 5);
+    private TradeEntity openTrade(String tokenId, String outcome, String entryPrice, String paperShares) {
+        return openTrade(tokenId, outcome, entryPrice, paperShares, 5);
     }
 
-    private SignalEntity openSignal(
+    private TradeEntity openTrade(
             String tokenId,
             String outcome,
             String entryPrice,
             String paperShares,
             long secondsAgo
     ) {
-        return SignalEntity.openPaperBuySignal(
+        TradeEntity trade = TradeEntity.fromIntent(new TradeIntent(
+                CostAwareMomentumStrategy.ID,
+                "cost-aware-momentum",
                 market.id(),
                 market.slug(),
                 market.question(),
-                outcome,
+                null,
                 tokenId,
-                new BigDecimal(entryPrice),
+                outcome,
+                com.vokerg.voktrader.trade.TradeSide.BUY,
                 new BigDecimal("1.00"),
-                new BigDecimal(paperShares),
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                new BigDecimal(paperShares),
+                null,
+                com.vokerg.voktrader.trade.TradeOrderType.FOK,
+                new BigDecimal(entryPrice),
                 new BigDecimal(entryPrice).subtract(new BigDecimal("0.01")),
                 new BigDecimal(entryPrice),
                 new BigDecimal("0.01"),
+                new BigDecimal(entryPrice).subtract(new BigDecimal("0.005")),
                 clock.instant().minusMillis(250),
                 250L,
-                CostAwareMomentumStrategy.ID,
-                "test",
                 clock.instant().minusSeconds(secondsAgo),
-                market.endDate()
+                market.endDate(),
+                60L,
+                "test"
+        ), ExecutionMode.PAPER);
+        trade.markOpen(
+                new BigDecimal(entryPrice),
+                new BigDecimal(paperShares),
+                new BigDecimal("1.00"),
+                BigDecimal.ZERO,
+                clock.instant().minusSeconds(secondsAgo)
         );
+        return trade;
     }
 
     private GammaMarketDto marketEndingIn(long seconds) {

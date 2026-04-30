@@ -19,7 +19,12 @@ import java.time.Instant;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "voktrader.strategy.simple-signal-logger", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(
+        prefix = "voktrader.strategy.simple-signal-logger",
+        name = "enabled",
+        havingValue = "true",
+        matchIfMissing = false
+)
 public class SimpleSignalLogger {
     private static final BigDecimal MAX_ASK = new BigDecimal("0.25");
     private static final BigDecimal MAX_SPREAD = new BigDecimal("0.03");

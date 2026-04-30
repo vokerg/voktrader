@@ -1,17 +1,23 @@
 package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.market.TrackedMarketState;
-import com.vokerg.voktrader.paper.SignalEntity;
-import com.vokerg.voktrader.paper.SignalService;
 import com.vokerg.voktrader.pricing.LatestPriceState;
 import com.vokerg.voktrader.pricing.OutcomePrice;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import com.vokerg.voktrader.trade.ExecutionRouter;
+import com.vokerg.voktrader.trade.TradeEntity;
+import com.vokerg.voktrader.trade.TradeExecutionResult;
+import com.vokerg.voktrader.trade.TradeIntent;
+import com.vokerg.voktrader.trade.TradeRepository;
+import com.vokerg.voktrader.trade.TradeStatus;
 
 import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.Optional;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class BuySellSmokeStrategy implements TradingStrategy {
@@ -20,7 +26,8 @@ public class BuySellSmokeStrategy implements TradingStrategy {
 
     private final LatestPriceState latestPriceState;
     private final TrackedMarketState trackedMarketState;
-    private final SignalService signalService;
+    private final ExecutionRouter executionRouter;
+    private final TradeRepository tradeRepository;
     private final StrategyProperties strategyProperties;
     private final StrategyTimeWindow strategyTimeWindow;
 
@@ -48,31 +55,37 @@ public class BuySellSmokeStrategy implements TradingStrategy {
 
         var config = strategyProperties.buySellSmokeOrDefault();
 
-        for (SignalEntity signal : signalService.openPaperSignals(ID)) {
-            if (!market.id().equals(signal.getMarketId())) {
+        for (TradeEntity trade : tradeRepository.findByStrategyIdAndStatus(ID, TradeStatus.OPEN)) {
+            if (!market.id().equals(trade.getMarketId())) {
                 continue;
             }
 
             OutcomePrice price = latestPriceState
-                    .byTokenId(signal.getTokenId())
+                    .byTokenId(trade.getTokenId())
                     .orElse(null);
 
             if (price == null || price.bid() == null) {
                 continue;
             }
 
-            BigDecimal exitValueUsd = signal.getShares().multiply(price.bid());
-            BigDecimal paperPnl = exitValueUsd.subtract(signal.getSizeUsd());
+            BigDecimal exitValueUsd = trade.getEntryFilledShares().multiply(price.bid());
+            BigDecimal paperPnl = exitValueUsd.subtract(trade.getEntryFilledUsd());
 
             if (paperPnl.compareTo(config.minProfitUsdOrDefault()) < 0) {
                 continue;
             }
 
-            signalService.sellOpenPaperSignal(
-                    signal.getId(),
+            TradeExecutionResult result = executionRouter.route(TradeIntent.sell(
+                    market,
                     price,
+                    trade.getEntryFilledShares(),
+                    ID,
+                    "buy-sell-smoke",
                     "bid produced paper pnl >= " + config.minProfitUsdOrDefault()
-            );
+            ));
+            log.info(
+                    "TRADE INTENT ROUTED: accepted={} mode={} tradeId={} orderId={} tradeStatus={} orderStatus={} message={}",
+                    result.accepted(), result.mode(), result.tradeId(), result.orderId(), result.tradeStatus(), result.orderStatus(), result.message());
         }
     }
 
@@ -83,11 +96,11 @@ public class BuySellSmokeStrategy implements TradingStrategy {
             return;
         }
 
-        boolean alreadyHasOpenSignalForThisMarket = signalService.openPaperSignals(ID)
-                .stream()
-                .anyMatch(signal -> market.id().equals(signal.getMarketId()));
-
-        if (alreadyHasOpenSignalForThisMarket) {
+        if (tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(
+                ID,
+                market.id(),
+                TradeStatus.OPEN
+        ).isPresent()) {
             return;
         }
 
@@ -99,15 +112,19 @@ public class BuySellSmokeStrategy implements TradingStrategy {
 
         var config = strategyProperties.buySellSmokeOrDefault();
 
-        signalService.createPaperBuySignal(
+        TradeExecutionResult result = executionRouter.route(TradeIntent.buy(
                 market,
                 candidate,
                 config.paperSizeUsdOrDefault(),
                 ID,
+                "buy-sell-smoke",
                 "ask <= " + config.buyBelowAskOrDefault()
                         + " or ask >= " + config.buyAboveAskOrDefault()
                         + ", spread <= " + config.maxSpreadOrDefault()
-        );
+        ));
+        log.info(
+                "TRADE INTENT ROUTED: accepted={} mode={} tradeId={} orderId={} tradeStatus={} orderStatus={} message={}",
+                result.accepted(), result.mode(), result.tradeId(), result.orderId(), result.tradeStatus(), result.orderStatus(), result.message());
     }
 
     private Optional<OutcomePrice> findBuyCandidate() {

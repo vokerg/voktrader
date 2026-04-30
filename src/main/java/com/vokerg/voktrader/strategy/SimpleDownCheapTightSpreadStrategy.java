@@ -1,11 +1,15 @@
 package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.market.TrackedMarketState;
-import com.vokerg.voktrader.paper.SignalService;
 import com.vokerg.voktrader.pricing.LatestPriceState;
+import com.vokerg.voktrader.trade.ExecutionRouter;
+import com.vokerg.voktrader.trade.TradeExecutionResult;
+import com.vokerg.voktrader.trade.TradeIntent;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class SimpleDownCheapTightSpreadStrategy implements TradingStrategy {
@@ -14,7 +18,7 @@ public class SimpleDownCheapTightSpreadStrategy implements TradingStrategy {
 
     private final LatestPriceState latestPriceState;
     private final TrackedMarketState trackedMarketState;
-    private final SignalService signalService;
+    private final ExecutionRouter executionRouter;
     private final StrategyProperties strategyProperties;
     private final StrategyTimeWindow strategyTimeWindow;
 
@@ -49,13 +53,17 @@ public class SimpleDownCheapTightSpreadStrategy implements TradingStrategy {
             return;
         }
 
-        signalService.createPaperBuySignal(
+        TradeExecutionResult result = executionRouter.route(TradeIntent.buy(
                 market,
                 down,
                 config.paperSizeUsdOrDefault(),
                 ID,
+                "down-ask-cheap-spread-tight",
                 "Down ask <= " + config.maxAskOrDefault()
                         + " and spread <= " + config.maxSpreadOrDefault()
-        );
+        ));
+        log.info(
+                "TRADE INTENT ROUTED: accepted={} mode={} tradeId={} orderId={} tradeStatus={} orderStatus={} message={}",
+                result.accepted(), result.mode(), result.tradeId(), result.orderId(), result.tradeStatus(), result.orderStatus(), result.message());
     }
 }

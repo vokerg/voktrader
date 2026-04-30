@@ -5,7 +5,7 @@ import com.vokerg.voktrader.market.MarketEntity;
 import com.vokerg.voktrader.market.MarketRepository;
 import com.vokerg.voktrader.market.MarketResolutionStatus;
 import com.vokerg.voktrader.market.MarketTrackingStatus;
-import com.vokerg.voktrader.paper.SignalService;
+import com.vokerg.voktrader.trade.TradeLifecycleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,7 +19,7 @@ import java.time.Instant;
 public class MarketResolutionService {
 
     private final MarketRepository marketRepository;
-    private final SignalService signalService;
+    private final TradeLifecycleService tradeLifecycleService;
 
     @Transactional
     public void resolveMarket(
@@ -67,7 +67,7 @@ public class MarketResolutionService {
 
         marketRepository.save(market);
 
-        signalService.resolveMarket(marketId, winningOutcome);
+        tradeLifecycleService.resolveMarket(marketId, winningOutcome);
 
         log.info(
                 "{}Resolved expired market: marketId={} winningOutcome={} winningAssetId={} source={}{}",

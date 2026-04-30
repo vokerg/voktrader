@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
+@Deprecated
 @Table(
         name = "signals",
         uniqueConstraints = {

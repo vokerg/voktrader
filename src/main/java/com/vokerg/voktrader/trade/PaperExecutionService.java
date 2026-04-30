@@ -25,6 +25,18 @@ public class PaperExecutionService {
 
     @Transactional
     public TradeExecutionResult execute(TradeIntent intent) {
+        if (intent.side() == TradeSide.SELL) {
+            return executeSell(intent);
+        }
+
+        if (intent.side() != TradeSide.BUY) {
+            return TradeExecutionResult.rejected(ExecutionMode.PAPER, null, null, null, null, "paper execution only supports BUY and SELL intents");
+        }
+
+        return executeBuy(intent);
+    }
+
+    private TradeExecutionResult executeBuy(TradeIntent intent) {
         ExecutionMode mode = ExecutionMode.PAPER;
         TradeEntity trade = tradeRepository.save(TradeEntity.fromIntent(intent, mode));
         eventRepository.save(TradeEventEntity.of(trade.getId(), null, null, "TRADE_CREATED", "paper trade created from intent", null));
@@ -43,16 +55,6 @@ public class PaperExecutionService {
             tradeOrderRepository.save(order);
             eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "RISK_BLOCKED", risk.firstBlockMessage(), null));
             return TradeExecutionResult.rejected(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), risk.firstBlockMessage());
-        }
-
-        if (intent.side() != TradeSide.BUY) {
-            String message = "paper v1 only supports new BUY entry intents; SELL exits should be modeled in the next iteration";
-            trade.markFailed(message);
-            order.markFailed(message);
-            tradeRepository.save(trade);
-            tradeOrderRepository.save(order);
-            eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "ERROR", message, null));
-            return TradeExecutionResult.rejected(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), message);
         }
 
         BigDecimal entryPrice = intent.expectedPrice();
@@ -86,6 +88,64 @@ public class PaperExecutionService {
                 entryPrice, intent.amountUsd(), shares, fee, intent.observedSpread(), intent.priceAgeMs(), intent.reason());
 
         return TradeExecutionResult.accepted(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "paper order filled");
+    }
+
+    private TradeExecutionResult executeSell(TradeIntent intent) {
+        ExecutionMode mode = ExecutionMode.PAPER;
+        TradeEntity trade = tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+                        intent.strategyId(),
+                        intent.marketId(),
+                        intent.tokenId(),
+                        TradeStatus.OPEN
+                )
+                .orElse(null);
+        if (trade == null) {
+            boolean hasClosedTrade = tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+                    intent.strategyId(),
+                    intent.marketId(),
+                    intent.tokenId(),
+                    TradeStatus.CLOSED
+            ).isPresent();
+            return TradeExecutionResult.rejected(mode, null, null, hasClosedTrade ? TradeStatus.CLOSED : null, null,
+                    hasClosedTrade ? "trade already closed" : "no open trade to close");
+        }
+
+        BigDecimal exitPrice = intent.observedBid();
+        if (exitPrice == null || exitPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            return TradeExecutionResult.rejected(mode, trade.getId(), null, trade.getStatus(), null,
+                    "paper exit price is missing or non-positive");
+        }
+
+        BigDecimal shares = trade.getEntryFilledShares();
+        if (shares == null || shares.compareTo(BigDecimal.ZERO) <= 0) {
+            return TradeExecutionResult.rejected(mode, trade.getId(), null, trade.getStatus(), null,
+                    "open trade has no shares to close");
+        }
+
+        BigDecimal exitAmountUsd = shares.multiply(exitPrice).setScale(SHARE_SCALE, RoundingMode.HALF_UP);
+        String idempotencyKey = idempotencyKey(intent, mode, trade.getId());
+        TradeOrderEntity order = tradeOrderRepository.save(TradeOrderEntity.fromIntent(
+                trade.getId(), intent, mode, TradeVenue.PAPER_SIM, idempotencyKey));
+        eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "EXIT_ORDER_CREATED", "paper simulated exit order created", null));
+
+        BigDecimal fee = feeCalculator.estimate(shares, exitPrice, properties.getPaperFeeRate());
+        order.markFilled(shares, exitAmountUsd, exitPrice, fee);
+        trade.markClosed(exitPrice, shares, exitAmountUsd, fee, order.getCompletedAt());
+
+        tradeRepository.save(trade);
+        tradeOrderRepository.save(order);
+        TradeFillEntity fill = tradeFillRepository.save(TradeFillEntity.synthetic(
+                trade.getId(), order.getId(), intent.side(), exitPrice, shares, exitAmountUsd, fee));
+
+        eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), fill.getId(), "EXIT_FILLED", intent.reason(), null));
+        eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), fill.getId(), "CLOSED", intent.reason(), null));
+
+        log.info(
+                "PAPER TRADE CLOSED: tradeId={} orderId={} strategy={} marketId={} outcome={} tokenId={} entryPrice={} exitPrice={} shares={} entryFee={} exitFee={} pnlUsd={} reason={}",
+                trade.getId(), order.getId(), trade.getStrategyId(), trade.getMarketId(), trade.getOutcome(), trade.getTokenId(),
+                trade.getEntryAvgPrice(), exitPrice, shares, trade.getEntryFeeUsd(), fee, trade.getRealizedPnlUsd(), intent.reason());
+
+        return TradeExecutionResult.accepted(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "paper exit filled");
     }
 
     private String idempotencyKey(TradeIntent intent, ExecutionMode mode, Long tradeId) {

@@ -212,6 +212,24 @@ public class TradeEntity {
         touch();
     }
 
+    public void markClosed(BigDecimal avgPrice, BigDecimal filledShares, BigDecimal filledUsd, BigDecimal feeUsd, Instant completedAt) {
+        this.status = TradeStatus.CLOSED;
+        this.exitAvgPrice = avgPrice;
+        this.exitFilledShares = filledShares;
+        this.exitFilledUsd = filledUsd;
+        this.exitFeeUsd = feeUsd;
+        this.exitCompletedAt = completedAt == null ? Instant.now() : completedAt;
+        BigDecimal entryFee = entryFeeUsd == null ? BigDecimal.ZERO : entryFeeUsd;
+        BigDecimal exitFee = feeUsd == null ? BigDecimal.ZERO : feeUsd;
+        BigDecimal totalFees = entryFee.add(exitFee);
+        this.totalFeeUsd = totalFees;
+        BigDecimal entryCost = entryFilledUsd == null ? BigDecimal.ZERO : entryFilledUsd;
+        BigDecimal exitValue = filledUsd == null ? BigDecimal.ZERO : filledUsd;
+        this.realizedPnlUsd = exitValue.subtract(entryCost).subtract(totalFees);
+        this.finalPnlUsd = this.realizedPnlUsd;
+        touch();
+    }
+
     public void markShadowRecorded() {
         this.status = TradeStatus.CREATED;
         touch();

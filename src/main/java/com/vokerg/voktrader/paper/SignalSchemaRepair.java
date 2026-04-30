@@ -11,6 +11,7 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 
 @Component
+@Deprecated
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class SignalSchemaRepair implements ApplicationRunner {
 
