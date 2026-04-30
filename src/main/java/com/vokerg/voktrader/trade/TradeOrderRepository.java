@@ -6,9 +6,9 @@ import java.util.List;
 import java.util.Optional;
 
 public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Long> {
-    boolean existsByIdempotencyKey(String idempotencyKey);
+    boolean existsByClientOrderId(String clientOrderId);
 
-    Optional<TradeOrderEntity> findByIdempotencyKey(String idempotencyKey);
+    Optional<TradeOrderEntity> findByClientOrderId(String clientOrderId);
 
     List<TradeOrderEntity> findByTradeId(Long tradeId);
 }

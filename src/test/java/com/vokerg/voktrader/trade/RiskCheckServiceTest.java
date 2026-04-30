@@ -55,7 +55,7 @@ class RiskCheckServiceTest {
                 eq("cost-aware-momentum-paper"),
                 anyCollection()
         )).thenReturn(0L);
-        when(tradeOrderRepository.findByIdempotencyKey("key")).thenReturn(Optional.empty());
+        when(tradeOrderRepository.findByClientOrderId("key")).thenReturn(Optional.empty());
 
         RiskAssessment assessment = service.assess(intent, ExecutionMode.PAPER, 10L, 20L, "key");
 
@@ -122,7 +122,7 @@ class RiskCheckServiceTest {
                 eq("cost-aware-momentum-paper"),
                 anyCollection()
         )).thenReturn(1L);
-        when(tradeOrderRepository.findByIdempotencyKey("key")).thenReturn(Optional.empty());
+        when(tradeOrderRepository.findByClientOrderId("key")).thenReturn(Optional.empty());
 
         RiskAssessment assessment = service.assess(intent, ExecutionMode.PAPER, null, null, "key");
 

@@ -46,7 +46,7 @@ public class LiveShadowExecutionService {
             expectedFee = feeCalculator.estimate(expectedShares, intent.expectedPrice(), properties.getPaperFeeRate());
         }
 
-        order.markShadowRecorded(expectedFee);
+        order.markShadowRecorded();
         trade.markShadowRecorded();
         tradeRepository.save(trade);
         tradeOrderRepository.save(order);

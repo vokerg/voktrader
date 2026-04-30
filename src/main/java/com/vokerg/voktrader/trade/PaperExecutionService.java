@@ -65,13 +65,13 @@ public class PaperExecutionService {
         BigDecimal shares = intent.amountUsd().divide(entryPrice, SHARE_SCALE, RoundingMode.HALF_UP);
         BigDecimal fee = feeCalculator.estimate(shares, entryPrice, properties.getPaperFeeRate());
 
-        order.markFilled(shares, intent.amountUsd(), entryPrice, fee);
+        order.markFilled(null, entryPrice, shares, intent.amountUsd());
         trade.markOpen(entryPrice, shares, intent.amountUsd(), fee, order.getCompletedAt());
 
         tradeRepository.save(trade);
         tradeOrderRepository.save(order);
         TradeFillEntity fill = tradeFillRepository.save(TradeFillEntity.synthetic(
-                trade.getId(), order.getId(), intent.side(), entryPrice, shares, intent.amountUsd(), fee));
+                trade.getId(), order.getId(), intent.side(), entryPrice, shares, intent.amountUsd()));
 
         eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), fill.getId(), "ORDER_FILLED", "paper order filled at observed ask", null));
         eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), fill.getId(), "POSITION_OPENED", "paper position opened", null));
@@ -123,13 +123,13 @@ public class PaperExecutionService {
         eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "EXIT_ORDER_CREATED", "paper simulated exit order created", null));
 
         BigDecimal fee = feeCalculator.estimate(shares, exitPrice, properties.getPaperFeeRate());
-        order.markFilled(shares, exitAmountUsd, exitPrice, fee);
+        order.markFilled(null, exitPrice, shares, exitAmountUsd);
         trade.markClosed(exitPrice, shares, exitAmountUsd, fee, order.getCompletedAt());
 
         tradeRepository.save(trade);
         tradeOrderRepository.save(order);
         TradeFillEntity fill = tradeFillRepository.save(TradeFillEntity.synthetic(
-                trade.getId(), order.getId(), intent.side(), exitPrice, shares, exitAmountUsd, fee));
+                trade.getId(), order.getId(), intent.side(), exitPrice, shares, exitAmountUsd));
 
         eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), fill.getId(), "EXIT_FILLED", intent.reason(), null));
         eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), fill.getId(), "CLOSED", intent.reason(), null));

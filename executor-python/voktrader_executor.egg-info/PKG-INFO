@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: voktrader-executor
+Version: 0.3.0
+Summary: Python Polymarket executor sidecar for voktrader
+Requires-Python: >=3.11
+Requires-Dist: fastapi>=0.111.0
+Requires-Dist: uvicorn[standard]>=0.30.0
+Requires-Dist: pydantic>=2.7.0
+Requires-Dist: pydantic-settings>=2.2.1
+Requires-Dist: py_clob_client_v2>=1.0.0

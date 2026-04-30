@@ -73,7 +73,7 @@ public class RiskCheckService {
                 maxTradesOk ? "market trade count accepted" : "maxTradesPerMarket reached"));
 
         boolean idempotencyOk = idempotencyKey != null && !idempotencyKey.isBlank()
-                && tradeOrderRepository.findByIdempotencyKey(idempotencyKey)
+                && tradeOrderRepository.findByClientOrderId(idempotencyKey)
                 .map(existing -> existing.getId().equals(orderId))
                 .orElse(true);
         assessment.add(check(tradeId, orderId, mode, "IDEMPOTENCY", idempotencyOk,

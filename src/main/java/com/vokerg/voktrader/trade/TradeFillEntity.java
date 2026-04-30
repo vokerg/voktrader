@@ -1,107 +1,188 @@
 package com.vokerg.voktrader.trade;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
-@Table(name = "trade_fills", indexes = {
-        @Index(name = "idx_trade_fills_trade", columnList = "trade_id"),
-        @Index(name = "idx_trade_fills_order", columnList = "trade_order_id"),
-        @Index(name = "idx_trade_fills_exchange_trade", columnList = "exchange_trade_id")
-})
+@Table(
+        name = "trade_fills",
+        indexes = {
+                @Index(name = "idx_trade_fills_trade", columnList = "tradeId"),
+                @Index(name = "idx_trade_fills_order", columnList = "orderId")
+        }
+)
 public class TradeFillEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "trade_id", nullable = false)
     private Long tradeId;
-
-    @Column(name = "trade_order_id", nullable = false)
+    private Long orderId;
     private Long tradeOrderId;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "venue", nullable = false, length = 32)
-    private TradeVenue venue;
-
-    @Column(name = "exchange_trade_id")
-    private String exchangeTradeId;
-
-    @Column(name = "exchange_order_id")
     private String exchangeOrderId;
 
-    @Column(name = "transaction_hash")
-    private String transactionHash;
+    @Enumerated(EnumType.STRING)
+    private TradeVenue venue;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "side", nullable = false, length = 16)
     private TradeSide side;
 
-    @Column(name = "price", nullable = false, precision = 19, scale = 8)
     private BigDecimal price;
-
-    @Column(name = "shares", nullable = false, precision = 19, scale = 8)
     private BigDecimal shares;
-
-    @Column(name = "amount_usd", nullable = false, precision = 19, scale = 8)
     private BigDecimal amountUsd;
-
-    @Column(name = "fee_usd", precision = 19, scale = 8)
     private BigDecimal feeUsd;
-
-    @Column(name = "liquidity_role")
     private String liquidityRole;
 
-    @Column(name = "occurred_at", nullable = false)
-    private Instant occurredAt;
-
-    @Column(name = "received_at", nullable = false)
-    private Instant receivedAt;
-
-    @Column(name = "raw_fill", columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT")
     private String rawFill;
 
-    @Column(name = "created_at", nullable = false)
+    private Instant filledAt;
+    private Instant occurredAt;
+    private Instant receivedAt;
     private Instant createdAt;
 
-    protected TradeFillEntity() {
-    }
-
-    public static TradeFillEntity synthetic(Long tradeId, Long orderId, TradeSide side, BigDecimal price, BigDecimal shares, BigDecimal amountUsd, BigDecimal feeUsd) {
+    public static TradeFillEntity synthetic(Long tradeId, Long orderId, TradeSide side, BigDecimal price, BigDecimal shares, BigDecimal amountUsd) {
         TradeFillEntity entity = new TradeFillEntity();
         entity.tradeId = tradeId;
+        entity.orderId = orderId;
         entity.tradeOrderId = orderId;
         entity.venue = TradeVenue.PAPER_SIM;
         entity.side = side;
         entity.price = price;
         entity.shares = shares;
         entity.amountUsd = amountUsd;
-        entity.feeUsd = feeUsd;
-        entity.liquidityRole = "TAKER_SIM";
-        entity.occurredAt = Instant.now();
-        entity.receivedAt = entity.occurredAt;
+        entity.feeUsd = BigDecimal.ZERO;
+        entity.liquidityRole = "SIMULATED";
         entity.rawFill = "{\"synthetic\":true}";
-        entity.createdAt = entity.occurredAt;
+        entity.filledAt = Instant.now();
+        entity.occurredAt = entity.filledAt;
+        entity.receivedAt = entity.filledAt;
         return entity;
     }
 
-    public Long getId() { return id; }
-    public Long getTradeId() { return tradeId; }
-    public Long getTradeOrderId() { return tradeOrderId; }
-    public TradeVenue getVenue() { return venue; }
-    public String getExchangeTradeId() { return exchangeTradeId; }
-    public String getExchangeOrderId() { return exchangeOrderId; }
-    public String getTransactionHash() { return transactionHash; }
-    public TradeSide getSide() { return side; }
-    public BigDecimal getPrice() { return price; }
-    public BigDecimal getShares() { return shares; }
-    public BigDecimal getAmountUsd() { return amountUsd; }
-    public BigDecimal getFeeUsd() { return feeUsd; }
-    public String getLiquidityRole() { return liquidityRole; }
-    public Instant getOccurredAt() { return occurredAt; }
-    public Instant getReceivedAt() { return receivedAt; }
-    public String getRawFill() { return rawFill; }
-    public Instant getCreatedAt() { return createdAt; }
+    public static TradeFillEntity polymarket(
+            Long tradeId,
+            Long orderId,
+            String exchangeOrderId,
+            TradeSide side,
+            BigDecimal price,
+            BigDecimal shares,
+            BigDecimal amountUsd,
+            BigDecimal feeUsd,
+            String rawFill
+    ) {
+        TradeFillEntity entity = new TradeFillEntity();
+        entity.tradeId = tradeId;
+        entity.orderId = orderId;
+        entity.tradeOrderId = orderId;
+        entity.exchangeOrderId = exchangeOrderId;
+        entity.venue = TradeVenue.POLYMARKET;
+        entity.side = side;
+        entity.price = price;
+        entity.shares = shares;
+        entity.amountUsd = amountUsd;
+        entity.feeUsd = feeUsd != null ? feeUsd : BigDecimal.ZERO;
+        entity.liquidityRole = "TAKER";
+        entity.rawFill = rawFill;
+        entity.filledAt = Instant.now();
+        entity.occurredAt = entity.filledAt;
+        entity.receivedAt = entity.filledAt;
+        return entity;
+    }
+
+    @PrePersist
+    void prePersist() {
+        if (this.tradeOrderId == null) {
+            this.tradeOrderId = this.orderId;
+        }
+        if (this.filledAt == null) {
+            this.filledAt = Instant.now();
+        }
+        if (this.occurredAt == null) {
+            this.occurredAt = this.filledAt;
+        }
+        if (this.receivedAt == null) {
+            this.receivedAt = this.filledAt;
+        }
+        this.createdAt = Instant.now();
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public Long getTradeId() {
+        return tradeId;
+    }
+
+    public Long getOrderId() {
+        return orderId;
+    }
+
+    public Long getTradeOrderId() {
+        return tradeOrderId;
+    }
+
+    public String getExchangeOrderId() {
+        return exchangeOrderId;
+    }
+
+    public TradeVenue getVenue() {
+        return venue;
+    }
+
+    public TradeSide getSide() {
+        return side;
+    }
+
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public BigDecimal getShares() {
+        return shares;
+    }
+
+    public BigDecimal getAmountUsd() {
+        return amountUsd;
+    }
+
+    public BigDecimal getFeeUsd() {
+        return feeUsd;
+    }
+
+    public String getLiquidityRole() {
+        return liquidityRole;
+    }
+
+    public String getRawFill() {
+        return rawFill;
+    }
+
+    public Instant getFilledAt() {
+        return filledAt;
+    }
+
+    public Instant getOccurredAt() {
+        return occurredAt;
+    }
+
+    public Instant getReceivedAt() {
+        return receivedAt;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
 }

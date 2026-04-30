@@ -7,5 +7,5 @@ import java.util.List;
 public interface TradeFillRepository extends JpaRepository<TradeFillEntity, Long> {
     List<TradeFillEntity> findByTradeId(Long tradeId);
 
-    List<TradeFillEntity> findByTradeOrderId(Long tradeOrderId);
+    List<TradeFillEntity> findByOrderId(Long orderId);
 }
