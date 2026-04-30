@@ -25,24 +25,19 @@ public class LiveShadowExecutionService {
     @Transactional
     public TradeExecutionResult execute(TradeIntent intent) {
         ExecutionMode mode = ExecutionMode.LIVE_SHADOW;
-        TradeEntity trade = tradeRepository.save(TradeEntity.fromIntent(intent, mode));
-        eventRepository.save(TradeEventEntity.of(trade.getId(), null, null, "TRADE_CREATED", "live-shadow trade created from intent", null));
+        String idempotencyKey = idempotencyKey(intent, mode);
+        RiskAssessment risk = riskCheckService.assess(intent, mode, null, null, idempotencyKey);
+        riskCheckRepository.saveAll(risk.checks());
+        if (!risk.passed()) {
+            return TradeExecutionResult.rejected(mode, null, null, null, null, risk.firstBlockMessage());
+        }
 
-        String idempotencyKey = idempotencyKey(intent, mode, trade.getId());
+        TradeEntity trade = tradeRepository.save(TradeEntity.fromIntent(intent, mode));
+        eventRepository.save(TradeEventEntity.of(trade.getId(), null, null, "TRADE_CREATED", "live-shadow trade created from accepted intent", null));
+
         TradeOrderEntity order = tradeOrderRepository.save(TradeOrderEntity.fromIntent(
                 trade.getId(), intent, mode, TradeVenue.POLYMARKET, idempotencyKey));
         eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "ORDER_CREATED", "live-shadow order recorded; no money moved", null));
-
-        RiskAssessment risk = riskCheckService.assess(intent, mode, trade.getId(), order.getId(), idempotencyKey);
-        riskCheckRepository.saveAll(risk.checks());
-        if (!risk.passed()) {
-            trade.markRiskRejected();
-            order.markRiskRejected(risk.firstBlockMessage());
-            tradeRepository.save(trade);
-            tradeOrderRepository.save(order);
-            eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "RISK_BLOCKED", risk.firstBlockMessage(), null));
-            return TradeExecutionResult.rejected(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), risk.firstBlockMessage());
-        }
 
         BigDecimal expectedShares = null;
         BigDecimal expectedFee = BigDecimal.ZERO.setScale(8, RoundingMode.HALF_UP);
@@ -67,7 +62,7 @@ public class LiveShadowExecutionService {
         return TradeExecutionResult.accepted(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "live-shadow order recorded");
     }
 
-    private String idempotencyKey(TradeIntent intent, ExecutionMode mode, Long tradeId) {
-        return mode + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side() + ":" + tradeId;
+    private String idempotencyKey(TradeIntent intent, ExecutionMode mode) {
+        return mode + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side();
     }
 }

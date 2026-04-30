@@ -57,18 +57,19 @@ public class RiskCheckService {
 
         long activeTradeCount = tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(
                 intent.marketId(), intent.tokenId(), intent.strategyId(), ACTIVE_STATUSES);
-        // The current trade has usually already been inserted so risk rows can point at trade_id.
-        // Treat one matching active row as the current trade, not as a duplicate.
-        boolean duplicateIntent = activeTradeCount > 1;
+        boolean duplicateIntent = activeTradeCount > 0;
         assessment.add(check(tradeId, orderId, mode, "DUPLICATE_OPEN_TRADE", !duplicateIntent,
-                activeTradeCount, "<= 1 including current trade",
+                activeTradeCount, "0 active trades before execution",
                 duplicateIntent ? "another active trade already exists for this market/token/strategy" : "no active duplicate trade"));
 
-        long tradesForMarketIncludingCurrent = tradeRepository.countByMarketIdAndStrategyId(intent.marketId(), intent.strategyId());
-        long priorTradesForMarket = Math.max(0, tradesForMarketIncludingCurrent - 1);
-        boolean maxTradesOk = priorTradesForMarket < properties.getMaxTradesPerMarket();
+        long activeTradesForMarketIncludingCurrent = tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(
+                intent.marketId(),
+                intent.strategyId(),
+                ACTIVE_STATUSES
+        );
+        boolean maxTradesOk = activeTradesForMarketIncludingCurrent < properties.getMaxTradesPerMarket();
         assessment.add(check(tradeId, orderId, mode, "MAX_TRADES_PER_MARKET", maxTradesOk,
-                priorTradesForMarket, properties.getMaxTradesPerMarket(),
+                activeTradesForMarketIncludingCurrent, properties.getMaxTradesPerMarket(),
                 maxTradesOk ? "market trade count accepted" : "maxTradesPerMarket reached"));
 
         boolean idempotencyOk = idempotencyKey != null && !idempotencyKey.isBlank()

@@ -11,6 +11,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,6 +35,49 @@ class PaperExecutionServiceTest {
             riskCheckRepository,
             eventRepository
     );
+
+    @Test
+    void buyRejectedByRiskCreatesOnlyRiskAuditRows() {
+        RiskAssessment blocked = new RiskAssessment();
+        blocked.add(TradeRiskCheckEntity.of(
+                null,
+                null,
+                ExecutionMode.PAPER,
+                "MAX_TRADES_PER_MARKET",
+                false,
+                RiskSeverity.BLOCK,
+                1,
+                1,
+                "maxTradesPerMarket reached"
+        ));
+        when(riskCheckService.assess(
+                any(TradeIntent.class),
+                eq(ExecutionMode.PAPER),
+                eq(null),
+                eq(null),
+                eq("PAPER:market-id:up:cost-aware-momentum-paper:BUY")
+        )).thenReturn(blocked);
+
+        TradeExecutionResult result = service.execute(TradeIntent.buy(
+                market(),
+                price("up", "Up", "0.59", "0.61"),
+                new BigDecimal("1.00"),
+                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
+                "entry"
+        ));
+
+        assertThat(result.accepted()).isFalse();
+        assertThat(result.tradeId()).isNull();
+        assertThat(result.orderId()).isNull();
+        assertThat(result.message()).isEqualTo("maxTradesPerMarket reached");
+
+        verify(riskCheckRepository).saveAll(blocked.checks());
+        verify(tradeRepository, org.mockito.Mockito.never()).save(any());
+        verify(tradeOrderRepository, org.mockito.Mockito.never()).save(any());
+        verify(tradeFillRepository, org.mockito.Mockito.never()).save(any());
+        verify(eventRepository, org.mockito.Mockito.never()).save(any());
+    }
 
     @Test
     void sellClosesMatchingOpenTradeAtBid() {

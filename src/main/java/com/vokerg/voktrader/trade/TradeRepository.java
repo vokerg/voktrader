@@ -21,7 +21,11 @@ public interface TradeRepository extends JpaRepository<TradeEntity, Long> {
             Collection<TradeStatus> statuses
     );
 
-    long countByMarketIdAndStrategyId(String marketId, String strategyId);
+    long countByMarketIdAndStrategyIdAndStatusIn(
+            String marketId,
+            String strategyId,
+            Collection<TradeStatus> statuses
+    );
 
     long countByModeInAndStatusIn(Collection<ExecutionMode> modes, Collection<TradeStatus> statuses);
 

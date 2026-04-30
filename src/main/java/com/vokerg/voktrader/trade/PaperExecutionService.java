@@ -38,24 +38,18 @@ public class PaperExecutionService {
 
     private TradeExecutionResult executeBuy(TradeIntent intent) {
         ExecutionMode mode = ExecutionMode.PAPER;
-        TradeEntity trade = tradeRepository.save(TradeEntity.fromIntent(intent, mode));
-        eventRepository.save(TradeEventEntity.of(trade.getId(), null, null, "TRADE_CREATED", "paper trade created from intent", null));
+        String idempotencyKey = idempotencyKey(intent, mode);
+        RiskAssessment risk = riskCheckService.assess(intent, mode, null, null, idempotencyKey);
+        riskCheckRepository.saveAll(risk.checks());
+        if (!risk.passed()) {
+            return TradeExecutionResult.rejected(mode, null, null, null, null, risk.firstBlockMessage());
+        }
 
-        String idempotencyKey = idempotencyKey(intent, mode, trade.getId());
+        TradeEntity trade = tradeRepository.save(TradeEntity.fromIntent(intent, mode));
+        eventRepository.save(TradeEventEntity.of(trade.getId(), null, null, "TRADE_CREATED", "paper trade created from accepted intent", null));
         TradeOrderEntity order = tradeOrderRepository.save(TradeOrderEntity.fromIntent(
                 trade.getId(), intent, mode, TradeVenue.PAPER_SIM, idempotencyKey));
         eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "ORDER_CREATED", "paper simulated order created", null));
-
-        RiskAssessment risk = riskCheckService.assess(intent, mode, trade.getId(), order.getId(), idempotencyKey);
-        riskCheckRepository.saveAll(risk.checks());
-        if (!risk.passed()) {
-            trade.markRiskRejected();
-            order.markRiskRejected(risk.firstBlockMessage());
-            tradeRepository.save(trade);
-            tradeOrderRepository.save(order);
-            eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "RISK_BLOCKED", risk.firstBlockMessage(), null));
-            return TradeExecutionResult.rejected(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), risk.firstBlockMessage());
-        }
 
         BigDecimal entryPrice = intent.expectedPrice();
         if (entryPrice == null || entryPrice.compareTo(BigDecimal.ZERO) <= 0) {
@@ -150,5 +144,9 @@ public class PaperExecutionService {
 
     private String idempotencyKey(TradeIntent intent, ExecutionMode mode, Long tradeId) {
         return mode + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side() + ":" + tradeId;
+    }
+
+    private String idempotencyKey(TradeIntent intent, ExecutionMode mode) {
+        return mode + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side();
     }
 }
