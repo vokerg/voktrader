@@ -32,3 +32,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Local secrets ###
+.env
+*.env
+executor-python/.env
+!*.env.example

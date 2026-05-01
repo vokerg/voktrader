@@ -4,13 +4,16 @@ This sidecar is intentionally separated from the JVM strategy/risk engine. The J
 
 ## Safety defaults
 
-- Java live profile has `voktrader.executor.enabled=false`.
-- Sidecar has `EXECUTOR_DRY_RUN=true`.
+- Java live profile uses `LIVE_TINY`, keeps `max-order-usd=1.00`, and allows one open live trade.
+- Java live profile has `voktrader.executor.enabled=true` and `voktrader.executor.dry-run=false`.
+- Sidecar has `EXECUTOR_DRY_RUN=false`.
 - Sidecar locally caps `MAX_ORDER_AMOUNT_USD=5`.
 - Sidecar defaults to FOK-only orders through `REQUIRE_FOK=true`.
 - The JVM live lifecycle defaults to `voktrader.executor.require-immediate-fill=true` because no async exchange-reconciliation loop is included here.
 
-## Local dry-run smoke test
+With the auth values blank, the sidecar is live-ready but cannot place an order. A trade attempt should fail with `POLYMARKET_PRIVATE_KEY is required when EXECUTOR_DRY_RUN=false`.
+
+## Local executor startup
 
 ```bash
 cd executor-python
@@ -50,6 +53,6 @@ Only after dry-run testing:
 2. Set `EXECUTOR_DRY_RUN=false` in `executor-python/.env`.
 3. Set `POLYMARKET_PRIVATE_KEY`, `POLYMARKET_FUNDER` where applicable, and optional API creds.
 4. Keep `MAX_ORDER_AMOUNT_USD` tiny until reconciliation and operations are proven.
-5. Start Java with `spring.profiles.active=live`, then set `voktrader.executor.enabled=true` and `voktrader.executor.dry-run=false` deliberately.
+5. Start Java with `spring.profiles.active=live`.
 
 This package does not add a background order reconciliation worker. With `require-immediate-fill=true`, accepted-but-unfilled live orders are treated as failed in the JVM ledger to avoid pretending there is an open filled position.

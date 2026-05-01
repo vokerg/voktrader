@@ -69,7 +69,7 @@ class PolymarketExecutor:
             )
             client.set_api_creds(creds)
         else:
-            client.set_api_creds(client.create_or_derive_api_creds())
+            client.set_api_creds(client.create_or_derive_api_key())
 
         self._client = client
         return client
@@ -80,19 +80,19 @@ class PolymarketExecutor:
         side = Side.BUY if command.side == TradeSide.BUY else Side.SELL
         order_type = getattr(OrderType, command.timeInForce.upper(), OrderType.FOK)
 
-        # py_clob_client_v2 MarketOrderArgs is amount-based for BUY and size-based for SELL.
+        # py_clob_client_v2 MarketOrderArgs uses amount for both sides:
+        # BUY amount is USD, SELL amount is shares.
+        amount = command.amountUsd if command.side == TradeSide.BUY else command.shares
         kwargs: dict[str, Any] = {
             "token_id": command.tokenId,
             "side": side,
+            "amount": float(amount),
             "price": float(command.limitPrice),
+            "order_type": order_type,
         }
-        if command.side == TradeSide.BUY:
-            kwargs["amount"] = float(command.amountUsd)
-        else:
-            kwargs["size"] = float(command.shares)
 
         args = MarketOrderArgs(**kwargs)
-        return client.create_market_order(args, order_type=order_type)
+        return client.create_and_post_market_order(args, order_type=order_type)
 
     def _normalize_response(self, command: OrderCommand, raw_response: Any) -> OrderResponse:
         data = raw_response if isinstance(raw_response, dict) else {}
