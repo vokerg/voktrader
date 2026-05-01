@@ -38,3 +38,7 @@ build/
 *.env
 executor-python/.env
 !*.env.example
+
+### Python ###
+__pycache__/
+*.py[cod]
