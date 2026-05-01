@@ -43,7 +43,10 @@ class PolymarketExecutor:
         if self._client is not None:
             return self._client
 
-        if not self.settings.polymarket_private_key:
+        private_key = _normalize_private_key(self.settings.polymarket_private_key)
+        funder = _normalize_funder_address(self.settings.polymarket_funder)
+
+        if not private_key:
             raise RuntimeError("POLYMARKET_PRIVATE_KEY is required when EXECUTOR_DRY_RUN=false")
 
         # Import lazily so local dry-run smoke tests do not require the CLOB SDK.
@@ -51,10 +54,10 @@ class PolymarketExecutor:
 
         client = ClobClient(
             self.settings.polymarket_host,
-            key=self.settings.polymarket_private_key,
+            key=private_key,
             chain_id=self.settings.polymarket_chain_id,
             signature_type=self.settings.polymarket_signature_type,
-            funder=self.settings.polymarket_funder,
+            funder=funder,
         )
 
         if (
@@ -185,3 +188,35 @@ def _decimal_or_none(value: Any) -> Decimal | None:
     if value is None or value == "":
         return None
     return Decimal(str(value))
+
+
+def _normalize_private_key(value: str | None) -> str | None:
+    if value is None or value.strip() == "":
+        return None
+    return _validated_hex(
+        value,
+        name="POLYMARKET_PRIVATE_KEY",
+        expected_hex_chars=64,
+        description="a 32-byte hex private key",
+    )
+
+
+def _normalize_funder_address(value: str | None) -> str | None:
+    if value is None or value.strip() == "":
+        return None
+    return _validated_hex(
+        value,
+        name="POLYMARKET_FUNDER",
+        expected_hex_chars=40,
+        description="a 20-byte hex wallet/proxy address",
+    )
+
+
+def _validated_hex(value: str, *, name: str, expected_hex_chars: int, description: str) -> str:
+    stripped = value.strip()
+    hex_part = stripped[2:] if stripped.lower().startswith("0x") else stripped
+    if len(hex_part) != expected_hex_chars or any(char not in "0123456789abcdefABCDEF" for char in hex_part):
+        raise ValueError(
+            f"{name} must be {description} ({expected_hex_chars} hex chars, optional 0x prefix) or left blank"
+        )
+    return stripped
