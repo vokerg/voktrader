@@ -1,0 +1,92 @@
+from decimal import Decimal
+
+from voktrader_executor.config import Settings
+from voktrader_executor.models import OrderCommand
+from voktrader_executor.polymarket_client import PolymarketExecutor
+
+
+def test_matched_buy_uses_exchange_making_and_taking_amounts():
+    command = OrderCommand(
+        idempotencyKey="test",
+        strategyId="cost-aware-momentum-paper",
+        marketId="2127144",
+        tokenId="token",
+        side="BUY",
+        amountUsd=Decimal("1.00"),
+        limitPrice=Decimal("0.66"),
+        timeInForce="FOK",
+        dryRun=False,
+    )
+
+    response = PolymarketExecutor(Settings())._normalize_response(
+        command,
+        {
+            "errorMsg": "",
+            "makingAmount": "1",
+            "orderID": "0x58ff",
+            "status": "MATCHED",
+            "success": True,
+            "takingAmount": "1.5625",
+        },
+    )
+
+    assert response.accepted is True
+    assert response.filled is True
+    assert response.status == "MATCHED"
+    assert response.filledAmountUsd == Decimal("1.00")
+    assert response.filledShares == Decimal("1.562500")
+    assert response.averagePrice == Decimal("0.64000000")
+
+
+def test_matched_sell_uses_exchange_making_and_taking_amounts():
+    command = OrderCommand(
+        idempotencyKey="test",
+        strategyId="cost-aware-momentum-paper",
+        marketId="2127144",
+        tokenId="token",
+        side="SELL",
+        shares=Decimal("1.515152"),
+        limitPrice=Decimal("0.56"),
+        timeInForce="FOK",
+        dryRun=False,
+    )
+
+    response = PolymarketExecutor(Settings())._normalize_response(
+        command,
+        {
+            "errorMsg": "",
+            "makingAmount": "1.51",
+            "orderID": "0x58ff",
+            "status": "MATCHED",
+            "success": True,
+            "takingAmount": "0.8456",
+        },
+    )
+
+    assert response.accepted is True
+    assert response.filled is True
+    assert response.status == "MATCHED"
+    assert response.filledShares == Decimal("1.51")
+    assert response.filledAmountUsd == Decimal("0.8456")
+    assert response.averagePrice == Decimal("0.56000000")
+
+
+def test_zero_share_sell_is_rejected_before_exchange_call():
+    command = OrderCommand(
+        idempotencyKey="test",
+        strategyId="cost-aware-momentum-paper",
+        marketId="2127144",
+        tokenId="token",
+        side="SELL",
+        shares=Decimal("0"),
+        limitPrice=Decimal("0.45"),
+        timeInForce="FOK",
+        dryRun=False,
+    )
+
+    try:
+        PolymarketExecutor(Settings())._validate_guardrails(command)
+    except ValueError as exc:
+        assert str(exc) == "SELL requires positive shares"
+    else:
+        raise AssertionError("Expected zero-share sell to be rejected")

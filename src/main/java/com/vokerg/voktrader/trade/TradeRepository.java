@@ -29,6 +29,12 @@ public interface TradeRepository extends JpaRepository<TradeEntity, Long> {
 
     long countByModeInAndStatusIn(Collection<ExecutionMode> modes, Collection<TradeStatus> statuses);
 
+    long countByStrategyIdAndMarketIdAndStatusIn(
+            String strategyId,
+            String marketId,
+            Collection<TradeStatus> statuses
+    );
+
     List<TradeEntity> findByMarketIdAndStatus(String marketId, TradeStatus status);
 
     List<TradeEntity> findByStatus(TradeStatus status);
@@ -46,5 +52,18 @@ public interface TradeRepository extends JpaRepository<TradeEntity, Long> {
             String strategyId,
             String marketId,
             TradeStatus status
+    );
+
+    Optional<TradeEntity> findFirstByStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(
+            String strategyId,
+            String marketId,
+            Collection<TradeStatus> statuses
+    );
+
+    Optional<TradeEntity> findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(
+            String strategyId,
+            String marketId,
+            String tokenId,
+            Collection<TradeStatus> statuses
     );
 }

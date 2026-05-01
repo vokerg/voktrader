@@ -23,6 +23,7 @@ import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -242,6 +243,15 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             return;
         }
 
+        if (completedTradeLimitReached(market.id(), config)
+                || closedTradeCooldownActive(market.id(), config)) {
+            return;
+        }
+
+        if (sameOutcomeLossLockoutActive(market.id(), candidate.tokenId())) {
+            return;
+        }
+
         var result = executionRouter.route(TradeIntent.buy(
                 market,
                 candidate,
@@ -261,6 +271,54 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
                 && price.ask() != null
                 && price.spread() != null
                 && price.updatedAt() != null;
+    }
+
+    private boolean completedTradeLimitReached(
+            String marketId,
+            StrategyProperties.CostAwareMomentum config
+    ) {
+        int maxCompletedTrades = config.maxCompletedTradesPerMarketOrDefault();
+        if (maxCompletedTrades <= 0) {
+            return false;
+        }
+
+        long completedTrades = tradeRepository.countByStrategyIdAndMarketIdAndStatusIn(
+                ID,
+                marketId,
+                List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED)
+        );
+        return completedTrades >= maxCompletedTrades;
+    }
+
+    private boolean closedTradeCooldownActive(
+            String marketId,
+            StrategyProperties.CostAwareMomentum config
+    ) {
+        long cooldownSeconds = config.closedTradeCooldownSecondsOrDefault();
+        if (cooldownSeconds <= 0) {
+            return false;
+        }
+
+        return tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(
+                        ID,
+                        marketId,
+                        List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED, TradeStatus.FAILED)
+                )
+                .map(TradeEntity::getUpdatedAt)
+                .filter(updatedAt -> Duration.between(updatedAt, clock.instant()).compareTo(Duration.ofSeconds(cooldownSeconds)) < 0)
+                .isPresent();
+    }
+
+    private boolean sameOutcomeLossLockoutActive(String marketId, String tokenId) {
+        return tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(
+                        ID,
+                        marketId,
+                        tokenId,
+                        List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED)
+                )
+                .map(TradeEntity::getFinalPnlUsd)
+                .filter(pnl -> pnl.compareTo(BigDecimal.ZERO) < 0)
+                .isPresent();
     }
 
     private boolean isStale(

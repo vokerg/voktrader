@@ -123,12 +123,24 @@ class PolymarketExecutor:
             _first_present(data, "averagePrice", "avg_price", "price", "matchedPrice")
         ) or command.limitPrice
 
+        making_amount = _decimal_or_none(_first_present(data, "makingAmount", "making_amount"))
+        taking_amount = _decimal_or_none(_first_present(data, "takingAmount", "taking_amount"))
+        if filled and making_amount is not None and taking_amount is not None:
+            if command.side == TradeSide.BUY:
+                filled_amount = making_amount
+                filled_shares = taking_amount
+            else:
+                filled_shares = making_amount
+                filled_amount = taking_amount
+            if filled_shares > 0 and filled_amount > 0:
+                avg_price = (filled_amount / filled_shares).quantize(Decimal("0.00000001"))
+
+        if filled and filled_amount == 0 and command.amountUsd is not None:
+            filled_amount = command.amountUsd
         if filled and filled_shares == 0 and command.shares is not None:
             filled_shares = command.shares
         if filled and filled_shares == 0 and filled_amount > 0 and avg_price > 0:
             filled_shares = (filled_amount / avg_price).quantize(Decimal("0.000001"))
-        if filled and filled_amount == 0 and command.amountUsd is not None:
-            filled_amount = command.amountUsd
         if filled and filled_amount == 0 and filled_shares > 0 and avg_price > 0:
             filled_amount = (filled_shares * avg_price).quantize(Decimal("0.000001"))
 

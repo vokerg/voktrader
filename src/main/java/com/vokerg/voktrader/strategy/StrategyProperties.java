@@ -43,7 +43,7 @@ public record StrategyProperties(
 
     public CostAwareMomentum costAwareMomentumOrDefault() {
         return costAwareMomentum == null
-                ? new CostAwareMomentum(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)
+                ? new CostAwareMomentum(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)
                 : costAwareMomentum;
     }
 
@@ -118,7 +118,9 @@ public record StrategyProperties(
             BigDecimal stopMid,
             Long minHoldSeconds,
             BigDecimal trailingStopBidDrop,
-            Long forceDecisionSeconds
+            Long forceDecisionSeconds,
+            Long closedTradeCooldownSeconds,
+            Integer maxCompletedTradesPerMarket
     ) {
         public long maxDataAgeMsOrDefault() {
             return maxDataAgeMs == null ? 2_500L : maxDataAgeMs;
@@ -186,6 +188,14 @@ public record StrategyProperties(
 
         public long forceDecisionSecondsOrDefault() {
             return forceDecisionSeconds == null ? 20L : forceDecisionSeconds;
+        }
+
+        public long closedTradeCooldownSecondsOrDefault() {
+            return closedTradeCooldownSeconds == null ? 90L : closedTradeCooldownSeconds;
+        }
+
+        public int maxCompletedTradesPerMarketOrDefault() {
+            return maxCompletedTradesPerMarket == null ? 3 : maxCompletedTradesPerMarket;
         }
     }
 }

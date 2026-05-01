@@ -72,6 +72,22 @@ class CostAwareMomentumStrategyTest {
                 market.id(),
                 TradeStatus.OPEN
         )).thenReturn(Optional.empty());
+        when(tradeRepository.countByStrategyIdAndMarketIdAndStatusIn(
+                any(),
+                any(),
+                any()
+        )).thenReturn(0L);
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(
+                any(),
+                any(),
+                any()
+        )).thenReturn(Optional.empty());
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(
+                any(),
+                any(),
+                any(),
+                any()
+        )).thenReturn(Optional.empty());
         when(executionRouter.route(any(TradeIntent.class))).thenReturn(TradeExecutionResult.accepted(
                 ExecutionMode.PAPER,
                 1L,
@@ -168,6 +184,71 @@ class CostAwareMomentumStrategyTest {
                 market.id(),
                 TradeStatus.OPEN
         )).thenReturn(Optional.of(open));
+        seedMomentum();
+        clock.advance(Duration.ofSeconds(11));
+        setOutcomePrices(price("up", "Up", "0.59", "0.61"), price("down", "Down", "0.39", "0.41"));
+
+        strategy.tick();
+
+        verify(executionRouter, never()).route(any());
+    }
+
+    @Test
+    void doesNotReenterMarketAfterCompletedTradeLimitReached() {
+        when(tradeRepository.countByStrategyIdAndMarketIdAndStatusIn(
+                any(),
+                any(),
+                any()
+        )).thenReturn(3L);
+        seedMomentum();
+        clock.advance(Duration.ofSeconds(11));
+        setOutcomePrices(price("up", "Up", "0.59", "0.61"), price("down", "Down", "0.39", "0.41"));
+
+        strategy.tick();
+
+        verify(executionRouter, never()).route(any());
+    }
+
+    @Test
+    void doesNotReenterMarketDuringClosedTradeCooldown() {
+        TradeEntity closed = openTrade("up", "Up", "0.50", "2.00000000");
+        closed.markClosed(
+                new BigDecimal("0.55"),
+                new BigDecimal("2.00000000"),
+                new BigDecimal("1.10"),
+                BigDecimal.ZERO,
+                clock.instant().minusSeconds(30)
+        );
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(
+                any(),
+                any(),
+                any()
+        )).thenReturn(Optional.of(closed));
+        seedMomentum();
+        clock.advance(Duration.ofSeconds(11));
+        setOutcomePrices(price("up", "Up", "0.59", "0.61"), price("down", "Down", "0.39", "0.41"));
+
+        strategy.tick();
+
+        verify(executionRouter, never()).route(any());
+    }
+
+    @Test
+    void doesNotReenterSameOutcomeAfterLossInMarket() {
+        TradeEntity losingUp = openTrade("up", "Up", "0.60", "1.66666700");
+        losingUp.markClosed(
+                new BigDecimal("0.55"),
+                new BigDecimal("1.66666700"),
+                new BigDecimal("0.91666685"),
+                BigDecimal.ZERO,
+                clock.instant().minusSeconds(120)
+        );
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(
+                any(),
+                any(),
+                any(),
+                any()
+        )).thenReturn(Optional.of(losingUp));
         seedMomentum();
         clock.advance(Duration.ofSeconds(11));
         setOutcomePrices(price("up", "Up", "0.59", "0.61"), price("down", "Down", "0.39", "0.41"));
