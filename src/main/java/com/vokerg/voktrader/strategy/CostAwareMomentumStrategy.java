@@ -138,10 +138,10 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
 
             BigDecimal mid = mid(price);
             BigDecimal paperPnl = calculateExitPnl(trade, price.bid());
-            boolean profitable = paperPnl.compareTo(BigDecimal.ZERO) > 0;
+            boolean profitTargetReached = paperPnl.compareTo(config.minProfitUsdOrDefault()) >= 0;
 
             if (isNearExpiry(market, config)) {
-                if (profitable) {
+                if (profitTargetReached) {
                     trailingPeakBidByTrade.remove(trailingKey(trade));
                     routeSell(market, trade, price, "near expiry profitable paper exit");
                 }
@@ -149,8 +149,8 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             }
 
             BigDecimal priceMove = price.bid().subtract(trade.getEntryAvgPrice());
-            boolean takeProfitReached = paperPnl.compareTo(config.minProfitUsdOrDefault()) >= 0
-                    || priceMove.compareTo(config.minPriceMoveOrDefault()) >= 0;
+            boolean takeProfitReached = profitTargetReached
+                    && priceMove.compareTo(config.minPriceMoveOrDefault()) >= 0;
 
             if (takeProfitReached || trailingPeakBidByTrade.containsKey(trailingKey(trade))) {
                 if (shouldSellTrailingStop(trade, price.bid(), config)) {

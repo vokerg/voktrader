@@ -271,6 +271,24 @@ class CostAwareMomentumStrategyTest {
     }
 
     @Test
+    void doesNotActivateTrailingStopWhenPriceMoveIsNotEnoughAfterFees() {
+        TradeEntity open = openTradeWithEntryFee(
+                "up",
+                "Up",
+                "0.66",
+                "1.51515152",
+                "0.02423564"
+        );
+        when(tradeRepository.findByStrategyIdAndStatus(CostAwareMomentumStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of(open));
+        OutcomePrice up = price("up", "Up", "0.71", "0.72");
+        when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(up));
+
+        strategy.tick();
+
+        verify(executionRouter, never()).route(any());
+    }
+
+    @Test
     void sellsOnTrailingStopAfterTakeProfitPeakFalls() {
         TradeEntity open = openTrade("up", "Up", "0.50", "2.00000000");
         when(tradeRepository.findByStrategyIdAndStatus(CostAwareMomentumStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of(open));
@@ -347,6 +365,26 @@ class CostAwareMomentumStrategyTest {
         verify(executionRouter, never()).route(any());
     }
 
+    @Test
+    void holdsNearExpiryWhenSmallPriceMoveIsEatenByCryptoTakerFees() {
+        market = marketEndingIn(10);
+        when(trackedMarketState.currentMarket()).thenReturn(Optional.of(market));
+        TradeEntity open = openTradeWithEntryFee(
+                "up",
+                "Up",
+                "0.66",
+                "1.51515152",
+                "0.02423564"
+        );
+        when(tradeRepository.findByStrategyIdAndStatus(CostAwareMomentumStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of(open));
+        OutcomePrice up = price("up", "Up", "0.69", "0.70");
+        when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(up));
+
+        strategy.tick();
+
+        verify(executionRouter, never()).route(any());
+    }
+
     private void seedMomentum() {
         setOutcomePrices(
                 price("up", "Up", "0.53", "0.55"),
@@ -385,6 +423,24 @@ class CostAwareMomentumStrategyTest {
 
     private TradeEntity openTrade(String tokenId, String outcome, String entryPrice, String paperShares) {
         return openTrade(tokenId, outcome, entryPrice, paperShares, 5);
+    }
+
+    private TradeEntity openTradeWithEntryFee(
+            String tokenId,
+            String outcome,
+            String entryPrice,
+            String paperShares,
+            String entryFee
+    ) {
+        TradeEntity trade = openTrade(tokenId, outcome, entryPrice, paperShares);
+        trade.markOpen(
+                new BigDecimal(entryPrice),
+                new BigDecimal(paperShares),
+                new BigDecimal("1.00"),
+                new BigDecimal(entryFee),
+                clock.instant().minusSeconds(5)
+        );
+        return trade;
     }
 
     private TradeEntity openTrade(

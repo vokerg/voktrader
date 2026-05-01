@@ -163,7 +163,7 @@ public record StrategyProperties(
         }
 
         public BigDecimal minProfitUsdOrDefault() {
-            return minProfitUsd == null ? new BigDecimal("0.02") : minProfitUsd;
+            return minProfitUsd == null ? new BigDecimal("0.04") : minProfitUsd;
         }
 
         public BigDecimal minPriceMoveOrDefault() {

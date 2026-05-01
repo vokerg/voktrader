@@ -28,7 +28,7 @@ public class TradingProperties {
     private int maxOpenLiveTrades = 1;
     private int maxTradesPerMarket = 1;
     private int minSecondsToExpiry = 30;
-    private BigDecimal paperFeeRate = new BigDecimal("0.02");
+    private BigDecimal paperFeeRate = new BigDecimal("0.072");
     private Set<String> allowedStrategyIds = new LinkedHashSet<>(Set.of("simple-down-cheap-tight-spread"));
 
     public ExecutionMode getMode() {
