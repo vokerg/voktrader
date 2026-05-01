@@ -112,6 +112,11 @@ public class LiveExecutionService {
     }
 
     private TradeExecutionResult executeSell(TradeIntent intent, ExecutionMode mode) {
+        if (intent.shares() == null || intent.shares().compareTo(BigDecimal.ZERO) <= 0) {
+            return TradeExecutionResult.rejected(mode, null, null, null, null,
+                    "LIVE exit rejected before executor call: sell intent has no positive shares");
+        }
+
         TradeEntity trade = tradeRepository
                 .findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
                         intent.strategyId(),
@@ -192,7 +197,8 @@ public class LiveExecutionService {
     }
 
     private String idempotencyKey(TradeIntent intent, ExecutionMode mode, Long tradeId) {
-        return mode + ":" + intent.strategyId() + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.side() + ":" + tradeId;
+        Instant decisionAt = intent.decisionAt() != null ? intent.decisionAt() : Instant.now();
+        return mode + ":" + intent.strategyId() + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.side() + ":" + tradeId + ":" + decisionAt.toEpochMilli();
     }
 
     private static <T> T firstNonNull(T primary, T fallback) {

@@ -34,10 +34,10 @@ class PolymarketExecutor:
             raise ValueError("Only FOK orders are allowed while REQUIRE_FOK=true")
         if command.limitPrice <= 0 or command.limitPrice >= 1:
             raise ValueError("limitPrice must be between 0 and 1")
-        if command.side == TradeSide.BUY and command.amountUsd is None:
-            raise ValueError("BUY requires amountUsd")
-        if command.side == TradeSide.SELL and command.shares is None:
-            raise ValueError("SELL requires shares")
+        if command.side == TradeSide.BUY and (command.amountUsd is None or command.amountUsd <= 0):
+            raise ValueError("BUY requires positive amountUsd")
+        if command.side == TradeSide.SELL and (command.shares is None or command.shares <= 0):
+            raise ValueError("SELL requires positive shares")
 
     def _get_client(self) -> Any:
         if self._client is not None:
@@ -125,8 +125,12 @@ class PolymarketExecutor:
 
         if filled and filled_shares == 0 and command.shares is not None:
             filled_shares = command.shares
+        if filled and filled_shares == 0 and filled_amount > 0 and avg_price > 0:
+            filled_shares = (filled_amount / avg_price).quantize(Decimal("0.000001"))
         if filled and filled_amount == 0 and command.amountUsd is not None:
             filled_amount = command.amountUsd
+        if filled and filled_amount == 0 and filled_shares > 0 and avg_price > 0:
+            filled_amount = (filled_shares * avg_price).quantize(Decimal("0.000001"))
 
         return OrderResponse(
             accepted=success,

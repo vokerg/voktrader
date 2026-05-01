@@ -6,6 +6,7 @@ import logging
 import uvicorn
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.responses import JSONResponse
+from py_clob_client_v2.exceptions import PolyApiException
 from pydantic import ValidationError
 
 from .config import Settings
@@ -80,6 +81,8 @@ def create_order(command: OrderCommand, _: None = Depends(require_auth)) -> Orde
             message=str(exc),
             rawResponse=json.dumps({"error": str(exc)}, sort_keys=True),
         )
+    except PolyApiException as exc:
+        response = poly_api_error_response(exc)
     except Exception as exc:  # noqa: BLE001 - return a structured failure to the JVM caller.
         response = OrderResponse(
             accepted=False,
@@ -92,6 +95,33 @@ def create_order(command: OrderCommand, _: None = Depends(require_auth)) -> Orde
     idempotency_store.put(command.idempotencyKey, response)
     log_response(command, response, cached=False, dry_run=effective_dry_run)
     return response
+
+
+def poly_api_error_response(exc: PolyApiException) -> OrderResponse:
+    error = exc.error_msg
+    status_code = exc.status_code
+    raw_response = json.dumps(
+        {"statusCode": status_code, "error": error},
+        default=str,
+        sort_keys=True,
+    )
+
+    if isinstance(error, dict):
+        message = str(error.get("error") or error.get("message") or error)
+        exchange_order_id = error.get("orderID") or error.get("orderId") or error.get("id")
+    else:
+        message = str(error)
+        exchange_order_id = None
+
+    status_name = "REJECTED" if status_code is not None and 400 <= status_code < 500 else "FAILED"
+    return OrderResponse(
+        accepted=False,
+        filled=False,
+        status=status_name,
+        exchangeOrderId=str(exchange_order_id) if exchange_order_id is not None else None,
+        message=message,
+        rawResponse=raw_response,
+    )
 
 
 def log_response(command: OrderCommand, response: OrderResponse, *, cached: bool, dry_run: bool) -> None:
