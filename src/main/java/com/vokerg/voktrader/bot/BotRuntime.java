@@ -94,8 +94,8 @@ public class BotRuntime {
         }
         GammaMarketDto current = trackedMarketState.currentMarket().orElse(null);
         if (current != null && expiredGraceElapsed(current)) {
-            log.info("{}Bot market expired grace elapsed: botId={} marketId={} endDate={} rolling to next market{}",
-                    LogColors.MARKET, botId(), current.id(), current.endDate(), LogColors.RESET);
+            log.info("{}Bot market expired grace elapsed: botId={} marketId={} endDate={} now={} rolling to next market{}",
+                    LogColors.MARKET, botId(), current.id(), current.endDate(), Instant.now(), LogColors.RESET);
             stopCurrentMarketAndRoll(current.id(), "expired_grace_elapsed");
         }
     }
@@ -403,6 +403,8 @@ public class BotRuntime {
         }
         resolutionOnlySubscriptions.put(marketId, webSocketSubscription);
         webSocketSubscription = null;
+        log.info("{}Keeping expired bot market WebSocket alive for resolution only: botId={} marketId={}{}",
+                LogColors.MARKET, botId(), marketId, LogColors.RESET);
     }
 
     private void disposeResolutionOnlySubscription(String marketId) {

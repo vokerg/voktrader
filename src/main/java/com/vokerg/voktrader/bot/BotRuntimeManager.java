@@ -48,8 +48,12 @@ public class BotRuntimeManager implements CommandLineRunner {
     }
 
     @Scheduled(initialDelay = 15_000, fixedDelay = 15_000)
-    public void ensureMarketsTracked() {
+    public void reloadEnabledBots() {
         reload("scheduled refresh");
+    }
+
+    @Scheduled(initialDelay = 5_000, fixedDelay = 5_000)
+    public void ensureMarketsTracked() {
         runtimes.values().forEach(BotRuntime::ensureMarketIsTracked);
     }
 
