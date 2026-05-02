@@ -6,6 +6,7 @@ import com.vokerg.voktrader.config.MarketSelectionProperties;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -13,6 +14,7 @@ import java.time.Instant;
 
 @Slf4j
 @Service
+@ConditionalOnProperty(name = "voktrader.legacy.paper-runner.enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class MarketLifecycleService {
 

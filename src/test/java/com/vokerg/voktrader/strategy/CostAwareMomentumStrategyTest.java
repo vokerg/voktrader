@@ -451,6 +451,7 @@ class CostAwareMomentumStrategyTest {
             long secondsAgo
     ) {
         TradeEntity trade = TradeEntity.fromIntent(new TradeIntent(
+                null,
                 CostAwareMomentumStrategy.ID,
                 "cost-aware-momentum",
                 market.id(),

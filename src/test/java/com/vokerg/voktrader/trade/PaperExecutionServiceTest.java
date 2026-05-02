@@ -55,7 +55,7 @@ class PaperExecutionServiceTest {
                 eq(ExecutionMode.PAPER),
                 eq(null),
                 eq(null),
-                eq("PAPER:market-id:up:cost-aware-momentum-paper:BUY")
+                eq("PAPER:default:market-id:up:cost-aware-momentum-paper:BUY")
         )).thenReturn(blocked);
 
         TradeExecutionResult result = service.execute(TradeIntent.buy(
