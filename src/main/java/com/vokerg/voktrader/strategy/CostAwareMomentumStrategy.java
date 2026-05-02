@@ -254,10 +254,6 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             return;
         }
 
-        if (!entryEconomicsCanCoverFees(candidate, config)) {
-            return;
-        }
-
         var result = executionRouter.route(TradeIntent.buy(
                 market,
                 candidate,
@@ -418,52 +414,6 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
                 .subtract(entryCost)
                 .subtract(entryFee)
                 .setScale(8, RoundingMode.HALF_UP);
-    }
-
-    private boolean entryEconomicsCanCoverFees(
-            OutcomePrice candidate,
-            StrategyProperties.CostAwareMomentum config
-    ) {
-        BigDecimal amountUsd = config.paperSizeUsdOrDefault();
-        BigDecimal entryPrice = candidate.ask();
-        if (entryPrice == null || entryPrice.compareTo(BigDecimal.ZERO) <= 0) {
-            return false;
-        }
-        BigDecimal projectedTargetExitPrice = entryPrice.add(config.minPriceMoveOrDefault());
-        if (projectedTargetExitPrice.compareTo(BigDecimal.ONE) >= 0) {
-            log.debug(
-                    "Skipping cost-aware momentum entry because projected target exit price is unrealistic: outcome={} entryPrice={} projectedTargetExitPrice={}",
-                    candidate.outcome(),
-                    entryPrice,
-                    projectedTargetExitPrice
-            );
-            return false;
-        }
-        BigDecimal estimatedShares = amountUsd.divide(entryPrice, 8, RoundingMode.HALF_UP);
-        BigDecimal estimatedEntryFee = feeCalculator.estimateTakerFeeUsd(estimatedShares, entryPrice, tradingProperties.getTakerFeeRate());
-        BigDecimal projectedExitFee = feeCalculator.estimateTakerFeeUsd(estimatedShares, projectedTargetExitPrice, tradingProperties.getTakerFeeRate());
-        BigDecimal projectedNetPnlAtTarget = estimatedShares
-                .multiply(projectedTargetExitPrice)
-                .subtract(projectedExitFee)
-                .subtract(amountUsd)
-                .subtract(estimatedEntryFee)
-                .setScale(8, RoundingMode.HALF_UP);
-
-        if (projectedNetPnlAtTarget.compareTo(config.minProfitUsdOrDefault()) < 0) {
-            log.debug(
-                    "Skipping cost-aware momentum entry because projected net PnL cannot cover taker fees: outcome={} entryPrice={} targetExitPrice={} projectedNetPnl={} minProfitUsd={} entryFee={} exitFee={} feeRate={}",
-                    candidate.outcome(),
-                    entryPrice,
-                    projectedTargetExitPrice,
-                    projectedNetPnlAtTarget,
-                    config.minProfitUsdOrDefault(),
-                    estimatedEntryFee,
-                    projectedExitFee,
-                    tradingProperties.getTakerFeeRate()
-            );
-            return false;
-        }
-        return true;
     }
 
     private void routeSell(GammaMarketDto market, TradeEntity trade, OutcomePrice price, String reason) {

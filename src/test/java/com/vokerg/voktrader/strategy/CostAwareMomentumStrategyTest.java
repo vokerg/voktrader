@@ -167,40 +167,7 @@ class CostAwareMomentumStrategyTest {
     }
 
     @Test
-    void doesNotBuyWhenProjectedTargetCannotCoverRoundTripTakerFees() {
-        seedMomentum();
-        clock.advance(Duration.ofSeconds(11));
-        OutcomePrice up = price("up", "Up", "0.59", "0.61");
-        setOutcomePrices(up, price("down", "Down", "0.39", "0.41"));
-
-        strategy.tick();
-
-        verify(executionRouter, never()).route(any(TradeIntent.class));
-    }
-
-    @Test
-    void buysStrongerSideWhenMomentumAndFeeAwareTargetPassThresholds() {
-        useCostAwareConfig(new StrategyProperties.CostAwareMomentum(
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                new BigDecimal("0.10"),
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        ));
+    void buysStrongerSideWhenMidBidSpreadAndMomentumPassThresholds() {
         seedMomentum();
         clock.advance(Duration.ofSeconds(11));
         OutcomePrice up = price("up", "Up", "0.59", "0.61");
@@ -442,27 +409,6 @@ class CostAwareMomentumStrategyTest {
                 price("down", "Down", "0.45", "0.47")
         );
         strategy.tick();
-    }
-
-    private void useCostAwareConfig(StrategyProperties.CostAwareMomentum config) {
-        StrategyProperties properties = new StrategyProperties(
-                "cost-aware-momentum-paper",
-                1000L,
-                null,
-                null,
-                config
-        );
-        strategy = new CostAwareMomentumStrategy(
-                latestPriceState,
-                trackedMarketState,
-                strategyTimeWindow,
-                executionRouter,
-                tradeRepository,
-                properties,
-                new PaperFeeCalculator(),
-                new TradingProperties(),
-                clock
-        );
     }
 
     private BigDecimal invokeCalculateExitPnl(TradeEntity trade, BigDecimal exitPrice) throws Exception {
