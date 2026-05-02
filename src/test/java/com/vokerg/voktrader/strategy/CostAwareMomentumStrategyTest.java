@@ -51,6 +51,7 @@ class CostAwareMomentumStrategyTest {
                 1000L,
                 null,
                 null,
+                null,
                 null
         );
         strategy = new CostAwareMomentumStrategy(
@@ -315,7 +316,7 @@ class CostAwareMomentumStrategyTest {
         clock.advance(Duration.ofSeconds(11));
         TradeEntity open = openTrade("up", "Up", "0.50", "2.00000000", 12);
         when(tradeRepository.findByStrategyIdAndStatus(CostAwareMomentumStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of(open));
-        OutcomePrice up = price("up", "Up", "0.45", "0.47");
+        OutcomePrice up = price("up", "Up", "0.38", "0.40");
         when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(up));
 
         strategy.tick();
@@ -385,6 +386,20 @@ class CostAwareMomentumStrategyTest {
         strategy.tick();
 
         verify(executionRouter, never()).route(any());
+    }
+
+    @Test
+    void evaluatesSellEvenOutsideBuyTradingWindow() {
+        when(strategyTimeWindow.isInsideTradingWindow()).thenReturn(false);
+        TradeEntity open = openTrade("up", "Up", "0.50", "2.00000000");
+        when(tradeRepository.findByStrategyIdAndStatus(CostAwareMomentumStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of(open));
+        when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(price("up", "Up", "0.58", "0.60")));
+        strategy.tick();
+        when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(price("up", "Up", "0.54", "0.56")));
+
+        strategy.tick();
+
+        verify(executionRouter).route(any(TradeIntent.class));
     }
 
     @Test

@@ -31,15 +31,15 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
-public class CostAwareMomentumStrategy implements TradingStrategy {
+public class FlipCatcherReversalStrategy implements TradingStrategy {
 
-    public static final String ID = "cost-aware-momentum-paper";
+    public static final String ID = "flip-catcher-reversal";
 
     private static final BigDecimal MIN_MID_SUM = new BigDecimal("0.97");
     private static final BigDecimal MAX_MID_SUM = new BigDecimal("1.03");
     private static final BigDecimal TWO = new BigDecimal("2");
     private static final Duration SAMPLE_WINDOW = Duration.ofSeconds(30);
-    private static final Duration MID_MOMENTUM_WINDOW = Duration.ofSeconds(10);
+    private static final Duration MID_MOMENTUM_WINDOW = Duration.ofSeconds(5);
     private static final Duration SHARP_REVERSAL_WINDOW = Duration.ofSeconds(3);
 
     private final LatestPriceState latestPriceState;
@@ -55,7 +55,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
     private final Map<String, BigDecimal> trailingPeakBidByTrade = new ConcurrentHashMap<>();
 
     @Autowired
-    public CostAwareMomentumStrategy(
+    public FlipCatcherReversalStrategy(
             LatestPriceState latestPriceState,
             TrackedMarketState trackedMarketState,
             StrategyTimeWindow strategyTimeWindow,
@@ -78,7 +78,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
         );
     }
 
-    CostAwareMomentumStrategy(
+    FlipCatcherReversalStrategy(
             LatestPriceState latestPriceState,
             TrackedMarketState trackedMarketState,
             StrategyTimeWindow strategyTimeWindow,
@@ -123,7 +123,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             return;
         }
 
-        var config = strategyProperties.costAwareMomentumOrDefault();
+        var config = strategyProperties.flipCatcherOrDefault();
         Long botId = currentBotId();
 
         for (TradeEntity trade : tradeRepository.findByStrategyIdAndStatus(ID, TradeStatus.OPEN)) {
@@ -149,7 +149,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             if (isNearExpiry(market, config)) {
                 if (profitTargetReached) {
                     trailingPeakBidByTrade.remove(trailingKey(trade));
-                    routeSell(market, trade, price, "near expiry profitable paper exit");
+                    routeSell(market, trade, price, "near expiry profitable flip-catcher exit");
                 }
                 continue;
             }
@@ -161,7 +161,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             if (takeProfitReached || trailingPeakBidByTrade.containsKey(trailingKey(trade))) {
                 if (shouldSellTrailingStop(trade, price.bid(), config)) {
                     trailingPeakBidByTrade.remove(trailingKey(trade));
-                    routeSell(market, trade, price, "cost-aware momentum trailing stop");
+                    routeSell(market, trade, price, "flip-catcher trailing stop");
                 }
                 continue;
             }
@@ -178,7 +178,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
                     && actualMomentumReversal
                     && (lossLimitHit || stopMidHit)) {
                 trailingPeakBidByTrade.remove(trailingKey(trade));
-                routeSell(market, trade, price, "cost-aware momentum stop loss");
+                routeSell(market, trade, price, "flip-catcher stop loss");
             }
         }
     }
@@ -200,7 +200,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
         recordSample(up);
         recordSample(down);
 
-        var config = strategyProperties.costAwareMomentumOrDefault();
+        var config = strategyProperties.flipCatcherOrDefault();
         Instant now = clock.instant();
         Long botId = currentBotId();
 
@@ -216,29 +216,15 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             return;
         }
 
-        OutcomePrice candidate = upMid.compareTo(downMid) >= 0 ? up : down;
-        OutcomePrice opposite = candidate == up ? down : up;
-        BigDecimal candidateMid = candidate == up ? upMid : downMid;
-        BigDecimal oppositeMid = opposite == up ? upMid : downMid;
-
-        if (candidate.spread().compareTo(config.maxSpreadOrDefault()) > 0
-                || candidateMid.compareTo(config.minMidOrDefault()) < 0
-                || candidate.ask().compareTo(config.maxEntryAskOrDefault()) > 0
-                || candidate.bid().compareTo(config.minBidOrDefault()) < 0
-                || oppositeMid.compareTo(config.maxOppositeMidOrDefault()) > 0) {
+        Candidate upCandidate = flipCandidate(up, down, upMid);
+        Candidate downCandidate = flipCandidate(down, up, downMid);
+        Candidate selected = selectCandidate(upCandidate, downCandidate);
+        if (selected == null) {
             return;
         }
 
-        Optional<BigDecimal> midMove10s = moveSince(candidate.tokenId(), MID_MOMENTUM_WINDOW, SampleValue.MID);
-        Optional<BigDecimal> bidMove10s = moveSince(candidate.tokenId(), MID_MOMENTUM_WINDOW, SampleValue.BID);
-        Optional<BigDecimal> midMove3s = moveSince(candidate.tokenId(), SHARP_REVERSAL_WINDOW, SampleValue.MID);
-
-        if (midMove10s.isEmpty()
-                || bidMove10s.isEmpty()
-                || midMove10s.get().compareTo(config.minMidMove10sOrDefault()) < 0
-                || bidMove10s.get().compareTo(config.minBidMove10sOrDefault()) < 0
-                || bidMove10s.get().compareTo(candidate.spread()) <= 0
-                || midMove3s.map(move -> move.compareTo(config.maxNegativeMove3sOrDefault()) <= 0).orElse(false)) {
+        OutcomePrice candidate = selected.price();
+        if (!entryPassesFlipFilters(selected, config)) {
             return;
         }
 
@@ -260,8 +246,8 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
                 candidate,
                 config.paperSizeUsdOrDefault(),
                 ID,
-                "cost-aware-momentum",
-                "cost-aware momentum: stronger side with positive 10s move"
+                "flip-catcher",
+                "flip-catcher: midrange side accelerating while opposite weakens"
         ));
         log.info(
                 "TRADE INTENT ROUTED: accepted={} mode={} tradeId={} orderId={} tradeStatus={} orderStatus={} message={}",
@@ -279,7 +265,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
     private boolean completedTradeLimitReached(
             Long botId,
             String marketId,
-            StrategyProperties.CostAwareMomentum config
+            StrategyProperties.FlipCatcher config
     ) {
         int maxCompletedTrades = config.maxCompletedTradesPerMarketOrDefault();
         if (maxCompletedTrades <= 0) {
@@ -304,7 +290,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
     private boolean closedTradeCooldownActive(
             Long botId,
             String marketId,
-            StrategyProperties.CostAwareMomentum config
+            StrategyProperties.FlipCatcher config
     ) {
         long cooldownSeconds = config.closedTradeCooldownSecondsOrDefault();
         if (cooldownSeconds <= 0) {
@@ -351,14 +337,14 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
     private boolean isStale(
             OutcomePrice price,
             Instant now,
-            StrategyProperties.CostAwareMomentum config
+            StrategyProperties.FlipCatcher config
     ) {
         return Duration.between(price.updatedAt(), now).toMillis() > config.maxDataAgeMsOrDefault();
     }
 
     private boolean isNearExpiry(
             GammaMarketDto market,
-            StrategyProperties.CostAwareMomentum config
+            StrategyProperties.FlipCatcher config
     ) {
         return market.endDate() != null
                 && Duration.between(clock.instant(), market.endDate()).compareTo(
@@ -368,7 +354,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
 
     private boolean hasHeldLongEnoughForStop(
             TradeEntity trade,
-            StrategyProperties.CostAwareMomentum config
+            StrategyProperties.FlipCatcher config
     ) {
         Instant heldSince = trade.getEntryCompletedAt() == null ? trade.getCreatedAt() : trade.getEntryCompletedAt();
         return heldSince != null
@@ -380,7 +366,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
     private boolean shouldSellTrailingStop(
             TradeEntity trade,
             BigDecimal bid,
-            StrategyProperties.CostAwareMomentum config
+            StrategyProperties.FlipCatcher config
     ) {
         String key = trailingKey(trade);
         BigDecimal previousPeak = trailingPeakBidByTrade.get(key);
@@ -423,7 +409,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
                 price,
                 trade.getEntryFilledShares(),
                 ID,
-                "cost-aware-momentum",
+                "flip-catcher",
                 reason
         ));
         log.info(
@@ -476,6 +462,54 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
                 : tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(botId, ID, marketId, TradeStatus.OPEN);
     }
 
+    private Candidate flipCandidate(OutcomePrice candidate, OutcomePrice opposite, BigDecimal candidateMid) {
+        return new Candidate(
+                candidate,
+                opposite,
+                candidateMid,
+                mid(opposite),
+                moveSince(candidate.tokenId(), MID_MOMENTUM_WINDOW, SampleValue.MID),
+                moveSince(candidate.tokenId(), MID_MOMENTUM_WINDOW, SampleValue.BID),
+                moveSince(candidate.tokenId(), SHARP_REVERSAL_WINDOW, SampleValue.MID),
+                moveSince(opposite.tokenId(), MID_MOMENTUM_WINDOW, SampleValue.MID),
+                moveSince(opposite.tokenId(), MID_MOMENTUM_WINDOW, SampleValue.BID)
+        );
+    }
+
+    private Candidate selectCandidate(Candidate left, Candidate right) {
+        if (left.midMove().isEmpty()) {
+            return right.midMove().isPresent() ? right : null;
+        }
+        if (right.midMove().isEmpty()) {
+            return left;
+        }
+        return left.midMove().get().compareTo(right.midMove().get()) >= 0 ? left : right;
+    }
+
+    private boolean entryPassesFlipFilters(Candidate candidate, StrategyProperties.FlipCatcher config) {
+        OutcomePrice price = candidate.price();
+        if (price.spread().compareTo(config.maxSpreadOrDefault()) > 0
+                || price.ask().compareTo(config.maxEntryAskOrDefault()) > 0
+                || candidate.mid().compareTo(config.minCandidateMidOrDefault()) < 0
+                || candidate.mid().compareTo(config.maxCandidateMidOrDefault()) > 0) {
+            return false;
+        }
+        if (candidate.midMove().isEmpty()
+                || candidate.bidMove().isEmpty()
+                || candidate.oppositeMidMove().isEmpty()
+                || candidate.oppositeBidMove().isEmpty()) {
+            return false;
+        }
+        return candidate.midMove().get().compareTo(config.minCandidateMidMove5sOrDefault()) >= 0
+                && candidate.bidMove().get().compareTo(config.minCandidateBidMove5sOrDefault()) >= 0
+                && candidate.bidMove().get().compareTo(price.spread()) > 0
+                && candidate.oppositeMidMove().get().compareTo(config.maxOppositeMidMove5sOrDefault()) <= 0
+                && candidate.oppositeBidMove().get().compareTo(config.maxOppositeBidMove5sOrDefault()) <= 0
+                && !candidate.recentMidMove()
+                .map(move -> move.compareTo(config.maxNegativeMove3sOrDefault()) <= 0)
+                .orElse(false);
+    }
+
     private Long currentBotId() {
         return BotRuntimeContextHolder.currentBotId().orElse(null);
     }
@@ -497,6 +531,19 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             BigDecimal ask,
             BigDecimal mid,
             Instant updatedAt
+    ) {
+    }
+
+    private record Candidate(
+            OutcomePrice price,
+            OutcomePrice opposite,
+            BigDecimal mid,
+            BigDecimal oppositeMid,
+            Optional<BigDecimal> midMove,
+            Optional<BigDecimal> bidMove,
+            Optional<BigDecimal> recentMidMove,
+            Optional<BigDecimal> oppositeMidMove,
+            Optional<BigDecimal> oppositeBidMove
     ) {
     }
 
