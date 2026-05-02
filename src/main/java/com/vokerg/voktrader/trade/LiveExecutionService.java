@@ -25,6 +25,8 @@ public class LiveExecutionService {
     private final TradeEventRepository tradeEventRepository;
     private final PythonExecutorClient pythonExecutorClient;
     private final ExecutorProperties executorProperties;
+    private final TradingProperties tradingProperties;
+    private final PolymarketFeeCalculator feeCalculator;
 
     @Transactional
     public TradeExecutionResult execute(TradeIntent intent, ExecutionMode mode) {
@@ -88,7 +90,7 @@ public class LiveExecutionService {
         BigDecimal fillPrice = firstNonNull(response.averagePrice(), intent.expectedPrice());
         BigDecimal fillShares = firstNonNull(response.filledShares(), intent.shares());
         BigDecimal fillAmountUsd = firstNonNull(response.filledAmountUsd(), intent.amountUsd());
-        BigDecimal feeUsd = firstNonNull(response.feeUsd(), BigDecimal.ZERO);
+        BigDecimal feeUsd = resolveFeeUsd(response, fillShares, fillPrice);
 
         TradeFillEntity fill = tradeFillRepository.save(TradeFillEntity.polymarket(
                 trade.getId(),
@@ -161,7 +163,7 @@ public class LiveExecutionService {
         BigDecimal fillPrice = firstNonNull(response.averagePrice(), intent.expectedPrice());
         BigDecimal fillShares = firstNonNull(response.filledShares(), firstNonNull(intent.shares(), trade.getEntryFilledShares()));
         BigDecimal fillAmountUsd = firstNonNull(response.filledAmountUsd(), fillPrice.multiply(fillShares));
-        BigDecimal feeUsd = firstNonNull(response.feeUsd(), BigDecimal.ZERO);
+        BigDecimal feeUsd = resolveFeeUsd(response, fillShares, fillPrice);
 
         TradeFillEntity fill = tradeFillRepository.save(TradeFillEntity.polymarket(
                 trade.getId(),
@@ -214,6 +216,24 @@ public class LiveExecutionService {
 
     private String botScope(Long botId) {
         return botId == null ? "default" : botId.toString();
+    }
+
+    private BigDecimal resolveFeeUsd(ExecutorOrderResponse response, BigDecimal shares, BigDecimal price) {
+        if (response.feeUsd() != null) {
+            return response.feeUsd();
+        }
+        if (!tradingProperties.isEstimateLiveFeesWhenMissing()) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal feeUsd = feeCalculator.estimateTakerFeeUsd(shares, price, tradingProperties.getTakerFeeRate());
+        log.info(
+                "LIVE fee missing from executor; estimated taker fee feeUsd={} shares={} price={} feeRate={}",
+                feeUsd,
+                shares,
+                price,
+                tradingProperties.getTakerFeeRate()
+        );
+        return feeUsd;
     }
 
     private static <T> T firstNonNull(T primary, T fallback) {

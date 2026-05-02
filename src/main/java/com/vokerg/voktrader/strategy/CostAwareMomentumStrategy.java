@@ -6,7 +6,7 @@ import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.LatestPriceState;
 import com.vokerg.voktrader.pricing.OutcomePrice;
 import com.vokerg.voktrader.trade.ExecutionRouter;
-import com.vokerg.voktrader.trade.PaperFeeCalculator;
+import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
 import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradeRepository;
@@ -48,7 +48,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
     private final ExecutionRouter executionRouter;
     private final TradeRepository tradeRepository;
     private final StrategyProperties strategyProperties;
-    private final PaperFeeCalculator paperFeeCalculator;
+    private final PolymarketFeeCalculator feeCalculator;
     private final TradingProperties tradingProperties;
     private final Clock clock;
     private final Map<String, Deque<PriceSample>> samplesByTokenId = new ConcurrentHashMap<>();
@@ -62,7 +62,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             ExecutionRouter executionRouter,
             TradeRepository tradeRepository,
             StrategyProperties strategyProperties,
-            PaperFeeCalculator paperFeeCalculator,
+            PolymarketFeeCalculator feeCalculator,
             TradingProperties tradingProperties
     ) {
         this(
@@ -72,7 +72,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
                 executionRouter,
                 tradeRepository,
                 strategyProperties,
-                paperFeeCalculator,
+                feeCalculator,
                 tradingProperties,
                 Clock.systemUTC()
         );
@@ -85,7 +85,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             ExecutionRouter executionRouter,
             TradeRepository tradeRepository,
             StrategyProperties strategyProperties,
-            PaperFeeCalculator paperFeeCalculator,
+            PolymarketFeeCalculator feeCalculator,
             TradingProperties tradingProperties,
             Clock clock
     ) {
@@ -95,7 +95,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
         this.executionRouter = executionRouter;
         this.tradeRepository = tradeRepository;
         this.strategyProperties = strategyProperties;
-        this.paperFeeCalculator = paperFeeCalculator;
+        this.feeCalculator = feeCalculator;
         this.tradingProperties = tradingProperties;
         this.clock = clock;
     }
@@ -142,8 +142,8 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             recordSample(price);
 
             BigDecimal mid = mid(price);
-            BigDecimal paperPnl = calculateExitPnl(trade, price.bid());
-            boolean profitTargetReached = paperPnl.compareTo(config.minProfitUsdOrDefault()) >= 0;
+            BigDecimal estimatedNetPnl = calculateExitPnl(trade, price.bid());
+            boolean profitTargetReached = estimatedNetPnl.compareTo(config.minProfitUsdOrDefault()) >= 0;
 
             if (isNearExpiry(market, config)) {
                 if (profitTargetReached) {
@@ -170,7 +170,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             boolean actualMomentumReversal = tenSecondMidMove
                     .map(move -> move.compareTo(new BigDecimal("-0.025")) < 0)
                     .orElse(false);
-            boolean lossLimitHit = paperPnl.compareTo(config.maxLossUsdOrDefault().negate()) <= 0;
+            boolean lossLimitHit = estimatedNetPnl.compareTo(config.maxLossUsdOrDefault().negate()) <= 0;
             boolean stopMidHit = mid.compareTo(config.stopMidOrDefault()) < 0;
 
             if (heldLongEnoughForStop
@@ -251,6 +251,10 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
         }
 
         if (sameOutcomeLossLockoutActive(botId, market.id(), candidate.tokenId())) {
+            return;
+        }
+
+        if (!entryEconomicsCanCoverFees(candidate, config)) {
             return;
         }
 
@@ -405,7 +409,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
 
     private BigDecimal calculateExitPnl(TradeEntity trade, BigDecimal exitPrice) {
         BigDecimal shares = trade.getEntryFilledShares() == null ? BigDecimal.ZERO : trade.getEntryFilledShares();
-        BigDecimal exitFee = paperFeeCalculator.estimate(shares, exitPrice, tradingProperties.getPaperFeeRate());
+        BigDecimal exitFee = feeCalculator.estimateTakerFeeUsd(shares, exitPrice, tradingProperties.getTakerFeeRate());
         BigDecimal entryFee = trade.getEntryFeeUsd() == null ? BigDecimal.ZERO : trade.getEntryFeeUsd();
         BigDecimal entryCost = trade.getEntryFilledUsd() == null ? BigDecimal.ZERO : trade.getEntryFilledUsd();
         return shares
@@ -414,6 +418,52 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
                 .subtract(entryCost)
                 .subtract(entryFee)
                 .setScale(8, RoundingMode.HALF_UP);
+    }
+
+    private boolean entryEconomicsCanCoverFees(
+            OutcomePrice candidate,
+            StrategyProperties.CostAwareMomentum config
+    ) {
+        BigDecimal amountUsd = config.paperSizeUsdOrDefault();
+        BigDecimal entryPrice = candidate.ask();
+        if (entryPrice == null || entryPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        BigDecimal projectedTargetExitPrice = entryPrice.add(config.minPriceMoveOrDefault());
+        if (projectedTargetExitPrice.compareTo(BigDecimal.ONE) >= 0) {
+            log.debug(
+                    "Skipping cost-aware momentum entry because projected target exit price is unrealistic: outcome={} entryPrice={} projectedTargetExitPrice={}",
+                    candidate.outcome(),
+                    entryPrice,
+                    projectedTargetExitPrice
+            );
+            return false;
+        }
+        BigDecimal estimatedShares = amountUsd.divide(entryPrice, 8, RoundingMode.HALF_UP);
+        BigDecimal estimatedEntryFee = feeCalculator.estimateTakerFeeUsd(estimatedShares, entryPrice, tradingProperties.getTakerFeeRate());
+        BigDecimal projectedExitFee = feeCalculator.estimateTakerFeeUsd(estimatedShares, projectedTargetExitPrice, tradingProperties.getTakerFeeRate());
+        BigDecimal projectedNetPnlAtTarget = estimatedShares
+                .multiply(projectedTargetExitPrice)
+                .subtract(projectedExitFee)
+                .subtract(amountUsd)
+                .subtract(estimatedEntryFee)
+                .setScale(8, RoundingMode.HALF_UP);
+
+        if (projectedNetPnlAtTarget.compareTo(config.minProfitUsdOrDefault()) < 0) {
+            log.debug(
+                    "Skipping cost-aware momentum entry because projected net PnL cannot cover taker fees: outcome={} entryPrice={} targetExitPrice={} projectedNetPnl={} minProfitUsd={} entryFee={} exitFee={} feeRate={}",
+                    candidate.outcome(),
+                    entryPrice,
+                    projectedTargetExitPrice,
+                    projectedNetPnlAtTarget,
+                    config.minProfitUsdOrDefault(),
+                    estimatedEntryFee,
+                    projectedExitFee,
+                    tradingProperties.getTakerFeeRate()
+            );
+            return false;
+        }
+        return true;
     }
 
     private void routeSell(GammaMarketDto market, TradeEntity trade, OutcomePrice price, String reason) {

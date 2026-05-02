@@ -17,6 +17,7 @@ import com.vokerg.voktrader.trade.TradingProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
@@ -26,6 +27,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -165,7 +167,40 @@ class CostAwareMomentumStrategyTest {
     }
 
     @Test
-    void buysStrongerSideWhenMidBidSpreadAndMomentumPassThresholds() {
+    void doesNotBuyWhenProjectedTargetCannotCoverRoundTripTakerFees() {
+        seedMomentum();
+        clock.advance(Duration.ofSeconds(11));
+        OutcomePrice up = price("up", "Up", "0.59", "0.61");
+        setOutcomePrices(up, price("down", "Down", "0.39", "0.41"));
+
+        strategy.tick();
+
+        verify(executionRouter, never()).route(any(TradeIntent.class));
+    }
+
+    @Test
+    void buysStrongerSideWhenMomentumAndFeeAwareTargetPassThresholds() {
+        useCostAwareConfig(new StrategyProperties.CostAwareMomentum(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                new BigDecimal("0.10"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
         seedMomentum();
         clock.advance(Duration.ofSeconds(11));
         OutcomePrice up = price("up", "Up", "0.59", "0.61");
@@ -385,12 +420,55 @@ class CostAwareMomentumStrategyTest {
         verify(executionRouter, never()).route(any());
     }
 
+    @Test
+    void calculateExitPnlSubtractsPersistedEntryFeeAndEstimatedExitFee() throws Exception {
+        TradeEntity open = openTrade("down", "Down", "0.57999983", "1.724135");
+        open.markOpen(
+                new BigDecimal("0.57999983"),
+                new BigDecimal("1.724135"),
+                new BigDecimal("0.999998"),
+                new BigDecimal("0.03023995"),
+                clock.instant().minusSeconds(5)
+        );
+
+        BigDecimal pnl = invokeCalculateExitPnl(open, new BigDecimal("0.53"));
+
+        assertThat(pnl).isEqualByComparingTo("-0.14736911");
+    }
+
     private void seedMomentum() {
         setOutcomePrices(
                 price("up", "Up", "0.53", "0.55"),
                 price("down", "Down", "0.45", "0.47")
         );
         strategy.tick();
+    }
+
+    private void useCostAwareConfig(StrategyProperties.CostAwareMomentum config) {
+        StrategyProperties properties = new StrategyProperties(
+                "cost-aware-momentum-paper",
+                1000L,
+                null,
+                null,
+                config
+        );
+        strategy = new CostAwareMomentumStrategy(
+                latestPriceState,
+                trackedMarketState,
+                strategyTimeWindow,
+                executionRouter,
+                tradeRepository,
+                properties,
+                new PaperFeeCalculator(),
+                new TradingProperties(),
+                clock
+        );
+    }
+
+    private BigDecimal invokeCalculateExitPnl(TradeEntity trade, BigDecimal exitPrice) throws Exception {
+        Method method = CostAwareMomentumStrategy.class.getDeclaredMethod("calculateExitPnl", TradeEntity.class, BigDecimal.class);
+        method.setAccessible(true);
+        return (BigDecimal) method.invoke(strategy, trade, exitPrice);
     }
 
     private void setOutcomePrices(OutcomePrice up, OutcomePrice down) {

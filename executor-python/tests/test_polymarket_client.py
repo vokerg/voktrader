@@ -36,6 +36,33 @@ def test_matched_buy_uses_exchange_making_and_taking_amounts():
     assert response.filledAmountUsd == Decimal("1.00")
     assert response.filledShares == Decimal("1.562500")
     assert response.averagePrice == Decimal("0.64000000")
+    assert response.feeUsd is None
+
+
+def test_missing_fee_stays_none_but_explicit_zero_is_preserved():
+    command = OrderCommand(
+        idempotencyKey="test",
+        strategyId="cost-aware-momentum-paper",
+        marketId="2127144",
+        tokenId="token",
+        side="BUY",
+        amountUsd=Decimal("1.00"),
+        limitPrice=Decimal("0.60"),
+        timeInForce="FOK",
+        dryRun=False,
+    )
+
+    missing = PolymarketExecutor(Settings())._normalize_response(
+        command,
+        {"status": "MATCHED", "success": True, "makingAmount": "1", "takingAmount": "1.666665"},
+    )
+    explicit_zero = PolymarketExecutor(Settings())._normalize_response(
+        command,
+        {"status": "MATCHED", "success": True, "makingAmount": "1", "takingAmount": "1.666665", "fee": "0"},
+    )
+
+    assert missing.feeUsd is None
+    assert explicit_zero.feeUsd == Decimal("0")
 
 
 def test_matched_sell_uses_exchange_making_and_taking_amounts():
@@ -90,3 +117,21 @@ def test_zero_share_sell_is_rejected_before_exchange_call():
         assert str(exc) == "SELL requires positive shares"
     else:
         raise AssertionError("Expected zero-share sell to be rejected")
+
+
+def test_dry_run_response_keeps_explicit_zero_fee():
+    command = OrderCommand(
+        idempotencyKey="test",
+        strategyId="cost-aware-momentum-paper",
+        marketId="2127144",
+        tokenId="token",
+        side="BUY",
+        amountUsd=Decimal("1.00"),
+        limitPrice=Decimal("0.60"),
+        timeInForce="FOK",
+        dryRun=True,
+    )
+
+    response = PolymarketExecutor(Settings())._dry_run_response(command)
+
+    assert response.feeUsd == Decimal("0")

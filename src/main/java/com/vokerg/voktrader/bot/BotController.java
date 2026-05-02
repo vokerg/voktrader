@@ -4,12 +4,14 @@ import com.vokerg.voktrader.bot.dto.BotConfigView;
 import com.vokerg.voktrader.bot.dto.BotCreateRequest;
 import com.vokerg.voktrader.bot.dto.BotSwitchRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/bots")
+@ConditionalOnProperty(name = "voktrader.bots.enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 public class BotController {
     private final BotConfigService configService;

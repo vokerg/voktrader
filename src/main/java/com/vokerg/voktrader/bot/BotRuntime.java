@@ -20,9 +20,11 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -88,6 +90,13 @@ public class BotRuntime {
         }
         if (trackedMarketState.isResolved()) {
             rollToNextMarket("current market resolved");
+            return;
+        }
+        GammaMarketDto current = trackedMarketState.currentMarket().orElse(null);
+        if (current != null && expiredGraceElapsed(current)) {
+            log.info("{}Bot market expired grace elapsed: botId={} marketId={} endDate={} rolling to next market{}",
+                    LogColors.MARKET, botId(), current.id(), current.endDate(), LogColors.RESET);
+            stopCurrentMarketAndRoll(current.id(), "expired_grace_elapsed");
         }
     }
 
@@ -95,6 +104,14 @@ public class BotRuntime {
         return trackedMarketState.currentEndDate()
                 .map(endDate -> !endDate.isAfter(Instant.now()))
                 .orElse(false);
+    }
+
+    private boolean expiredGraceElapsed(GammaMarketDto market) {
+        if (market.endDate() == null) {
+            return false;
+        }
+        Instant rolloverAt = market.endDate().plus(marketSelectionProperties.expiryGrace());
+        return !Instant.now().isBefore(rolloverAt);
     }
 
     public void rollToNextMarket(String reason) {
@@ -290,6 +307,10 @@ public class BotRuntime {
     }
 
     private void handlePriceMessage(MarketWsMessageDto message, Map<String, String> outcomeByTokenId) {
+        if (message.isPriceChange()) {
+            handlePriceChangeMessage(message, outcomeByTokenId);
+            return;
+        }
         String tokenId = message.assetId();
         String outcome = outcomeByTokenId.get(tokenId);
         if (outcome == null) {
@@ -305,6 +326,33 @@ public class BotRuntime {
             log.info("{}Live bot price update botId={} event={} outcome={} tokenId={} bid={} ask={} spread={}{}",
                     LogColors.SNAPSHOT, botId(), message.eventType(), outcome, tokenId, bid, ask,
                     ask != null && bid != null ? ask.subtract(bid) : null, LogColors.RESET);
+        }
+    }
+
+    private void handlePriceChangeMessage(MarketWsMessageDto message, Map<String, String> outcomeByTokenId) {
+        if (message.priceChanges() == null || message.priceChanges().isEmpty()) {
+            return;
+        }
+        message.priceChanges().forEach(change -> {
+            String tokenId = change.assetId();
+            String outcome = outcomeByTokenId.get(tokenId);
+            if (outcome == null) {
+                return;
+            }
+            BigDecimal bid = parseDecimal(change.bestBid()).orElse(null);
+            BigDecimal ask = parseDecimal(change.bestAsk()).orElse(null);
+            latestPriceState.update(tokenId, outcome, bid, ask);
+        });
+    }
+
+    private Optional<BigDecimal> parseDecimal(String value) {
+        if (value == null || value.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(new BigDecimal(value));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
         }
     }
 

@@ -152,7 +152,14 @@ class PolymarketExecutor:
             averagePrice=avg_price,
             filledShares=filled_shares,
             filledAmountUsd=filled_amount,
-            feeUsd=_decimal_or_zero(_first_present(data, "fee", "feeUsd", "fee_usd")),
+            feeUsd=_decimal_or_none_for_first_present(
+                data,
+                "fee",
+                "feeUsd",
+                "fee_usd",
+                "takerFee",
+                "taker_fee",
+            ),
             message=str(_first_present(data, "message", "error") or status),
             rawResponse=raw_json,
         )
@@ -198,6 +205,10 @@ def _first_present(data: dict[str, Any], *keys: str) -> Any:
 def _decimal_or_zero(value: Any) -> Decimal:
     result = _decimal_or_none(value)
     return result if result is not None else Decimal("0")
+
+
+def _decimal_or_none_for_first_present(data: dict[str, Any], *keys: str) -> Decimal | None:
+    return _decimal_or_none(_first_present(data, *keys))
 
 
 def _decimal_or_none(value: Any) -> Decimal | None:
