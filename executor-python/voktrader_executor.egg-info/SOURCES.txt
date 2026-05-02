@@ -1,5 +1,6 @@
 README.md
 pyproject.toml
+tests/test_polymarket_client.py
 voktrader_executor/__init__.py
 voktrader_executor/config.py
 voktrader_executor/idempotency.py
