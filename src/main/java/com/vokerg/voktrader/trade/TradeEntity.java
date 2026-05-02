@@ -7,16 +7,14 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "trades", indexes = {
-        @Index(name = "idx_trades_market_status", columnList = "market_id,status"),
+        @Index(name = "idx_trades_market_status", columnList = "market_id,status"), @Index(name = "idx_trades_bot_market_status", columnList = "bot_id,market_id,status"),
         @Index(name = "idx_trades_strategy", columnList = "strategy_id"),
         @Index(name = "idx_trades_token", columnList = "token_id")
 })
 public class TradeEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Enumerated(EnumType.STRING)
+    private Long id; @Column(name = "bot_id") private Long botId; @Enumerated(EnumType.STRING)
     @Column(name = "mode", nullable = false, length = 32)
     private ExecutionMode mode;
 
@@ -160,7 +158,7 @@ public class TradeEntity {
 
     public static TradeEntity fromIntent(TradeIntent intent, ExecutionMode mode) {
         TradeEntity entity = new TradeEntity();
-        entity.mode = mode;
+        entity.botId = intent.botId(); entity.mode = mode;
         entity.strategyId = intent.strategyId();
         entity.ruleId = intent.ruleId();
         entity.marketId = intent.marketId();
@@ -258,7 +256,7 @@ public class TradeEntity {
     }
 
     public Long getId() { return id; }
-    public ExecutionMode getMode() { return mode; }
+    public Long getBotId() { return botId; } public ExecutionMode getMode() { return mode; }
     public String getStrategyId() { return strategyId; }
     public String getRuleId() { return ruleId; }
     public String getMarketId() { return marketId; }

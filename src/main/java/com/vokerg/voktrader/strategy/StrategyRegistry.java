@@ -11,14 +11,10 @@ import java.util.stream.Collectors;
 
 @Component
 public class StrategyRegistry {
-
     private final StrategyProperties strategyProperties;
     private final Map<String, TradingStrategy> strategiesById;
 
-    public StrategyRegistry(
-            StrategyProperties strategyProperties,
-            List<TradingStrategy> strategies
-    ) {
+    public StrategyRegistry(StrategyProperties strategyProperties, List<TradingStrategy> strategies) {
         this.strategyProperties = strategyProperties;
         this.strategiesById = strategies.stream()
                 .sorted(Comparator.comparing(TradingStrategy::id))
@@ -26,23 +22,23 @@ public class StrategyRegistry {
                         TradingStrategy::id,
                         Function.identity(),
                         (left, right) -> {
-                            throw new IllegalStateException(
-                                    "Duplicate strategy id: " + left.id()
-                            );
+                            throw new IllegalStateException("Duplicate strategy id: " + left.id());
                         }
                 ));
     }
 
     public TradingStrategy activeStrategy() {
-        String activeId = strategyProperties.activeOrDefault();
-        TradingStrategy strategy = strategiesById.get(activeId);
+        return strategy(strategyProperties.activeOrDefault());
+    }
 
+    public TradingStrategy strategy(String strategyId) {
+        String requested = strategyId == null || strategyId.isBlank()
+                ? strategyProperties.activeOrDefault()
+                : strategyId.trim();
+        TradingStrategy strategy = strategiesById.get(requested);
         if (strategy == null) {
-            throw new IllegalStateException(
-                    "Unknown strategy id '" + activeId + "'. Available strategies: " + strategyIds()
-            );
+            throw new IllegalStateException("Unknown strategy id '" + requested + "'. Available strategies: " + strategyIds());
         }
-
         return strategy;
     }
 

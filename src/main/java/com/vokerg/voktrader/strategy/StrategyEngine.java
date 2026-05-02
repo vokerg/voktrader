@@ -3,14 +3,14 @@ package com.vokerg.voktrader.strategy;
 import com.vokerg.voktrader.market.TrackedMarketState;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 
 @Slf4j
-@Component
+@Component @ConditionalOnProperty(name = "voktrader.legacy.strategy-engine.enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class StrategyEngine {
 

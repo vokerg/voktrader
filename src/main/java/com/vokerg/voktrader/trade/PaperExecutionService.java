@@ -86,20 +86,9 @@ public class PaperExecutionService {
 
     private TradeExecutionResult executeSell(TradeIntent intent) {
         ExecutionMode mode = ExecutionMode.PAPER;
-        TradeEntity trade = tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
-                        intent.strategyId(),
-                        intent.marketId(),
-                        intent.tokenId(),
-                        TradeStatus.OPEN
-                )
-                .orElse(null);
+        TradeEntity trade = findLatestTokenTrade(intent, TradeStatus.OPEN).orElse(null);
         if (trade == null) {
-            boolean hasClosedTrade = tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
-                    intent.strategyId(),
-                    intent.marketId(),
-                    intent.tokenId(),
-                    TradeStatus.CLOSED
-            ).isPresent();
+            boolean hasClosedTrade = findLatestTokenTrade(intent, TradeStatus.CLOSED).isPresent();
             return TradeExecutionResult.rejected(mode, null, null, hasClosedTrade ? TradeStatus.CLOSED : null, null,
                     hasClosedTrade ? "trade already closed" : "no open trade to close");
         }
@@ -142,11 +131,7 @@ public class PaperExecutionService {
         return TradeExecutionResult.accepted(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "paper exit filled");
     }
 
-    private String idempotencyKey(TradeIntent intent, ExecutionMode mode, Long tradeId) {
-        return mode + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side() + ":" + tradeId;
-    }
+    private java.util.Optional<TradeEntity> findLatestTokenTrade(TradeIntent intent, TradeStatus status) { if (intent.botId() != null) { return tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(intent.botId(), intent.strategyId(), intent.marketId(), intent.tokenId(), status); } return tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(intent.strategyId(), intent.marketId(), intent.tokenId(), status); } private String idempotencyKey(TradeIntent intent, ExecutionMode mode, Long tradeId) { return mode + ":" + (intent.botId() == null ? "default" : intent.botId()) + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side() + ":" + tradeId; }
 
-    private String idempotencyKey(TradeIntent intent, ExecutionMode mode) {
-        return mode + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side();
-    }
+    private String idempotencyKey(TradeIntent intent, ExecutionMode mode) { return mode + ":" + (intent.botId() == null ? "default" : intent.botId()) + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side(); }
 }
