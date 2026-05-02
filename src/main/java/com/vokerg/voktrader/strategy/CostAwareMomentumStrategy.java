@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.strategy;
 
+import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.LatestPriceState;
@@ -122,8 +123,12 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
         }
 
         var config = strategyProperties.costAwareMomentumOrDefault();
+        Long botId = currentBotId();
 
         for (TradeEntity trade : tradeRepository.findByStrategyIdAndStatus(ID, TradeStatus.OPEN)) {
+            if (!sameBotScope(trade, botId)) {
+                continue;
+            }
             if (!market.id().equals(trade.getMarketId())) {
                 continue;
             }
@@ -196,6 +201,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
 
         var config = strategyProperties.costAwareMomentumOrDefault();
         Instant now = clock.instant();
+        Long botId = currentBotId();
 
         if (isStale(up, now, config) || isStale(down, now, config)) {
             return;
@@ -235,20 +241,16 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             return;
         }
 
-        if (tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(
-                ID,
-                market.id(),
-                TradeStatus.OPEN
-        ).isPresent()) {
+        if (findOpenTrade(botId, market.id()).isPresent()) {
             return;
         }
 
-        if (completedTradeLimitReached(market.id(), config)
-                || closedTradeCooldownActive(market.id(), config)) {
+        if (completedTradeLimitReached(botId, market.id(), config)
+                || closedTradeCooldownActive(botId, market.id(), config)) {
             return;
         }
 
-        if (sameOutcomeLossLockoutActive(market.id(), candidate.tokenId())) {
+        if (sameOutcomeLossLockoutActive(botId, market.id(), candidate.tokenId())) {
             return;
         }
 
@@ -274,6 +276,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
     }
 
     private boolean completedTradeLimitReached(
+            Long botId,
             String marketId,
             StrategyProperties.CostAwareMomentum config
     ) {
@@ -282,7 +285,14 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             return false;
         }
 
-        long completedTrades = tradeRepository.countByStrategyIdAndMarketIdAndStatusIn(
+        long completedTrades = botId == null
+                ? tradeRepository.countByStrategyIdAndMarketIdAndStatusIn(
+                ID,
+                marketId,
+                List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED)
+        )
+                : tradeRepository.countByBotIdAndStrategyIdAndMarketIdAndStatusIn(
+                botId,
                 ID,
                 marketId,
                 List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED)
@@ -291,6 +301,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
     }
 
     private boolean closedTradeCooldownActive(
+            Long botId,
             String marketId,
             StrategyProperties.CostAwareMomentum config
     ) {
@@ -299,23 +310,38 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             return false;
         }
 
-        return tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(
-                        ID,
-                        marketId,
-                        List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED, TradeStatus.FAILED)
-                )
+        return (botId == null
+                ? tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(
+                ID,
+                marketId,
+                List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED, TradeStatus.FAILED)
+        )
+                : tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(
+                botId,
+                ID,
+                marketId,
+                List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED, TradeStatus.FAILED)
+        ))
                 .map(TradeEntity::getUpdatedAt)
                 .filter(updatedAt -> Duration.between(updatedAt, clock.instant()).compareTo(Duration.ofSeconds(cooldownSeconds)) < 0)
                 .isPresent();
     }
 
-    private boolean sameOutcomeLossLockoutActive(String marketId, String tokenId) {
-        return tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(
-                        ID,
-                        marketId,
-                        tokenId,
-                        List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED)
-                )
+    private boolean sameOutcomeLossLockoutActive(Long botId, String marketId, String tokenId) {
+        return (botId == null
+                ? tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(
+                ID,
+                marketId,
+                tokenId,
+                List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED)
+        )
+                : tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(
+                botId,
+                ID,
+                marketId,
+                tokenId,
+                List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED)
+        ))
                 .map(TradeEntity::getFinalPnlUsd)
                 .filter(pnl -> pnl.compareTo(BigDecimal.ZERO) < 0)
                 .isPresent();
@@ -371,10 +397,10 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
 
     private String trailingKey(TradeEntity trade) {
         if (trade.getId() != null) {
-            return "id:" + trade.getId();
+            return scopeKey(trade.getBotId()) + ":id:" + trade.getId();
         }
 
-        return "trade:" + trade.getMarketId() + ":" + trade.getTokenId() + ":" + trade.getRuleId();
+        return scopeKey(trade.getBotId()) + ":trade:" + trade.getMarketId() + ":" + trade.getTokenId() + ":" + trade.getRuleId();
     }
 
     private BigDecimal calculateExitPnl(TradeEntity trade, BigDecimal exitPrice) {
@@ -412,7 +438,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
 
     private void recordSample(OutcomePrice price) {
         Deque<PriceSample> samples = samplesByTokenId.computeIfAbsent(
-                price.tokenId(),
+                sampleKey(price.tokenId()),
                 ignored -> new ArrayDeque<>()
         );
         samples.addLast(new PriceSample(price.bid(), price.ask(), mid(price), price.updatedAt()));
@@ -428,7 +454,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             Duration window,
             SampleValue sampleValue
     ) {
-        Deque<PriceSample> samples = samplesByTokenId.get(tokenId);
+        Deque<PriceSample> samples = samplesByTokenId.get(sampleKey(tokenId));
 
         if (samples == null || samples.size() < 2) {
             return Optional.empty();
@@ -441,6 +467,28 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
                 .filter(sample -> !sample.updatedAt().isAfter(target))
                 .max(Comparator.comparing(PriceSample::updatedAt))
                 .map(sample -> sampleValue.value(latest).subtract(sampleValue.value(sample)));
+    }
+
+    private Optional<TradeEntity> findOpenTrade(Long botId, String marketId) {
+        return botId == null
+                ? tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(ID, marketId, TradeStatus.OPEN)
+                : tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(botId, ID, marketId, TradeStatus.OPEN);
+    }
+
+    private Long currentBotId() {
+        return BotRuntimeContextHolder.currentBotId().orElse(null);
+    }
+
+    private boolean sameBotScope(TradeEntity trade, Long botId) {
+        return trade.getBotId() == null ? botId == null : trade.getBotId().equals(botId);
+    }
+
+    private String sampleKey(String tokenId) {
+        return scopeKey(currentBotId()) + ":" + tokenId;
+    }
+
+    private String scopeKey(Long botId) {
+        return botId == null ? "default" : "bot:" + botId;
     }
 
     private record PriceSample(

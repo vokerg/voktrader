@@ -63,6 +63,10 @@ public class LiveShadowExecutionService {
     }
 
     private String idempotencyKey(TradeIntent intent, ExecutionMode mode) {
-        return mode + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side();
+        return mode + ":" + botScope(intent.botId()) + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side();
+    }
+
+    private String botScope(Long botId) {
+        return botId == null ? "default" : botId.toString();
     }
 }

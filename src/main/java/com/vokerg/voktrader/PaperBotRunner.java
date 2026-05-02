@@ -437,7 +437,7 @@ public class PaperBotRunner implements CommandLineRunner {
             return;
         }
 
-        if (message.isBook() || message.isBestBidAsk()) {
+        if (message.isBook() || message.isBestBidAsk() || message.isPriceChange()) {
             handlePriceMessage(message, outcomeByTokenId);
             return;
         }

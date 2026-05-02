@@ -40,6 +40,7 @@ public class BotRuntime {
     private final Map<String, Disposable> resolutionOnlySubscriptions = new ConcurrentHashMap<>();
     private final LatestPriceState latestPriceState = new LatestPriceState();
     private final TrackedMarketState trackedMarketState = new TrackedMarketState();
+    private final Map<String, Instant> lastPriceLogByTokenId = new ConcurrentHashMap<>();
     private Disposable webSocketSubscription;
 
     public BotRuntime(
@@ -260,6 +261,9 @@ public class BotRuntime {
                     return;
                 }
                 latestPriceState.update(tokenId, outcome, book.bestBid().orElse(null), book.bestAsk().orElse(null));
+                log.info("{}Seeded bot price state botId={} outcome={} tokenId={} bid={} ask={} spread={}{}",
+                        LogColors.MARKET, botId(), outcome, tokenId,
+                        book.bestBid().orElse(null), book.bestAsk().orElse(null), book.spread().orElse(null), LogColors.RESET);
             } catch (Exception e) {
                 log.warn("{}Failed to seed REST book for botId={} outcome={} tokenId={}{}",
                         LogColors.MARKET, botId(), outcome, tokenId, LogColors.RESET, e);
@@ -276,7 +280,7 @@ public class BotRuntime {
                     botId(), subscriptionMarketId, message.eventType());
             return;
         }
-        if (message.isBook() || message.isBestBidAsk()) {
+        if (message.isBook() || message.isBestBidAsk() || message.isPriceChange()) {
             handlePriceMessage(message, outcomeByTokenId);
             return;
         }
@@ -291,7 +295,17 @@ public class BotRuntime {
         if (outcome == null) {
             return;
         }
-        latestPriceState.update(tokenId, outcome, message.effectiveBestBid().orElse(null), message.effectiveBestAsk().orElse(null));
+        var bid = message.effectiveBestBid().orElse(null);
+        var ask = message.effectiveBestAsk().orElse(null);
+        latestPriceState.update(tokenId, outcome, bid, ask);
+        Instant now = Instant.now();
+        Instant lastLoggedAt = lastPriceLogByTokenId.get(tokenId);
+        if (lastLoggedAt == null || Duration.between(lastLoggedAt, now).compareTo(Duration.ofSeconds(10)) >= 0) {
+            lastPriceLogByTokenId.put(tokenId, now);
+            log.info("{}Live bot price update botId={} event={} outcome={} tokenId={} bid={} ask={} spread={}{}",
+                    LogColors.SNAPSHOT, botId(), message.eventType(), outcome, tokenId, bid, ask,
+                    ask != null && bid != null ? ask.subtract(bid) : null, LogColors.RESET);
+        }
     }
 
     private void handleMarketResolved(MarketWsMessageDto message, String subscriptionMarketId) {

@@ -117,14 +117,7 @@ public class LiveExecutionService {
                     "LIVE exit rejected before executor call: sell intent has no positive shares");
         }
 
-        TradeEntity trade = tradeRepository
-                .findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
-                        intent.strategyId(),
-                        intent.marketId(),
-                        intent.tokenId(),
-                        TradeStatus.OPEN
-                )
-                .orElse(null);
+        TradeEntity trade = findLatestTokenTrade(intent, TradeStatus.OPEN).orElse(null);
         if (trade == null) {
             return TradeExecutionResult.rejected(mode, null, null, null, null,
                     "No open live trade to close for marketId=" + intent.marketId());
@@ -193,12 +186,34 @@ public class LiveExecutionService {
 
     private String idempotencyKey(TradeIntent intent, ExecutionMode mode) {
         Instant decisionAt = intent.decisionAt() != null ? intent.decisionAt() : Instant.now();
-        return mode + ":" + intent.strategyId() + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.side() + ":" + decisionAt.toEpochMilli();
+        return mode + ":" + botScope(intent.botId()) + ":" + intent.strategyId() + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.side() + ":" + decisionAt.toEpochMilli();
     }
 
     private String idempotencyKey(TradeIntent intent, ExecutionMode mode, Long tradeId) {
         Instant decisionAt = intent.decisionAt() != null ? intent.decisionAt() : Instant.now();
-        return mode + ":" + intent.strategyId() + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.side() + ":" + tradeId + ":" + decisionAt.toEpochMilli();
+        return mode + ":" + botScope(intent.botId()) + ":" + intent.strategyId() + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.side() + ":" + tradeId + ":" + decisionAt.toEpochMilli();
+    }
+
+    private java.util.Optional<TradeEntity> findLatestTokenTrade(TradeIntent intent, TradeStatus status) {
+        if (intent.botId() != null) {
+            return tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+                    intent.botId(),
+                    intent.strategyId(),
+                    intent.marketId(),
+                    intent.tokenId(),
+                    status
+            );
+        }
+        return tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+                intent.strategyId(),
+                intent.marketId(),
+                intent.tokenId(),
+                status
+        );
+    }
+
+    private String botScope(Long botId) {
+        return botId == null ? "default" : botId.toString();
     }
 
     private static <T> T firstNonNull(T primary, T fallback) {

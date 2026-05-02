@@ -1,9 +1,13 @@
 package com.vokerg.voktrader.pricing;
 
+import com.vokerg.voktrader.bot.BotRuntime;
+import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
+import com.vokerg.voktrader.bot.BotRuntimeManager;
 import com.vokerg.voktrader.common.LogColors;
 import com.vokerg.voktrader.market.TrackedMarketState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -18,13 +22,24 @@ public class PriceSnapshotLogger {
     private final LatestPriceState latestPriceState;
     private final TrackedMarketState trackedMarketState;
     private final PriceSnapshotService priceSnapshotService;
+    private final ObjectProvider<BotRuntimeManager> botRuntimeManagerProvider;
 
     @Scheduled(fixedRate = 2000)
     public void logSnapshot() {
+        BotRuntimeManager botRuntimeManager = botRuntimeManagerProvider.getIfAvailable();
+        if (botRuntimeManager != null && !botRuntimeManager.runtimes().isEmpty()) {
+            for (BotRuntime runtime : botRuntimeManager.runtimes()) {
+                BotRuntimeContextHolder.runWith(runtime.context(), () -> logSnapshotForScope("botId=" + runtime.botId()));
+            }
+            return;
+        }
+        logSnapshotForScope("legacy");
+    }
 
+    private void logSnapshotForScope(String scope) {
         if (trackedMarketState.isResolved()) {
             return;
-}
+        }
 
         var up = latestPriceState.byOutcome("Up").orElse(null);
         var down = latestPriceState.byOutcome("Down").orElse(null);
@@ -42,8 +57,9 @@ public class PriceSnapshotLogger {
         String remaining = formatRemaining(remainingDuration);
 
         log.info(
-                "{}SNAPSHOT marketId={} remaining={} | Up {}/{} spread={} | Down {}/{} spread={}{}",
+                "{}SNAPSHOT scope={} marketId={} remaining={} | Up {}/{} spread={} | Down {}/{} spread={}{}",
                 LogColors.SNAPSHOT,
+                scope,
                 marketId,
                 remaining,
                 up.bid(),

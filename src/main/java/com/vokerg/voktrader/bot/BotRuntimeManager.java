@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -100,6 +101,10 @@ public class BotRuntimeManager implements CommandLineRunner {
                     runtimes.put(botId, runtime);
                     runtime.start(reason);
                 });
+    }
+
+    public List<BotRuntime> runtimes() {
+        return List.copyOf(runtimes.values());
     }
 
     private BotRuntime newRuntime(BotConfigEntity config) {
