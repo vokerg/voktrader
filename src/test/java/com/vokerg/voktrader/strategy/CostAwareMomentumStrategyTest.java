@@ -17,7 +17,6 @@ import com.vokerg.voktrader.trade.TradingProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
@@ -59,7 +58,7 @@ class CostAwareMomentumStrategyTest {
                 trackedMarketState,
                 strategyTimeWindow,
                 executionRouter,
-                tradeRepository,
+                new StrategyTradeSupport(tradeRepository),
                 properties,
                 new PaperFeeCalculator(),
                 new TradingProperties(),
@@ -401,7 +400,7 @@ class CostAwareMomentumStrategyTest {
     }
 
     @Test
-    void calculateExitPnlSubtractsPersistedEntryFeeAndEstimatedExitFee() throws Exception {
+    void calculateExitPnlSubtractsPersistedEntryFeeAndEstimatedExitFee() {
         TradeEntity open = openTrade("down", "Down", "0.57999983", "1.724135");
         open.markOpen(
                 new BigDecimal("0.57999983"),
@@ -411,7 +410,12 @@ class CostAwareMomentumStrategyTest {
                 clock.instant().minusSeconds(5)
         );
 
-        BigDecimal pnl = invokeCalculateExitPnl(open, new BigDecimal("0.53"));
+        BigDecimal pnl = new StrategyTradeSupport(tradeRepository).estimateExitPnl(
+                open,
+                new BigDecimal("0.53"),
+                new TradingProperties().getTakerFeeRate(),
+                new PaperFeeCalculator()
+        );
 
         assertThat(pnl).isEqualByComparingTo("-0.14736911");
     }
@@ -422,12 +426,6 @@ class CostAwareMomentumStrategyTest {
                 price("down", "Down", "0.45", "0.47")
         );
         strategy.tick();
-    }
-
-    private BigDecimal invokeCalculateExitPnl(TradeEntity trade, BigDecimal exitPrice) throws Exception {
-        Method method = CostAwareMomentumStrategy.class.getDeclaredMethod("calculateExitPnl", TradeEntity.class, BigDecimal.class);
-        method.setAccessible(true);
-        return (BigDecimal) method.invoke(strategy, trade, exitPrice);
     }
 
     private void setOutcomePrices(OutcomePrice up, OutcomePrice down) {

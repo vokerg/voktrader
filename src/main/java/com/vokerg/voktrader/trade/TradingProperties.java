@@ -31,7 +31,10 @@ public class TradingProperties {
     private BigDecimal paperFeeRate = new BigDecimal("0.072");
     private BigDecimal takerFeeRate = new BigDecimal("0.072");
     private boolean estimateLiveFeesWhenMissing = true;
-    private Set<String> allowedStrategyIds = new LinkedHashSet<>(Set.of("simple-down-cheap-tight-spread"));
+    private Set<String> allowedStrategyIds = new LinkedHashSet<>(Set.of(
+            "cost-aware-momentum-paper",
+            "flip-catcher-reversal"
+    ));
 
     public ExecutionMode getMode() {
         return mode;

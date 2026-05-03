@@ -21,6 +21,7 @@ import java.util.Optional;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@Deprecated
 public class BuySellSmokeStrategy implements TradingStrategy {
 
     public static final String ID = "buy-sell-smoke";

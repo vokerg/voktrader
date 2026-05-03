@@ -18,7 +18,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
@@ -60,7 +59,7 @@ class FlipCatcherReversalStrategyTest {
                 trackedMarketState,
                 strategyTimeWindow,
                 executionRouter,
-                tradeRepository,
+                new StrategyTradeSupport(tradeRepository),
                 properties,
                 new PolymarketFeeCalculator(),
                 new TradingProperties(),
@@ -137,7 +136,7 @@ class FlipCatcherReversalStrategyTest {
     }
 
     @Test
-    void calculateExitPnlSubtractsPersistedEntryFeeAndEstimatedExitFee() throws Exception {
+    void calculateExitPnlSubtractsPersistedEntryFeeAndEstimatedExitFee() {
         TradeEntity open = openTrade("down", "Down", "0.57999983", "1.724135");
         open.markOpen(
                 new BigDecimal("0.57999983"),
@@ -147,15 +146,14 @@ class FlipCatcherReversalStrategyTest {
                 clock.instant().minusSeconds(5)
         );
 
-        BigDecimal pnl = invokeCalculateExitPnl(open, new BigDecimal("0.53"));
+        BigDecimal pnl = new StrategyTradeSupport(tradeRepository).estimateExitPnl(
+                open,
+                new BigDecimal("0.53"),
+                new TradingProperties().getTakerFeeRate(),
+                new PolymarketFeeCalculator()
+        );
 
         assertThat(pnl).isEqualByComparingTo("-0.14736911");
-    }
-
-    private BigDecimal invokeCalculateExitPnl(TradeEntity trade, BigDecimal exitPrice) throws Exception {
-        Method method = FlipCatcherReversalStrategy.class.getDeclaredMethod("calculateExitPnl", TradeEntity.class, BigDecimal.class);
-        method.setAccessible(true);
-        return (BigDecimal) method.invoke(strategy, trade, exitPrice);
     }
 
     private void setOutcomePrices(OutcomePrice up, OutcomePrice down) {

@@ -14,7 +14,7 @@ public record StrategyProperties(
         FlipCatcher flipCatcher
 ) {
 
-    public static final String DEFAULT_ACTIVE = "simple-down-cheap-tight-spread";
+    public static final String DEFAULT_ACTIVE = "cost-aware-momentum-paper";
 
     public String activeOrDefault() {
         if (active == null || active.isBlank()) {

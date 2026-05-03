@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@Deprecated
 public class SimpleDownCheapTightSpreadStrategy implements TradingStrategy {
 
     public static final String ID = "simple-down-cheap-tight-spread";
