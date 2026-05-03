@@ -29,6 +29,7 @@ public class TradingProperties {
     private int maxTradesPerMarket = 1;
     private int minSecondsToExpiry = 30;
     private BigDecimal paperFeeRate = new BigDecimal("0.072");
+    private BigDecimal makerFeeRate = BigDecimal.ZERO;
     private BigDecimal takerFeeRate = new BigDecimal("0.072");
     private boolean estimateLiveFeesWhenMissing = true;
     private Set<String> allowedStrategyIds = new LinkedHashSet<>(Set.of(
@@ -118,6 +119,14 @@ public class TradingProperties {
 
     public BigDecimal getTakerFeeRate() {
         return takerFeeRate;
+    }
+
+    public BigDecimal getMakerFeeRate() {
+        return makerFeeRate;
+    }
+
+    public void setMakerFeeRate(BigDecimal makerFeeRate) {
+        this.makerFeeRate = makerFeeRate;
     }
 
     public void setTakerFeeRate(BigDecimal takerFeeRate) {

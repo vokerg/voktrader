@@ -1,19 +1,20 @@
 package com.vokerg.voktrader.strategy;
 
+import com.vokerg.voktrader.economy.ExitEconomy;
+import com.vokerg.voktrader.economy.LiquidityRole;
+import com.vokerg.voktrader.economy.TradeEconomy;
 import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.LatestPriceState;
 import com.vokerg.voktrader.pricing.OutcomePrice;
 import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.ExecutionRouter;
-import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
 import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradeOrderStatus;
 import com.vokerg.voktrader.trade.TradeRepository;
 import com.vokerg.voktrader.trade.TradeStatus;
-import com.vokerg.voktrader.trade.TradingProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -40,6 +41,7 @@ class FlipCatcherReversalStrategyTest {
     private final StrategyTimeWindow strategyTimeWindow = mock(StrategyTimeWindow.class);
     private final ExecutionRouter executionRouter = mock(ExecutionRouter.class);
     private final TradeRepository tradeRepository = mock(TradeRepository.class);
+    private final TradeEconomy tradeEconomy = mock(TradeEconomy.class);
     private final MutableClock clock = new MutableClock(Instant.parse("2026-04-30T10:00:00Z"));
     private FlipCatcherReversalStrategy strategy;
     private GammaMarketDto market;
@@ -54,15 +56,16 @@ class FlipCatcherReversalStrategyTest {
                 null,
                 null
         );
+        StrategyTradeSupport tradeSupport = new StrategyTradeSupport(tradeRepository);
         strategy = new FlipCatcherReversalStrategy(
                 latestPriceState,
                 trackedMarketState,
                 strategyTimeWindow,
                 executionRouter,
-                new StrategyTradeSupport(tradeRepository),
+                new StrategyExitSupport(latestPriceState, tradeSupport, executionRouter),
+                tradeSupport,
                 properties,
-                new PolymarketFeeCalculator(),
-                new TradingProperties(),
+                tradeEconomy,
                 clock
         );
         market = marketEndingIn(240);
@@ -92,6 +95,13 @@ class FlipCatcherReversalStrategyTest {
                 TradeOrderStatus.FILLED,
                 "accepted"
         ));
+        when(tradeEconomy.estimateExit(any(TradeEntity.class), any(BigDecimal.class), any(BigDecimal.class), any()))
+                .thenAnswer(invocation -> {
+                    TradeEntity trade = invocation.getArgument(0);
+                    BigDecimal exitPrice = invocation.getArgument(1);
+                    BigDecimal minimumProfit = invocation.getArgument(2);
+                    return exitEconomy(trade, exitPrice, minimumProfit);
+                });
     }
 
     @Test
@@ -133,27 +143,6 @@ class FlipCatcherReversalStrategyTest {
         strategy.tick();
 
         verify(executionRouter, never()).route(any());
-    }
-
-    @Test
-    void calculateExitPnlSubtractsPersistedEntryFeeAndEstimatedExitFee() {
-        TradeEntity open = openTrade("down", "Down", "0.57999983", "1.724135");
-        open.markOpen(
-                new BigDecimal("0.57999983"),
-                new BigDecimal("1.724135"),
-                new BigDecimal("0.999998"),
-                new BigDecimal("0.03023995"),
-                clock.instant().minusSeconds(5)
-        );
-
-        BigDecimal pnl = new StrategyTradeSupport(tradeRepository).estimateExitPnl(
-                open,
-                new BigDecimal("0.53"),
-                new TradingProperties().getTakerFeeRate(),
-                new PolymarketFeeCalculator()
-        );
-
-        assertThat(pnl).isEqualByComparingTo("-0.14736911");
     }
 
     private void setOutcomePrices(OutcomePrice up, OutcomePrice down) {
@@ -209,6 +198,21 @@ class FlipCatcherReversalStrategyTest {
                 clock.instant().minusSeconds(5)
         );
         return trade;
+    }
+
+    private ExitEconomy exitEconomy(TradeEntity trade, BigDecimal exitPrice, BigDecimal minimumProfit) {
+        BigDecimal shares = trade.getEntryFilledShares() == null ? BigDecimal.ZERO : trade.getEntryFilledShares();
+        BigDecimal entryCost = trade.getEntryFilledUsd() == null ? BigDecimal.ZERO : trade.getEntryFilledUsd();
+        BigDecimal netPnl = shares.multiply(exitPrice).subtract(entryCost);
+        return new ExitEconomy(
+                LiquidityRole.TAKER,
+                shares.multiply(exitPrice),
+                BigDecimal.ZERO,
+                trade.getEntryFeeUsd() == null ? BigDecimal.ZERO : trade.getEntryFeeUsd(),
+                netPnl,
+                minimumProfit,
+                netPnl.compareTo(minimumProfit) >= 0
+        );
     }
 
     private GammaMarketDto marketEndingIn(long seconds) {

@@ -11,7 +11,7 @@ import java.math.RoundingMode;
 public class PolymarketFeeCalculator {
     private static final int MONEY_SCALE = 8;
 
-    public BigDecimal estimateTakerFeeUsd(BigDecimal shares, BigDecimal price, BigDecimal feeRate) {
+    public BigDecimal estimateFeeUsd(BigDecimal shares, BigDecimal price, BigDecimal feeRate) {
         if (shares == null || price == null || feeRate == null) {
             return zero();
         }
@@ -26,6 +26,10 @@ public class PolymarketFeeCalculator {
                 .multiply(price)
                 .multiply(BigDecimal.ONE.subtract(price))
                 .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+    }
+
+    public BigDecimal estimateTakerFeeUsd(BigDecimal shares, BigDecimal price, BigDecimal feeRate) {
+        return estimateFeeUsd(shares, price, feeRate);
     }
 
     private BigDecimal zero() {
