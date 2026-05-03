@@ -5,6 +5,8 @@ import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.bot.BotRuntimeManager;
 import com.vokerg.voktrader.common.LogColors;
 import com.vokerg.voktrader.market.TrackedMarketState;
+import com.vokerg.voktrader.telemetry.TelemetryData;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -23,6 +25,7 @@ public class PriceSnapshotLogger {
     private final TrackedMarketState trackedMarketState;
     private final PriceSnapshotService priceSnapshotService;
     private final ObjectProvider<BotRuntimeManager> botRuntimeManagerProvider;
+    private final TradingEventLogger eventLogger;
 
     @Scheduled(fixedRate = 2000)
     public void logSnapshot() {
@@ -69,6 +72,26 @@ public class PriceSnapshotLogger {
                 down.ask(),
                 down.spread(),
                 LogColors.RESET
+        );
+        eventLogger.market(
+                "PRICE_SNAPSHOT",
+                BotRuntimeContextHolder.currentBotId().orElse(null),
+                market,
+                "scheduled snapshot",
+                TelemetryData.data(
+                        "scope", scope,
+                        "remaining", remaining,
+                        "remainingSeconds", remainingDuration == null ? null : remainingDuration.getSeconds(),
+                        "upTokenId", up.tokenId(),
+                        "upBid", up.bid(),
+                        "upAsk", up.ask(),
+                        "upSpread", up.spread(),
+                        "downTokenId", down.tokenId(),
+                        "downBid", down.bid(),
+                        "downAsk", down.ask(),
+                        "downSpread", down.spread()
+                ),
+                true
         );
 
         priceSnapshotService.saveSnapshot(marketId, remainingDuration, up, down, capturedAt);

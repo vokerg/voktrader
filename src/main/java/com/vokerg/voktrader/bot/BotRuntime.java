@@ -11,6 +11,8 @@ import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.polymarket.dto.MarketWsMessageDto;
 import com.vokerg.voktrader.pricing.LatestPriceState;
 import com.vokerg.voktrader.resolution.MarketResolutionService;
+import com.vokerg.voktrader.telemetry.TelemetryData;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -38,6 +40,7 @@ public class BotRuntime {
     private final MarketSelectionProperties marketSelectionProperties;
     private final MarketPersistenceService marketPersistenceService;
     private final MarketResolutionService marketResolutionService;
+    private final TradingEventLogger eventLogger;
     private final AtomicBoolean rolloverInProgress = new AtomicBoolean(false);
     private final Map<String, Disposable> resolutionOnlySubscriptions = new ConcurrentHashMap<>();
     private final LatestPriceState latestPriceState = new LatestPriceState();
@@ -53,7 +56,8 @@ public class BotRuntime {
             ObjectMapper objectMapper,
             MarketSelectionProperties marketSelectionProperties,
             MarketPersistenceService marketPersistenceService,
-            MarketResolutionService marketResolutionService
+            MarketResolutionService marketResolutionService,
+            TradingEventLogger eventLogger
     ) {
         this.config = config;
         this.gammaClient = gammaClient;
@@ -63,6 +67,7 @@ public class BotRuntime {
         this.marketSelectionProperties = marketSelectionProperties;
         this.marketPersistenceService = marketPersistenceService;
         this.marketResolutionService = marketResolutionService;
+        this.eventLogger = eventLogger;
     }
 
     public Long botId() {
@@ -80,6 +85,14 @@ public class BotRuntime {
     public void start(String reason) {
         log.info("{}Starting bot runtime id={} name={} family={} strategy={} reason={}{}",
                 LogColors.MARKET, botId(), config.getName(), config.getMarketFamily(), config.getStrategyId(), reason, LogColors.RESET);
+        eventLogger.market(
+                "BOT_RUNTIME_STARTED",
+                botId(),
+                null,
+                reason,
+                TelemetryData.data("name", config.getName(), "family", config.getMarketFamily(), "strategyId", config.getStrategyId()),
+                true
+        );
         rollToNextMarket(reason);
     }
 
@@ -96,6 +109,14 @@ public class BotRuntime {
         if (current != null && expiredGraceElapsed(current)) {
             log.info("{}Bot market expired grace elapsed: botId={} marketId={} endDate={} now={} rolling to next market{}",
                     LogColors.MARKET, botId(), current.id(), current.endDate(), Instant.now(), LogColors.RESET);
+            eventLogger.market(
+                    "MARKET_EXPIRED_GRACE_ELAPSED",
+                    botId(),
+                    current,
+                    "expired_grace_elapsed",
+                    TelemetryData.data("endDate", current.endDate(), "now", Instant.now()),
+                    true
+            );
             stopCurrentMarketAndRoll(current.id(), "expired_grace_elapsed");
         }
     }
@@ -117,8 +138,17 @@ public class BotRuntime {
     public void rollToNextMarket(String reason) {
         if (!rolloverInProgress.compareAndSet(false, true)) {
             log.debug("Rollover already in progress for botId={} reason={}", botId(), reason);
+            eventLogger.market("MARKET_ROLLOVER_ALREADY_IN_PROGRESS", botId(), null, reason, Map.of(), false);
             return;
         }
+        eventLogger.market(
+                "MARKET_ROLLOVER_STARTED",
+                botId(),
+                trackedMarketState.currentMarket().orElse(null),
+                reason,
+                TelemetryData.data("family", config.getMarketFamily()),
+                true
+        );
         AtomicBoolean foundMarket = new AtomicBoolean(false);
         findConfiguredMarket()
                 .subscribeOn(Schedulers.boundedElastic())
@@ -127,16 +157,54 @@ public class BotRuntime {
                     trackMarket(market);
                     return market;
                 }).subscribeOn(Schedulers.boundedElastic()))
-                .doOnError(error -> log.error("Failed during bot market rollover botId={}", botId(), error))
+                .doOnError(error -> {
+                    log.error("Failed during bot market rollover botId={}", botId(), error);
+                    eventLogger.market(
+                            "MARKET_ROLLOVER_FAILED",
+                            botId(),
+                            null,
+                            reason,
+                            TelemetryData.data("error", error.getMessage()),
+                            true
+                    );
+                })
                 .doFinally(signalType -> rolloverInProgress.set(false))
                 .subscribe(
-                        market -> log.info("{}Bot rollover complete: botId={} marketId={} slug={} question={}{}",
-                                LogColors.MARKET, botId(), market.id(), market.slug(), market.question(), LogColors.RESET),
-                        error -> log.error("Bot rollover subscription failed botId={}", botId(), error),
+                        market -> {
+                            log.info("{}Bot rollover complete: botId={} marketId={} slug={} question={}{}",
+                                    LogColors.MARKET, botId(), market.id(), market.slug(), market.question(), LogColors.RESET);
+                            eventLogger.market(
+                                    "MARKET_ROLLOVER_COMPLETED",
+                                    botId(),
+                                    market,
+                                    reason,
+                                    TelemetryData.data("question", market.question(), "endDate", market.endDate()),
+                                    true
+                            );
+                        },
+                        error -> {
+                            log.error("Bot rollover subscription failed botId={}", botId(), error);
+                            eventLogger.market(
+                                    "MARKET_ROLLOVER_SUBSCRIPTION_FAILED",
+                                    botId(),
+                                    null,
+                                    reason,
+                                    TelemetryData.data("error", error.getMessage()),
+                                    true
+                            );
+                        },
                         () -> {
                             if (!foundMarket.get()) {
                                 log.warn("{}No next market found during bot rollover botId={} family={} reason={}{}",
                                         LogColors.MARKET, botId(), config.getMarketFamily(), reason, LogColors.RESET);
+                                eventLogger.market(
+                                        "MARKET_ROLLOVER_NO_MARKET_FOUND",
+                                        botId(),
+                                        null,
+                                        reason,
+                                        TelemetryData.data("family", config.getMarketFamily()),
+                                        true
+                                );
                             }
                         });
     }
@@ -145,6 +213,14 @@ public class BotRuntime {
         if (!trackedMarketState.isCurrentMarket(marketId)) {
             log.info("{}Ignoring late event for non-current bot market: botId={} marketId={} reason={}{}",
                     LogColors.MARKET, botId(), marketId, reason, LogColors.RESET);
+            eventLogger.market(
+                    "MARKET_LATE_STOP_IGNORED",
+                    botId(),
+                    trackedMarketState.currentMarket().orElse(null),
+                    reason,
+                    TelemetryData.data("marketId", marketId),
+                    false
+            );
             return;
         }
         keepCurrentWebSocketForResolution(marketId);
@@ -190,6 +266,14 @@ public class BotRuntime {
         if (family.asset() != BotAsset.BTC) {
             return Mono.empty();
         }
+        eventLogger.market(
+                "MARKET_SLUG_LOOKUP_FALLBACK",
+                botId(),
+                null,
+                "deterministic slug lookup empty",
+                TelemetryData.data("family", family, "query", family.searchQuery()),
+                true
+        );
         return gammaClient.searchBitcoinUpDownMarkets()
                 .filter(this::matchesConfiguredMarketFamily)
                 .filter(this::hasEnoughTimeRemainingForSetup)
@@ -210,6 +294,14 @@ public class BotRuntime {
         if (tokenIds.size() < 2 || outcomes.size() < 2) {
             log.warn("Market did not have enough token/outcome data: botId={} question={} tokenIds={} outcomes={}",
                     botId(), market.question(), tokenIds, outcomes);
+            eventLogger.market(
+                    "MARKET_TRACKING_REJECTED",
+                    botId(),
+                    market,
+                    "not enough token/outcome data",
+                    TelemetryData.data("question", market.question(), "tokenIds", tokenIds, "outcomes", outcomes),
+                    true
+            );
             return;
         }
         Map<String, String> outcomeByTokenId = buildOutcomeMap(tokenIds, outcomes);
@@ -217,6 +309,21 @@ public class BotRuntime {
         log.info("{}Tracking bot market botId={} marketId={} dbId={} slug={} family={} endDate={} remaining={} tokenOutcomeMap={}{}",
                 LogColors.MARKET, botId(), market.id(), savedMarket.getId(), market.slug(), config.getMarketFamily(),
                 market.endDate(), remaining, outcomeByTokenId, LogColors.RESET);
+        eventLogger.market(
+                "MARKET_TRACKING_STARTED",
+                botId(),
+                market,
+                "tracking selected market",
+                TelemetryData.data(
+                        "dbId", savedMarket.getId(),
+                        "family", config.getMarketFamily(),
+                        "question", market.question(),
+                        "endDate", market.endDate(),
+                        "remaining", remaining,
+                        "outcomeByTokenId", outcomeByTokenId
+                ),
+                true
+        );
         seedStateFromRestOrderBooks(outcomeByTokenId);
         webSocketSubscription = webSocketClient.subscribeToMarketData(
                 tokenIds,
@@ -275,15 +382,48 @@ public class BotRuntime {
                 if (book == null) {
                     log.warn("{}No REST order book returned for botId={} outcome={} tokenId={}{}",
                             LogColors.MARKET, botId(), outcome, tokenId, LogColors.RESET);
+                    eventLogger.price(
+                            "PRICE_SEED_MISSING_BOOK",
+                            botId(),
+                            trackedMarketState.currentMarket().orElse(null),
+                            null,
+                            "REST order book missing",
+                            TelemetryData.data("outcome", outcome, "tokenId", tokenId),
+                            true
+                    );
                     return;
                 }
                 latestPriceState.update(tokenId, outcome, book.bestBid().orElse(null), book.bestAsk().orElse(null));
                 log.info("{}Seeded bot price state botId={} outcome={} tokenId={} bid={} ask={} spread={}{}",
                         LogColors.MARKET, botId(), outcome, tokenId,
                         book.bestBid().orElse(null), book.bestAsk().orElse(null), book.spread().orElse(null), LogColors.RESET);
+                eventLogger.price(
+                        "PRICE_SEEDED_FROM_REST",
+                        botId(),
+                        trackedMarketState.currentMarket().orElse(null),
+                        null,
+                        "seeded REST book",
+                        TelemetryData.data(
+                                "outcome", outcome,
+                                "tokenId", tokenId,
+                                "bid", book.bestBid().orElse(null),
+                                "ask", book.bestAsk().orElse(null),
+                                "spread", book.spread().orElse(null)
+                        ),
+                        true
+                );
             } catch (Exception e) {
                 log.warn("{}Failed to seed REST book for botId={} outcome={} tokenId={}{}",
                         LogColors.MARKET, botId(), outcome, tokenId, LogColors.RESET, e);
+                eventLogger.price(
+                        "PRICE_SEED_FAILED",
+                        botId(),
+                        trackedMarketState.currentMarket().orElse(null),
+                        null,
+                        "REST seed failed",
+                        TelemetryData.data("outcome", outcome, "tokenId", tokenId, "error", e.getMessage()),
+                        true
+                );
             }
         });
     }
@@ -295,6 +435,14 @@ public class BotRuntime {
         if (!message.isMarketResolved() && !trackedMarketState.isCurrentMarket(subscriptionMarketId)) {
             log.debug("Ignoring late event for non-current bot market: botId={} marketId={} event={}",
                     botId(), subscriptionMarketId, message.eventType());
+            eventLogger.market(
+                    "MARKET_LATE_WS_EVENT_IGNORED",
+                    botId(),
+                    trackedMarketState.currentMarket().orElse(null),
+                    "late websocket event",
+                    TelemetryData.data("subscriptionMarketId", subscriptionMarketId, "eventType", message.eventType()),
+                    false
+            );
             return;
         }
         if (message.isBook() || message.isBestBidAsk() || message.isPriceChange()) {
@@ -326,6 +474,22 @@ public class BotRuntime {
             log.info("{}Live bot price update botId={} event={} outcome={} tokenId={} bid={} ask={} spread={}{}",
                     LogColors.SNAPSHOT, botId(), message.eventType(), outcome, tokenId, bid, ask,
                     ask != null && bid != null ? ask.subtract(bid) : null, LogColors.RESET);
+            eventLogger.price(
+                    "PRICE_WS_UPDATE",
+                    botId(),
+                    trackedMarketState.currentMarket().orElse(null),
+                    null,
+                    "websocket price update",
+                    TelemetryData.data(
+                            "eventType", message.eventType(),
+                            "outcome", outcome,
+                            "tokenId", tokenId,
+                            "bid", bid,
+                            "ask", ask,
+                            "spread", ask != null && bid != null ? ask.subtract(bid) : null
+                    ),
+                    true
+            );
         }
     }
 
@@ -362,13 +526,41 @@ public class BotRuntime {
         if (resolvedMarketId == null || resolvedMarketId.isBlank()) {
             log.warn("{}Received market_resolved but could not determine market id botId={}{}",
                     LogColors.TRADE, botId(), LogColors.RESET);
+            eventLogger.market(
+                    "MARKET_RESOLUTION_REJECTED",
+                    botId(),
+                    market,
+                    "missing market id",
+                    TelemetryData.data("subscriptionMarketId", subscriptionMarketId, "eventType", message.eventType()),
+                    true
+            );
             return;
         }
         if (message.winningOutcome() == null || message.winningOutcome().isBlank()) {
             log.warn("{}Received market_resolved without winningOutcome botId={} marketId={}{}",
                     LogColors.TRADE, botId(), resolvedMarketId, LogColors.RESET);
+            eventLogger.market(
+                    "MARKET_RESOLUTION_REJECTED",
+                    botId(),
+                    market,
+                    "missing winning outcome",
+                    TelemetryData.data("marketId", resolvedMarketId, "winningAssetId", message.winningAssetId()),
+                    true
+            );
             return;
         }
+        eventLogger.market(
+                "MARKET_RESOLVED_WS",
+                botId(),
+                market,
+                "websocket resolution",
+                TelemetryData.data(
+                        "marketId", resolvedMarketId,
+                        "winningAssetId", message.winningAssetId(),
+                        "winningOutcome", message.winningOutcome()
+                ),
+                true
+        );
         marketResolutionService.resolveMarket(resolvedMarketId, message.winningAssetId(), message.winningOutcome(), "websocket");
         if (!trackedMarketState.isCurrentMarket(resolvedMarketId)) {
             disposeResolutionOnlySubscription(resolvedMarketId);
@@ -392,6 +584,14 @@ public class BotRuntime {
         if (webSocketSubscription != null && !webSocketSubscription.isDisposed()) {
             webSocketSubscription.dispose();
             log.info("Bot WebSocket subscription disposed botId={}", botId());
+            eventLogger.market(
+                    "MARKET_WS_DISPOSED",
+                    botId(),
+                    trackedMarketState.currentMarket().orElse(null),
+                    "subscription disposed",
+                    Map.of(),
+                    false
+            );
         }
         webSocketSubscription = null;
     }
@@ -405,12 +605,28 @@ public class BotRuntime {
         webSocketSubscription = null;
         log.info("{}Keeping expired bot market WebSocket alive for resolution only: botId={} marketId={}{}",
                 LogColors.MARKET, botId(), marketId, LogColors.RESET);
+        eventLogger.market(
+                "MARKET_WS_RESOLUTION_ONLY",
+                botId(),
+                null,
+                "keeping expired market websocket for resolution",
+                TelemetryData.data("marketId", marketId),
+                true
+        );
     }
 
     private void disposeResolutionOnlySubscription(String marketId) {
         Disposable subscription = resolutionOnlySubscriptions.remove(marketId);
         if (subscription != null && !subscription.isDisposed()) {
             subscription.dispose();
+            eventLogger.market(
+                    "MARKET_RESOLUTION_WS_DISPOSED",
+                    botId(),
+                    null,
+                    "resolution-only websocket disposed",
+                    TelemetryData.data("marketId", marketId),
+                    false
+            );
         }
     }
 }

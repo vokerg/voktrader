@@ -7,6 +7,7 @@ import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.LatestPriceState;
 import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.ExecutionRouter;
 import com.vokerg.voktrader.trade.TradeEntity;
@@ -42,6 +43,7 @@ class FlipCatcherReversalStrategyTest {
     private final ExecutionRouter executionRouter = mock(ExecutionRouter.class);
     private final TradeRepository tradeRepository = mock(TradeRepository.class);
     private final TradeEconomy tradeEconomy = mock(TradeEconomy.class);
+    private final TradingEventLogger eventLogger = mock(TradingEventLogger.class);
     private final MutableClock clock = new MutableClock(Instant.parse("2026-04-30T10:00:00Z"));
     private FlipCatcherReversalStrategy strategy;
     private GammaMarketDto market;
@@ -64,9 +66,10 @@ class FlipCatcherReversalStrategyTest {
                         strategyTimeWindow,
                         tradeSupport,
                         executionRouter,
+                        eventLogger,
                         clock
                 ),
-                new StrategyExitSupport(trackedMarketState, latestPriceState, tradeSupport, executionRouter, tradeEconomy),
+                new StrategyExitSupport(trackedMarketState, latestPriceState, tradeSupport, executionRouter, tradeEconomy, eventLogger),
                 tradeSupport,
                 properties,
                 clock

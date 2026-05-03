@@ -4,6 +4,8 @@ import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.LatestPriceState;
 import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.telemetry.TelemetryData;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import com.vokerg.voktrader.trade.ExecutionRouter;
 import com.vokerg.voktrader.trade.TradeIntent;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +17,7 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 
 @Slf4j
@@ -29,6 +32,7 @@ public class StrategyEntrySupport {
     private final StrategyTimeWindow strategyTimeWindow;
     private final StrategyTradeSupport tradeSupport;
     private final ExecutionRouter executionRouter;
+    private final TradingEventLogger eventLogger;
     private final Clock clock;
 
     @Autowired
@@ -37,9 +41,10 @@ public class StrategyEntrySupport {
             TrackedMarketState trackedMarketState,
             StrategyTimeWindow strategyTimeWindow,
             StrategyTradeSupport tradeSupport,
-            ExecutionRouter executionRouter
+            ExecutionRouter executionRouter,
+            TradingEventLogger eventLogger
     ) {
-        this(latestPriceState, trackedMarketState, strategyTimeWindow, tradeSupport, executionRouter, Clock.systemUTC());
+        this(latestPriceState, trackedMarketState, strategyTimeWindow, tradeSupport, executionRouter, eventLogger, Clock.systemUTC());
     }
 
     StrategyEntrySupport(
@@ -48,6 +53,7 @@ public class StrategyEntrySupport {
             StrategyTimeWindow strategyTimeWindow,
             StrategyTradeSupport tradeSupport,
             ExecutionRouter executionRouter,
+            TradingEventLogger eventLogger,
             Clock clock
     ) {
         this.latestPriceState = latestPriceState;
@@ -55,6 +61,7 @@ public class StrategyEntrySupport {
         this.strategyTimeWindow = strategyTimeWindow;
         this.tradeSupport = tradeSupport;
         this.executionRouter = executionRouter;
+        this.eventLogger = eventLogger;
         this.clock = clock;
     }
 
@@ -66,17 +73,27 @@ public class StrategyEntrySupport {
             EntryEvaluator evaluator
     ) {
         if (!strategyTimeWindow.isInsideTradingWindow()) {
+            eventLogger.entryRejected(strategyId, ruleId, null, null, "outside trading window", Map.of());
             return;
         }
 
         GammaMarketDto market = trackedMarketState.currentMarket().orElse(null);
         if (market == null || market.id() == null) {
+            eventLogger.entryRejected(strategyId, ruleId, market, null, "no current market", Map.of());
             return;
         }
 
         OutcomePrice up = latestPriceState.byOutcome("Up").orElse(null);
         OutcomePrice down = latestPriceState.byOutcome("Down").orElse(null);
         if (!StrategyExitSupport.hasCompletePrice(up) || !StrategyExitSupport.hasCompletePrice(down)) {
+            eventLogger.entryRejected(
+                    strategyId,
+                    ruleId,
+                    market,
+                    null,
+                    "incomplete up/down price state",
+                    Map.of("hasUp", StrategyExitSupport.hasCompletePrice(up), "hasDown", StrategyExitSupport.hasCompletePrice(down))
+            );
             return;
         }
 
@@ -84,13 +101,57 @@ public class StrategyEntrySupport {
         priceRecorder.record(down);
 
         Instant now = clock.instant();
-        if (isStale(up, now, rules) || isStale(down, now, rules) || midSumOutsideOne(up, down)) {
+        if (isStale(up, now, rules) || isStale(down, now, rules)) {
+            eventLogger.entryRejected(
+                    strategyId,
+                    ruleId,
+                    market,
+                    null,
+                    "stale price state",
+                    Map.of(
+                            "upAgeMs", Duration.between(up.updatedAt(), now).toMillis(),
+                            "downAgeMs", Duration.between(down.updatedAt(), now).toMillis(),
+                            "maxAgeMs", rules.maxDataAgeMs()
+                    )
+            );
             return;
         }
 
-        evaluator.evaluate(new EntryContext(market, up, down, mid(up), mid(down), now))
-                .filter(signal -> entryAllowed(strategyId, market, signal.candidate(), rules, now))
-                .ifPresent(signal -> routeBuy(strategyId, ruleId, market, signal));
+        if (midSumOutsideOne(up, down)) {
+            eventLogger.entryRejected(
+                    strategyId,
+                    ruleId,
+                    market,
+                    null,
+                    "mid sum outside sane range",
+                    Map.of("upMid", mid(up), "downMid", mid(down), "midSum", mid(up).add(mid(down)))
+            );
+            return;
+        }
+
+        EntryContext context = new EntryContext(market, up, down, mid(up), mid(down), now);
+        evaluator.evaluate(context)
+                .ifPresentOrElse(signal -> {
+                    if (!entryAllowed(strategyId, ruleId, market, signal.candidate(), rules, now)) {
+                        return;
+                    }
+                    eventLogger.entrySignal(
+                            strategyId,
+                            ruleId,
+                            market,
+                            signal.candidate(),
+                            signal.reason(),
+                            Map.of("paperSizeUsd", signal.paperSizeUsd())
+                    );
+                    routeBuy(strategyId, ruleId, market, signal);
+                }, () -> eventLogger.entryRejected(
+                        strategyId,
+                        ruleId,
+                        market,
+                        null,
+                        "strategy produced no entry signal",
+                        Map.of("upMid", context.upMid(), "downMid", context.downMid())
+                ));
     }
 
     public static BigDecimal mid(OutcomePrice price) {
@@ -110,16 +171,44 @@ public class StrategyEntrySupport {
 
     private boolean entryAllowed(
             String strategyId,
+            String ruleId,
             GammaMarketDto market,
             OutcomePrice candidate,
             EntryRules rules,
             Instant now
     ) {
         Long botId = tradeSupport.currentBotId();
-        return !tradeSupport.hasOpenTrade(strategyId, botId, market.id())
-                && !tradeSupport.marketTradeLimitReached(strategyId, botId, market.id(), rules.maxTradesPerMarket())
-                && !tradeSupport.closedTradeCooldownActive(strategyId, botId, market.id(), rules.closedTradeCooldownSeconds(), now)
-                && !tradeSupport.sameOutcomeLossLockoutActive(strategyId, botId, market.id(), candidate.tokenId());
+        if (tradeSupport.hasOpenTrade(strategyId, botId, market.id())) {
+            eventLogger.entryRejected(strategyId, ruleId, market, candidate, "open trade already exists", TelemetryData.data("botId", botId));
+            return false;
+        }
+        if (tradeSupport.marketTradeLimitReached(strategyId, botId, market.id(), rules.maxTradesPerMarket())) {
+            eventLogger.entryRejected(
+                    strategyId,
+                    ruleId,
+                    market,
+                    candidate,
+                    "market trade limit reached",
+                    TelemetryData.data("botId", botId, "maxTradesPerMarket", rules.maxTradesPerMarket())
+            );
+            return false;
+        }
+        if (tradeSupport.closedTradeCooldownActive(strategyId, botId, market.id(), rules.closedTradeCooldownSeconds(), now)) {
+            eventLogger.entryRejected(
+                    strategyId,
+                    ruleId,
+                    market,
+                    candidate,
+                    "closed trade cooldown active",
+                    TelemetryData.data("botId", botId, "cooldownSeconds", rules.closedTradeCooldownSeconds())
+            );
+            return false;
+        }
+        if (tradeSupport.sameOutcomeLossLockoutActive(strategyId, botId, market.id(), candidate.tokenId())) {
+            eventLogger.entryRejected(strategyId, ruleId, market, candidate, "same outcome loss lockout active", TelemetryData.data("botId", botId));
+            return false;
+        }
+        return true;
     }
 
     private void routeBuy(String strategyId, String ruleId, GammaMarketDto market, EntrySignal signal) {
@@ -134,6 +223,23 @@ public class StrategyEntrySupport {
         log.info(
                 "TRADE INTENT ROUTED: accepted={} mode={} tradeId={} orderId={} tradeStatus={} orderStatus={} message={}",
                 result.accepted(), result.mode(), result.tradeId(), result.orderId(), result.tradeStatus(), result.orderStatus(), result.message());
+        eventLogger.routed(
+                "ENTRY",
+                strategyId,
+                ruleId,
+                market,
+                signal.candidate(),
+                signal.reason(),
+                TelemetryData.data(
+                        "accepted", result.accepted(),
+                        "mode", result.mode(),
+                        "tradeId", result.tradeId(),
+                        "orderId", result.orderId(),
+                        "tradeStatus", result.tradeStatus(),
+                        "orderStatus", result.orderStatus(),
+                        "message", result.message()
+                )
+        );
     }
 
     @FunctionalInterface

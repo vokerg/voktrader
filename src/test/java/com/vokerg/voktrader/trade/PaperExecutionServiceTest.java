@@ -2,6 +2,7 @@ package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -33,7 +34,8 @@ class PaperExecutionServiceTest {
             tradeOrderRepository,
             tradeFillRepository,
             riskCheckRepository,
-            eventRepository
+            eventRepository,
+            mock(TradingEventLogger.class)
     );
 
     @Test

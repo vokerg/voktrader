@@ -5,6 +5,8 @@ import com.vokerg.voktrader.market.MarketEntity;
 import com.vokerg.voktrader.market.MarketRepository;
 import com.vokerg.voktrader.market.MarketResolutionStatus;
 import com.vokerg.voktrader.market.MarketTrackingStatus;
+import com.vokerg.voktrader.telemetry.TelemetryData;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import com.vokerg.voktrader.trade.TradeLifecycleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +22,7 @@ public class MarketResolutionService {
 
     private final MarketRepository marketRepository;
     private final TradeLifecycleService tradeLifecycleService;
+    private final TradingEventLogger eventLogger;
 
     @Transactional
     public void resolveMarket(
@@ -48,6 +51,18 @@ public class MarketResolutionService {
                     market.getWinningOutcome(),
                     source,
                     LogColors.RESET);
+            eventLogger.market(
+                    "MARKET_RESOLUTION_DUPLICATE",
+                    null,
+                    null,
+                    "duplicate resolution",
+                    TelemetryData.data(
+                            "marketId", marketId,
+                            "winningOutcome", market.getWinningOutcome(),
+                            "source", source
+                    ),
+                    true
+            );
             return;
         }
 
@@ -77,5 +92,19 @@ public class MarketResolutionService {
                 winningAssetId,
                 source,
                 LogColors.RESET);
+        eventLogger.market(
+                "MARKET_RESOLVED",
+                null,
+                null,
+                "market resolved",
+                TelemetryData.data(
+                        "marketId", marketId,
+                        "winningOutcome", winningOutcome,
+                        "winningAssetId", winningAssetId,
+                        "source", source,
+                        "resolvedAt", now
+                ),
+                true
+        );
     }
 }

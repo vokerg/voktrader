@@ -8,6 +8,7 @@ import com.vokerg.voktrader.polymarket.client.PolymarketWebSocketClient;
 import com.vokerg.voktrader.resolution.MarketResolutionService;
 import com.vokerg.voktrader.strategy.StrategyRegistry;
 import com.vokerg.voktrader.strategy.TradingStrategy;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +37,7 @@ public class BotRuntimeManager implements CommandLineRunner {
     private final MarketPersistenceService marketPersistenceService;
     private final MarketResolutionService marketResolutionService;
     private final StrategyRegistry strategyRegistry;
+    private final TradingEventLogger eventLogger;
 
     private final Map<Long, BotRuntime> runtimes = new ConcurrentHashMap<>();
 
@@ -118,7 +120,8 @@ public class BotRuntimeManager implements CommandLineRunner {
                 objectMapper,
                 marketSelectionProperties,
                 marketPersistenceService,
-                marketResolutionService
+                marketResolutionService,
+                eventLogger
         );
     }
 

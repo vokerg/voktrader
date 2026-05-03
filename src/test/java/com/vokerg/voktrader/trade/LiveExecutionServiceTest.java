@@ -6,6 +6,7 @@ import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.executor.PythonExecutorClient;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -39,7 +40,8 @@ class LiveExecutionServiceTest {
             pythonExecutorClient,
             executorProperties,
             tradingProperties,
-            new PolymarketFeeCalculator()
+            new PolymarketFeeCalculator(),
+            mock(TradingEventLogger.class)
     );
 
     @BeforeEach

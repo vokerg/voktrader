@@ -9,6 +9,7 @@ import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.polymarket.dto.MarketWsMessageDto;
 import com.vokerg.voktrader.polymarket.dto.PriceChangeDto;
 import com.vokerg.voktrader.resolution.MarketResolutionService;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -46,7 +47,8 @@ class BotRuntimeTest {
                 mock(ObjectMapper.class),
                 marketSelectionProperties,
                 marketPersistenceService,
-                mock(MarketResolutionService.class)
+                mock(MarketResolutionService.class),
+                mock(TradingEventLogger.class)
         );
         GammaMarketDto expiredMarket = marketEndingAt(Instant.now().minusSeconds(1));
         when(gammaClient.getMarketBySlug(org.mockito.ArgumentMatchers.anyString())).thenReturn(Mono.empty());
@@ -139,7 +141,8 @@ class BotRuntimeTest {
                 mock(ObjectMapper.class),
                 new MarketSelectionProperties("5m", 60L, 300L, 0L),
                 mock(MarketPersistenceService.class),
-                mock(MarketResolutionService.class)
+                mock(MarketResolutionService.class),
+                mock(TradingEventLogger.class)
         );
     }
 
