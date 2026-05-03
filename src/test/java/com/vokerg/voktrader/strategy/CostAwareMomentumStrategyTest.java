@@ -57,14 +57,17 @@ class CostAwareMomentumStrategyTest {
         );
         StrategyTradeSupport tradeSupport = new StrategyTradeSupport(tradeRepository);
         strategy = new CostAwareMomentumStrategy(
-                latestPriceState,
-                trackedMarketState,
-                strategyTimeWindow,
-                executionRouter,
-                new StrategyExitSupport(latestPriceState, tradeSupport, executionRouter),
+                new StrategyEntrySupport(
+                        latestPriceState,
+                        trackedMarketState,
+                        strategyTimeWindow,
+                        tradeSupport,
+                        executionRouter,
+                        clock
+                ),
+                new StrategyExitSupport(trackedMarketState, latestPriceState, tradeSupport, executionRouter, tradeEconomy),
                 tradeSupport,
                 properties,
-                tradeEconomy,
                 clock
         );
         market = marketEndingIn(60);

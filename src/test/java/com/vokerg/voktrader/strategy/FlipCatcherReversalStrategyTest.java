@@ -58,14 +58,17 @@ class FlipCatcherReversalStrategyTest {
         );
         StrategyTradeSupport tradeSupport = new StrategyTradeSupport(tradeRepository);
         strategy = new FlipCatcherReversalStrategy(
-                latestPriceState,
-                trackedMarketState,
-                strategyTimeWindow,
-                executionRouter,
-                new StrategyExitSupport(latestPriceState, tradeSupport, executionRouter),
+                new StrategyEntrySupport(
+                        latestPriceState,
+                        trackedMarketState,
+                        strategyTimeWindow,
+                        tradeSupport,
+                        executionRouter,
+                        clock
+                ),
+                new StrategyExitSupport(trackedMarketState, latestPriceState, tradeSupport, executionRouter, tradeEconomy),
                 tradeSupport,
                 properties,
-                tradeEconomy,
                 clock
         );
         market = marketEndingIn(240);

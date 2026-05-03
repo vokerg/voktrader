@@ -1,21 +1,12 @@
 package com.vokerg.voktrader.strategy;
 
-import com.vokerg.voktrader.economy.ExitEconomy;
-import com.vokerg.voktrader.economy.LiquidityRole;
-import com.vokerg.voktrader.economy.TradeEconomy;
-import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
-import com.vokerg.voktrader.pricing.LatestPriceState;
 import com.vokerg.voktrader.pricing.OutcomePrice;
-import com.vokerg.voktrader.trade.ExecutionRouter;
 import com.vokerg.voktrader.trade.TradeEntity;
-import com.vokerg.voktrader.trade.TradeIntent;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -26,74 +17,50 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Slf4j
 @Component
 public class FlipCatcherReversalStrategy implements TradingStrategy {
 
     public static final String ID = "flip-catcher-reversal";
 
-    private static final BigDecimal MIN_MID_SUM = new BigDecimal("0.97");
-    private static final BigDecimal MAX_MID_SUM = new BigDecimal("1.03");
-    private static final BigDecimal TWO = new BigDecimal("2");
     private static final Duration SAMPLE_WINDOW = Duration.ofSeconds(30);
     private static final Duration MID_MOMENTUM_WINDOW = Duration.ofSeconds(5);
     private static final Duration SHARP_REVERSAL_WINDOW = Duration.ofSeconds(3);
 
-    private final LatestPriceState latestPriceState;
-    private final TrackedMarketState trackedMarketState;
-    private final StrategyTimeWindow strategyTimeWindow;
-    private final ExecutionRouter executionRouter;
+    private final StrategyEntrySupport entrySupport;
     private final StrategyExitSupport exitSupport;
     private final StrategyTradeSupport tradeSupport;
     private final StrategyProperties strategyProperties;
-    private final TradeEconomy tradeEconomy;
     private final Clock clock;
     private final Map<String, Deque<PriceSample>> samplesByTokenId = new ConcurrentHashMap<>();
     private final Map<String, BigDecimal> trailingPeakBidByTrade = new ConcurrentHashMap<>();
 
     @Autowired
     public FlipCatcherReversalStrategy(
-            LatestPriceState latestPriceState,
-            TrackedMarketState trackedMarketState,
-            StrategyTimeWindow strategyTimeWindow,
-            ExecutionRouter executionRouter,
+            StrategyEntrySupport entrySupport,
             StrategyExitSupport exitSupport,
             StrategyTradeSupport tradeSupport,
-            StrategyProperties strategyProperties,
-            TradeEconomy tradeEconomy
+            StrategyProperties strategyProperties
     ) {
         this(
-                latestPriceState,
-                trackedMarketState,
-                strategyTimeWindow,
-                executionRouter,
+                entrySupport,
                 exitSupport,
                 tradeSupport,
                 strategyProperties,
-                tradeEconomy,
                 Clock.systemUTC()
         );
     }
 
     FlipCatcherReversalStrategy(
-            LatestPriceState latestPriceState,
-            TrackedMarketState trackedMarketState,
-            StrategyTimeWindow strategyTimeWindow,
-            ExecutionRouter executionRouter,
+            StrategyEntrySupport entrySupport,
             StrategyExitSupport exitSupport,
             StrategyTradeSupport tradeSupport,
             StrategyProperties strategyProperties,
-            TradeEconomy tradeEconomy,
             Clock clock
     ) {
-        this.latestPriceState = latestPriceState;
-        this.trackedMarketState = trackedMarketState;
-        this.strategyTimeWindow = strategyTimeWindow;
-        this.executionRouter = executionRouter;
+        this.entrySupport = entrySupport;
         this.exitSupport = exitSupport;
         this.tradeSupport = tradeSupport;
         this.strategyProperties = strategyProperties;
-        this.tradeEconomy = tradeEconomy;
         this.clock = clock;
     }
 
@@ -105,39 +72,30 @@ public class FlipCatcherReversalStrategy implements TradingStrategy {
     @Override
     public void tick() {
         trySellOpenSignals();
-
-        if (!strategyTimeWindow.isInsideTradingWindow()) {
-            return;
-        }
-
         tryBuySignal();
     }
 
     private void trySellOpenSignals() {
-        GammaMarketDto market = trackedMarketState.currentMarket().orElse(null);
         var config = strategyProperties.flipCatcherOrDefault();
-        exitSupport.evaluateOpenTrades(ID, "flip-catcher", market, context -> exitReason(context, config));
+        exitSupport.evaluateCurrentMarketOpenTrades(
+                ID,
+                "flip-catcher",
+                config.minProfitUsdOrDefault(),
+                this::recordSample,
+                analysis -> exitReason(analysis, config)
+        );
     }
 
     private Optional<String> exitReason(
-            StrategyExitSupport.OpenTradeContext context,
+            StrategyExitSupport.ExitAnalysis analysis,
             StrategyProperties.FlipCatcher config
     ) {
-        TradeEntity trade = context.trade();
-        OutcomePrice price = context.price();
-        recordSample(price);
+        TradeEntity trade = analysis.trade();
+        OutcomePrice price = analysis.price();
+        BigDecimal estimatedNetPnl = analysis.economy().estimatedNetPnlUsd();
+        boolean profitTargetReached = analysis.economy().minimumProfitReached();
 
-        BigDecimal mid = mid(price);
-        ExitEconomy exitEconomy = tradeEconomy.estimateExit(
-                trade,
-                price.bid(),
-                config.minProfitUsdOrDefault(),
-                LiquidityRole.TAKER
-        );
-        BigDecimal estimatedNetPnl = exitEconomy.estimatedNetPnlUsd();
-        boolean profitTargetReached = exitEconomy.minimumProfitReached();
-
-        if (isNearExpiry(context.market(), config)) {
+        if (isNearExpiry(analysis.market(), config)) {
             if (profitTargetReached) {
                 trailingPeakBidByTrade.remove(trailingKey(trade));
                 return Optional.of("near expiry profitable flip-catcher exit");
@@ -163,7 +121,7 @@ public class FlipCatcherReversalStrategy implements TradingStrategy {
                 .map(move -> move.compareTo(new BigDecimal("-0.025")) < 0)
                 .orElse(false);
         boolean lossLimitHit = estimatedNetPnl.compareTo(config.maxLossUsdOrDefault().negate()) <= 0;
-        boolean stopMidHit = mid.compareTo(config.stopMidOrDefault()) < 0;
+        boolean stopMidHit = analysis.mid().compareTo(config.stopMidOrDefault()) < 0;
 
         if (heldLongEnoughForStop
                 && actualMomentumReversal
@@ -176,88 +134,41 @@ public class FlipCatcherReversalStrategy implements TradingStrategy {
     }
 
     private void tryBuySignal() {
-        GammaMarketDto market = trackedMarketState.currentMarket().orElse(null);
-
-        if (market == null || market.id() == null) {
-            return;
-        }
-
-        OutcomePrice up = latestPriceState.byOutcome("Up").orElse(null);
-        OutcomePrice down = latestPriceState.byOutcome("Down").orElse(null);
-
-        if (!StrategyExitSupport.hasCompletePrice(up) || !StrategyExitSupport.hasCompletePrice(down)) {
-            return;
-        }
-
-        recordSample(up);
-        recordSample(down);
-
         var config = strategyProperties.flipCatcherOrDefault();
-        Instant now = clock.instant();
-        Long botId = tradeSupport.currentBotId();
+        entrySupport.evaluateUpDownEntry(
+                ID,
+                "flip-catcher",
+                new StrategyEntrySupport.EntryRules(
+                        config.maxDataAgeMsOrDefault(),
+                        config.closedTradeCooldownSecondsOrDefault(),
+                        config.maxTradesPerMarketOrDefault()
+                ),
+                this::recordSample,
+                context -> entrySignal(context, config)
+        );
+    }
 
-        if (isStale(up, now, config) || isStale(down, now, config)) {
-            return;
-        }
-
-        BigDecimal upMid = mid(up);
-        BigDecimal downMid = mid(down);
-        BigDecimal midSum = upMid.add(downMid);
-
-        if (midSum.compareTo(MIN_MID_SUM) < 0 || midSum.compareTo(MAX_MID_SUM) > 0) {
-            return;
-        }
-
-        Candidate upCandidate = flipCandidate(up, down, upMid);
-        Candidate downCandidate = flipCandidate(down, up, downMid);
+    private Optional<StrategyEntrySupport.EntrySignal> entrySignal(
+            StrategyEntrySupport.EntryContext context,
+            StrategyProperties.FlipCatcher config
+    ) {
+        Candidate upCandidate = flipCandidate(context.up(), context.down(), context.upMid());
+        Candidate downCandidate = flipCandidate(context.down(), context.up(), context.downMid());
         Candidate selected = selectCandidate(upCandidate, downCandidate);
         if (selected == null) {
-            return;
+            return Optional.empty();
         }
 
         OutcomePrice candidate = selected.price();
         if (!entryPassesFlipFilters(selected, config)) {
-            return;
+            return Optional.empty();
         }
 
-        if (tradeSupport.hasOpenTrade(ID, botId, market.id())) {
-            return;
-        }
-
-        if (tradeSupport.marketTradeLimitReached(ID, botId, market.id(), config.maxTradesPerMarketOrDefault())
-                || tradeSupport.closedTradeCooldownActive(
-                ID,
-                botId,
-                market.id(),
-                config.closedTradeCooldownSecondsOrDefault(),
-                clock.instant()
-        )) {
-            return;
-        }
-
-        if (tradeSupport.sameOutcomeLossLockoutActive(ID, botId, market.id(), candidate.tokenId())) {
-            return;
-        }
-
-        var result = executionRouter.route(TradeIntent.buy(
-                market,
+        return Optional.of(new StrategyEntrySupport.EntrySignal(
                 candidate,
                 config.paperSizeUsdOrDefault(),
-                ID,
-                "flip-catcher",
                 "flip-catcher: midrange side accelerating while opposite weakens"
         ));
-        log.info(
-                "TRADE INTENT ROUTED: accepted={} mode={} tradeId={} orderId={} tradeStatus={} orderStatus={} message={}",
-                result.accepted(), result.mode(), result.tradeId(), result.orderId(), result.tradeStatus(), result.orderStatus(), result.message());
-    }
-
-    private boolean isStale(
-            OutcomePrice price,
-            Instant now,
-            StrategyProperties.FlipCatcher config
-    ) {
-        return Duration.between(price.updatedAt(), now).toMillis() > config.maxDataAgeMsOrDefault();
     }
 
     private boolean isNearExpiry(
@@ -309,9 +220,7 @@ public class FlipCatcherReversalStrategy implements TradingStrategy {
     }
 
     private BigDecimal mid(OutcomePrice price) {
-        return price.bid()
-                .add(price.ask())
-                .divide(TWO, 8, RoundingMode.HALF_UP);
+        return StrategyEntrySupport.mid(price);
     }
 
     private void recordSample(OutcomePrice price) {

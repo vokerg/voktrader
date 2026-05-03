@@ -1,5 +1,9 @@
 package com.vokerg.voktrader.strategy;
 
+import com.vokerg.voktrader.economy.ExitEconomy;
+import com.vokerg.voktrader.economy.LiquidityRole;
+import com.vokerg.voktrader.economy.TradeEconomy;
+import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.LatestPriceState;
 import com.vokerg.voktrader.pricing.OutcomePrice;
@@ -10,20 +14,45 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Optional;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class StrategyExitSupport {
+    private static final BigDecimal TWO = new BigDecimal("2");
+
+    private final TrackedMarketState trackedMarketState;
     private final LatestPriceState latestPriceState;
     private final StrategyTradeSupport tradeSupport;
     private final ExecutionRouter executionRouter;
+    private final TradeEconomy tradeEconomy;
+
+    public void evaluateCurrentMarketOpenTrades(
+            String strategyId,
+            String ruleId,
+            BigDecimal minimumProfitUsd,
+            PriceRecorder priceRecorder,
+            ExitEvaluator evaluator
+    ) {
+        evaluateOpenTrades(
+                strategyId,
+                ruleId,
+                trackedMarketState.currentMarket().orElse(null),
+                minimumProfitUsd,
+                priceRecorder,
+                evaluator
+        );
+    }
 
     public void evaluateOpenTrades(
             String strategyId,
             String ruleId,
             GammaMarketDto market,
+            BigDecimal minimumProfitUsd,
+            PriceRecorder priceRecorder,
             ExitEvaluator evaluator
     ) {
         if (market == null || market.id() == null) {
@@ -38,7 +67,15 @@ public class StrategyExitSupport {
                 continue;
             }
 
-            evaluator.evaluate(new OpenTradeContext(market, trade, price))
+            priceRecorder.record(price);
+            ExitEconomy economy = tradeEconomy.estimateExit(
+                    trade,
+                    price.bid(),
+                    minimumProfitUsd,
+                    LiquidityRole.TAKER
+            );
+
+            evaluator.evaluate(new ExitAnalysis(market, trade, price, mid(price), economy))
                     .ifPresent(reason -> routeSell(strategyId, ruleId, market, trade, price, reason));
         }
     }
@@ -49,6 +86,12 @@ public class StrategyExitSupport {
                 && price.ask() != null
                 && price.spread() != null
                 && price.updatedAt() != null;
+    }
+
+    private static BigDecimal mid(OutcomePrice price) {
+        return price.bid()
+                .add(price.ask())
+                .divide(TWO, 8, RoundingMode.HALF_UP);
     }
 
     private void routeSell(
@@ -74,13 +117,20 @@ public class StrategyExitSupport {
 
     @FunctionalInterface
     public interface ExitEvaluator {
-        Optional<String> evaluate(OpenTradeContext context);
+        Optional<String> evaluate(ExitAnalysis analysis);
     }
 
-    public record OpenTradeContext(
+    @FunctionalInterface
+    public interface PriceRecorder {
+        void record(OutcomePrice price);
+    }
+
+    public record ExitAnalysis(
             GammaMarketDto market,
             TradeEntity trade,
-            OutcomePrice price
+            OutcomePrice price,
+            BigDecimal mid,
+            ExitEconomy economy
     ) {
     }
 }
