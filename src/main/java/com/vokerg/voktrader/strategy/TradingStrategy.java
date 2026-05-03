@@ -4,7 +4,7 @@ package com.vokerg.voktrader.strategy;
  * A trading strategy is a named unit of trading logic.
  *
  * <p>Strategies are regular Spring beans, but they do not schedule themselves.
- * StrategyEngine owns the schedule and invokes only the configured active strategy.</p>
+ * BotRuntimeManager owns the schedule and invokes each enabled bot's configured strategy.</p>
  */
 public interface TradingStrategy {
 
