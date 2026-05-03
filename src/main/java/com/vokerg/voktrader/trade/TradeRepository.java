@@ -11,7 +11,7 @@ public interface TradeRepository extends JpaRepository<TradeEntity, Long> {
     long countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(String marketId, String tokenId, String strategyId, Collection<TradeStatus> statuses);
     long countByMarketIdAndStrategyIdAndStatusIn(String marketId, String strategyId, Collection<TradeStatus> statuses);
     long countByModeInAndStatusIn(Collection<ExecutionMode> modes, Collection<TradeStatus> statuses);
-    long countByStrategyIdAndMarketIdAndStatusIn(String strategyId, String marketId, Collection<TradeStatus> statuses);
+    long countByStrategyIdAndMarketId(String strategyId, String marketId);
     List<TradeEntity> findByMarketIdAndStatus(String marketId, TradeStatus status);
     List<TradeEntity> findByStatus(TradeStatus status);
     List<TradeEntity> findByStrategyIdAndStatus(String strategyId, TradeStatus status);
@@ -22,7 +22,7 @@ public interface TradeRepository extends JpaRepository<TradeEntity, Long> {
 
     long countByBotIdAndMarketIdAndTokenIdAndStrategyIdAndStatusIn(Long botId, String marketId, String tokenId, String strategyId, Collection<TradeStatus> statuses);
     long countByBotIdAndMarketIdAndStrategyIdAndStatusIn(Long botId, String marketId, String strategyId, Collection<TradeStatus> statuses);
-    long countByBotIdAndStrategyIdAndMarketIdAndStatusIn(Long botId, String strategyId, String marketId, Collection<TradeStatus> statuses);
+    long countByBotIdAndStrategyIdAndMarketId(Long botId, String strategyId, String marketId);
     Optional<TradeEntity> findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(Long botId, String strategyId, String marketId, String tokenId, TradeStatus status);
     Optional<TradeEntity> findFirstByBotIdAndStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(Long botId, String strategyId, String marketId, TradeStatus status);
     Optional<TradeEntity> findFirstByBotIdAndStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(Long botId, String strategyId, String marketId, Collection<TradeStatus> statuses);

@@ -75,10 +75,9 @@ class CostAwareMomentumStrategyTest {
                 market.id(),
                 TradeStatus.OPEN
         )).thenReturn(Optional.empty());
-        when(tradeRepository.countByStrategyIdAndMarketIdAndStatusIn(
-                any(),
-                any(),
-                any()
+        when(tradeRepository.countByStrategyIdAndMarketId(
+                CostAwareMomentumStrategy.ID,
+                market.id()
         )).thenReturn(0L);
         when(tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(
                 any(),
@@ -197,12 +196,11 @@ class CostAwareMomentumStrategyTest {
     }
 
     @Test
-    void doesNotReenterMarketAfterCompletedTradeLimitReached() {
-        when(tradeRepository.countByStrategyIdAndMarketIdAndStatusIn(
-                any(),
-                any(),
-                any()
-        )).thenReturn(3L);
+    void doesNotReenterMarketAfterPerBotTradeLimitReached() {
+        when(tradeRepository.countByStrategyIdAndMarketId(
+                CostAwareMomentumStrategy.ID,
+                market.id()
+        )).thenReturn(5L);
         seedMomentum();
         clock.advance(Duration.ofSeconds(11));
         setOutcomePrices(price("up", "Up", "0.59", "0.61"), price("down", "Down", "0.39", "0.41"));

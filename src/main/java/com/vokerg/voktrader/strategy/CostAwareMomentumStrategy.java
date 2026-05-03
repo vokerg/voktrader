@@ -246,7 +246,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             return;
         }
 
-        if (completedTradeLimitReached(botId, market.id(), config)
+        if (marketTradeLimitReached(botId, market.id(), config)
                 || closedTradeCooldownActive(botId, market.id(), config)) {
             return;
         }
@@ -276,29 +276,21 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
                 && price.updatedAt() != null;
     }
 
-    private boolean completedTradeLimitReached(
+    private boolean marketTradeLimitReached(
             Long botId,
             String marketId,
             StrategyProperties.CostAwareMomentum config
     ) {
-        int maxCompletedTrades = config.maxCompletedTradesPerMarketOrDefault();
-        if (maxCompletedTrades <= 0) {
+        int maxTrades = config.maxTradesPerMarketOrDefault();
+        if (maxTrades <= 0) {
             return false;
         }
 
-        long completedTrades = botId == null
-                ? tradeRepository.countByStrategyIdAndMarketIdAndStatusIn(
-                ID,
-                marketId,
-                List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED)
-        )
-                : tradeRepository.countByBotIdAndStrategyIdAndMarketIdAndStatusIn(
-                botId,
-                ID,
-                marketId,
-                List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED)
-        );
-        return completedTrades >= maxCompletedTrades;
+        long trades = botId == null
+                ? tradeRepository.countByStrategyIdAndMarketId(ID, marketId)
+                : tradeRepository.countByBotIdAndStrategyIdAndMarketId(botId, ID, marketId);
+
+        return trades >= maxTrades;
     }
 
     private boolean closedTradeCooldownActive(

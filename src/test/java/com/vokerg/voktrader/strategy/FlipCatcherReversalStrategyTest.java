@@ -76,7 +76,10 @@ class FlipCatcherReversalStrategyTest {
                 market.id(),
                 TradeStatus.OPEN
         )).thenReturn(Optional.empty());
-        when(tradeRepository.countByStrategyIdAndMarketIdAndStatusIn(any(), any(), any())).thenReturn(0L);
+        when(tradeRepository.countByStrategyIdAndMarketId(
+                FlipCatcherReversalStrategy.ID,
+                market.id()
+        )).thenReturn(0L);
         when(tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(any(), any(), any()))
                 .thenReturn(Optional.empty());
         when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(any(), any(), any(), any()))

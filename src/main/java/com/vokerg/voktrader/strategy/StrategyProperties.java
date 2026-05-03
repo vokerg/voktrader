@@ -127,7 +127,7 @@ public record StrategyProperties(
             BigDecimal trailingStopBidDrop,
             Long forceDecisionSeconds,
             Long closedTradeCooldownSeconds,
-            Integer maxCompletedTradesPerMarket
+            Integer maxTradesPerMarket
     ) {
         public long maxDataAgeMsOrDefault() {
             return maxDataAgeMs == null ? 2_500L : maxDataAgeMs;
@@ -201,9 +201,10 @@ public record StrategyProperties(
             return closedTradeCooldownSeconds == null ? 90L : closedTradeCooldownSeconds;
         }
 
-        public int maxCompletedTradesPerMarketOrDefault() {
-            return maxCompletedTradesPerMarket == null ? 3 : maxCompletedTradesPerMarket;
+        public int maxTradesPerMarketOrDefault() {
+            return maxTradesPerMarket == null ? 5 : maxTradesPerMarket;
         }
+
     }
 
     public record FlipCatcher(
@@ -226,7 +227,7 @@ public record StrategyProperties(
             BigDecimal trailingStopBidDrop,
             Long forceDecisionSeconds,
             Long closedTradeCooldownSeconds,
-            Integer maxCompletedTradesPerMarket
+            Integer maxTradesPerMarket
     ) {
         public long maxDataAgeMsOrDefault() { return maxDataAgeMs == null ? 2_500L : maxDataAgeMs; }
         public BigDecimal maxSpreadOrDefault() { return maxSpread == null ? new BigDecimal("0.02") : maxSpread; }
@@ -247,6 +248,6 @@ public record StrategyProperties(
         public BigDecimal trailingStopBidDropOrDefault() { return trailingStopBidDrop == null ? new BigDecimal("0.02") : trailingStopBidDrop; }
         public long forceDecisionSecondsOrDefault() { return forceDecisionSeconds == null ? 20L : forceDecisionSeconds; }
         public long closedTradeCooldownSecondsOrDefault() { return closedTradeCooldownSeconds == null ? 90L : closedTradeCooldownSeconds; }
-        public int maxCompletedTradesPerMarketOrDefault() { return maxCompletedTradesPerMarket == null ? 3 : maxCompletedTradesPerMarket; }
+        public int maxTradesPerMarketOrDefault() { return maxTradesPerMarket == null ? 5 : maxTradesPerMarket; }
     }
 }
