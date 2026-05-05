@@ -70,6 +70,27 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
     }
 
     @Override
+    public StrategyDescription description() {
+        return new StrategyDescription(
+                "Cost-aware momentum",
+                "Active production candidate. Uses the shared strategy market view while preserving its original top-of-book behavior.",
+                "Attempts to buy the stronger Up/Down side when price action is already moving in its favor and the opposite side is weak. "
+                        + "It is intentionally momentum-biased: it does not try to catch the absolute bottom; it tries to join a move once bid and mid movement confirm it.",
+                "Uses latest top-of-book bid/ask/spread for Up and Down, midpoint history sampled by the strategy, bot-scoped trade history, fee-aware exit economy, "
+                        + "and market expiry timing. It does not require a full order book to enter.",
+                "Chooses the side with the higher midpoint, then requires tight spread, minimum midpoint, maximum ask, minimum bid, weak opposite midpoint, positive 10-second mid move, "
+                        + "positive 10-second bid move, and no sharp negative 3-second reversal. Entry is routed as a taker-style buy at observed ask.",
+                "Uses fee-aware exit estimates. It prefers trailing-stop behavior after profit is reachable, can exit near expiry only when profitable, and can stop loss after minimum hold time "
+                        + "when momentum reverses and loss/stop-mid conditions are met.",
+                "Good for fast directional moves where the book top is clean and the stronger side keeps receiving bid support. Relatively simple, well tested, and does not depend on deep book availability.",
+                "Weak when top-of-book lies about executable depth. It may buy into thin asks because it only checks spread and top ask, not how much size exists behind the ask. "
+                        + "It can overreact to short-lived momentum bursts, struggles in choppy mean-reverting markets, and may miss early reversals because it waits for confirmation. "
+                        + "Maker economics are not considered for entry, and taker slippage beyond best ask is invisible to this strategy.",
+                "Tune max spread, min bid, min midpoint move, and trailing stop together. If order book data is reliable, prefer using OrderBookLiquidityStrategy for entries where fill quality matters."
+        );
+    }
+
+    @Override
     public void tick() {
         trySellOpenSignals();
         tryBuySignal();
@@ -152,10 +173,16 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             StrategyEntrySupport.EntryContext context,
             StrategyProperties.CostAwareMomentum config
     ) {
-        OutcomePrice candidate = context.upMid().compareTo(context.downMid()) >= 0 ? context.up() : context.down();
-        OutcomePrice opposite = candidate == context.up() ? context.down() : context.up();
-        BigDecimal candidateMid = candidate == context.up() ? context.upMid() : context.downMid();
-        BigDecimal oppositeMid = opposite == context.up() ? context.upMid() : context.downMid();
+        StrategyOutcomeView candidateView = context.upOutcome().mid().compareTo(context.downOutcome().mid()) >= 0
+                ? context.upOutcome()
+                : context.downOutcome();
+        StrategyOutcomeView oppositeView = "Up".equalsIgnoreCase(candidateView.outcome())
+                ? context.downOutcome()
+                : context.upOutcome();
+        OutcomePrice candidate = candidateView.price();
+        OutcomePrice opposite = oppositeView.price();
+        BigDecimal candidateMid = candidateView.mid();
+        BigDecimal oppositeMid = oppositeView.mid();
 
         if (candidate.spread().compareTo(config.maxSpreadOrDefault()) > 0
                 || candidateMid.compareTo(config.minMidOrDefault()) < 0

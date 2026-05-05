@@ -70,6 +70,24 @@ public class FlipCatcherReversalStrategy implements TradingStrategy {
     }
 
     @Override
+    public StrategyDescription description() {
+        return new StrategyDescription(
+                "Flip-catcher reversal",
+                "Active production candidate. Adjusted to use the shared strategy market view without changing its original behavior.",
+                "Targets midrange reversals around the flip point. It looks for the side that was previously weaker or balanced, then starts accelerating while the opposite side weakens.",
+                "Uses latest top-of-book bid/ask/spread, Up/Down midpoint history, candidate/opposite bid and mid movement, bot-scoped trade history, fee-aware exit economy, and expiry timing. "
+                        + "It does not require full order book depth.",
+                "Builds a candidate for both Up and Down, chooses the stronger recent mover, and requires the selected side to remain in a midrange band rather than already repriced too far. "
+                        + "It requires candidate mid and bid acceleration, opposite mid/bid weakness, tight spread, acceptable ask, and no immediate sharp negative move.",
+                "Similar to cost-aware momentum: fee-aware exit estimates, trailing stop after profit threshold, near-expiry profitable exit, and stop loss after minimum hold when reversal/loss conditions align.",
+                "Useful when markets flip quickly around 0.45-0.55 and one side starts taking control before fully repricing. It can catch moves earlier than the higher-mid momentum strategy.",
+                "Weak in noisy midrange chop because it deliberately operates near the indecision zone. False flips can trigger entries just before the market snaps back. "
+                        + "Like cost-aware momentum, it sees only top-of-book quality, so it can underestimate slippage and liquidity gaps. It may also avoid strong late moves once price leaves the configured midrange.",
+                "Tune candidate mid band and 5-second movement thresholds carefully. Wider mid bands increase opportunity but also false flips. If false fills or slippage dominate, add order-book gates or use OrderBookLiquidityStrategy."
+        );
+    }
+
+    @Override
     public void tick() {
         trySellOpenSignals();
         tryBuySignal();
@@ -152,8 +170,8 @@ public class FlipCatcherReversalStrategy implements TradingStrategy {
             StrategyEntrySupport.EntryContext context,
             StrategyProperties.FlipCatcher config
     ) {
-        Candidate upCandidate = flipCandidate(context.up(), context.down(), context.upMid());
-        Candidate downCandidate = flipCandidate(context.down(), context.up(), context.downMid());
+        Candidate upCandidate = flipCandidate(context.upOutcome(), context.downOutcome());
+        Candidate downCandidate = flipCandidate(context.downOutcome(), context.upOutcome());
         Candidate selected = selectCandidate(upCandidate, downCandidate);
         if (selected == null) {
             return Optional.empty();
@@ -256,12 +274,14 @@ public class FlipCatcherReversalStrategy implements TradingStrategy {
                 .map(sample -> sampleValue.value(latest).subtract(sampleValue.value(sample)));
     }
 
-    private Candidate flipCandidate(OutcomePrice candidate, OutcomePrice opposite, BigDecimal candidateMid) {
+    private Candidate flipCandidate(StrategyOutcomeView candidateView, StrategyOutcomeView oppositeView) {
+        OutcomePrice candidate = candidateView.price();
+        OutcomePrice opposite = oppositeView.price();
         return new Candidate(
                 candidate,
                 opposite,
-                candidateMid,
-                mid(opposite),
+                candidateView.mid(),
+                oppositeView.mid(),
                 moveSince(candidate.tokenId(), MID_MOMENTUM_WINDOW, SampleValue.MID),
                 moveSince(candidate.tokenId(), MID_MOMENTUM_WINDOW, SampleValue.BID),
                 moveSince(candidate.tokenId(), SHARP_REVERSAL_WINDOW, SampleValue.MID),

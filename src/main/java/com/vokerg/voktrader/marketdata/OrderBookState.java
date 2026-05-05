@@ -21,6 +21,11 @@ public class OrderBookState {
             List<PriceLevelDto> asks,
             Instant updatedAt
     ) {
+        Optional<OrderBookState> delegate = delegate();
+        if (delegate.isPresent()) {
+            delegate.get().update(tokenId, outcome, bids, asks, updatedAt);
+            return;
+        }
         if (tokenId == null || tokenId.isBlank()) {
             return;
         }
@@ -37,6 +42,11 @@ public class OrderBookState {
     }
 
     public void applyPriceChange(String tokenId, String outcome, String side, String price, String size, Instant updatedAt) {
+        Optional<OrderBookState> delegate = delegate();
+        if (delegate.isPresent()) {
+            delegate.get().applyPriceChange(tokenId, outcome, side, price, size, updatedAt);
+            return;
+        }
         if (tokenId == null || tokenId.isBlank()) {
             return;
         }
@@ -56,6 +66,10 @@ public class OrderBookState {
     }
 
     public Optional<OutcomeOrderBook> byTokenId(String tokenId) {
+        Optional<OrderBookState> delegate = delegate();
+        if (delegate.isPresent()) {
+            return delegate.get().byTokenId(tokenId);
+        }
         if (tokenId == null || tokenId.isBlank()) {
             return Optional.empty();
         }
@@ -63,6 +77,10 @@ public class OrderBookState {
     }
 
     public Optional<OutcomeOrderBook> byOutcome(String outcome) {
+        Optional<OrderBookState> delegate = delegate();
+        if (delegate.isPresent()) {
+            return delegate.get().byOutcome(outcome);
+        }
         if (outcome == null || outcome.isBlank()) {
             return Optional.empty();
         }
@@ -72,10 +90,18 @@ public class OrderBookState {
     }
 
     public Map<String, OutcomeOrderBook> allByTokenId() {
+        Optional<OrderBookState> delegate = delegate();
+        if (delegate.isPresent()) {
+            return delegate.get().allByTokenId();
+        }
         return Map.copyOf(booksByTokenId);
     }
 
     public Map<String, OutcomeOrderBook> allByOutcome() {
+        Optional<OrderBookState> delegate = delegate();
+        if (delegate.isPresent()) {
+            return delegate.get().allByOutcome();
+        }
         Map<String, OutcomeOrderBook> books = new LinkedHashMap<>();
         booksByTokenId.values().forEach(book -> {
             if (book.outcome() != null) {
@@ -94,6 +120,11 @@ public class OrderBookState {
     }
 
     public void clear() {
+        Optional<OrderBookState> delegate = delegate();
+        if (delegate.isPresent()) {
+            delegate.get().clear();
+            return;
+        }
         booksByTokenId.clear();
     }
 
@@ -144,5 +175,10 @@ public class OrderBookState {
             case "SELL" -> Optional.of(OrderBookSide.SELL);
             default -> Optional.empty();
         };
+    }
+
+    private Optional<OrderBookState> delegate() {
+        return BotRuntimeContextHolder.currentOrderBookState()
+                .filter(state -> state != this);
     }
 }

@@ -55,6 +55,7 @@ class CostAwareMomentumStrategyTest {
                 null,
                 null,
                 null,
+                null,
                 null
         );
         StrategyTradeSupport tradeSupport = new StrategyTradeSupport(tradeRepository);
@@ -66,6 +67,7 @@ class CostAwareMomentumStrategyTest {
                         tradeSupport,
                         executionRouter,
                         eventLogger,
+                        mock(StrategyMarketDataProvider.class),
                         clock
                 ),
                 new StrategyExitSupport(trackedMarketState, latestPriceState, tradeSupport, executionRouter, tradeEconomy, eventLogger),

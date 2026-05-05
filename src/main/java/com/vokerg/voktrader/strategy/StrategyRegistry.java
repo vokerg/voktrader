@@ -3,6 +3,7 @@ package com.vokerg.voktrader.strategy;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -44,5 +45,16 @@ public class StrategyRegistry {
 
     public Set<String> strategyIds() {
         return strategiesById.keySet();
+    }
+
+    public Map<String, TradingStrategy.StrategyDescription> strategyDescriptions() {
+        return strategiesById.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> entry.getValue().description(),
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
     }
 }
