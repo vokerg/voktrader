@@ -2,7 +2,7 @@ package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
-import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.marketdata.OutcomePrice;
 
 import java.math.BigDecimal;
 import java.time.Duration;

@@ -1,4 +1,4 @@
-package com.vokerg.voktrader.pricing;
+package com.vokerg.voktrader.marketdata;
 
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.market.MarketEntity;

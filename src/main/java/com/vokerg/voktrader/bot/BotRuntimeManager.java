@@ -2,9 +2,8 @@ package com.vokerg.voktrader.bot;
 
 import com.vokerg.voktrader.config.MarketSelectionProperties;
 import com.vokerg.voktrader.market.MarketPersistenceService;
-import com.vokerg.voktrader.polymarket.client.ClobClient;
+import com.vokerg.voktrader.marketdata.MarketPriceFeedService;
 import com.vokerg.voktrader.polymarket.client.GammaClient;
-import com.vokerg.voktrader.polymarket.client.PolymarketWebSocketClient;
 import com.vokerg.voktrader.resolution.MarketResolutionService;
 import com.vokerg.voktrader.strategy.StrategyRegistry;
 import com.vokerg.voktrader.strategy.TradingStrategy;
@@ -30,8 +29,7 @@ public class BotRuntimeManager implements CommandLineRunner {
     private final BotConfigService configService;
     private final BotConfigRepository configRepository;
     private final GammaClient gammaClient;
-    private final ClobClient clobClient;
-    private final PolymarketWebSocketClient webSocketClient;
+    private final MarketPriceFeedService marketPriceFeedService;
     private final ObjectMapper objectMapper;
     private final MarketSelectionProperties marketSelectionProperties;
     private final MarketPersistenceService marketPersistenceService;
@@ -115,8 +113,7 @@ public class BotRuntimeManager implements CommandLineRunner {
         return new BotRuntime(
                 config,
                 gammaClient,
-                clobClient,
-                webSocketClient,
+                marketPriceFeedService,
                 objectMapper,
                 marketSelectionProperties,
                 marketPersistenceService,

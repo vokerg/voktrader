@@ -1,4 +1,4 @@
-package com.vokerg.voktrader.pricing;
+package com.vokerg.voktrader.marketdata;
 
 
 import org.springframework.data.jpa.repository.JpaRepository;

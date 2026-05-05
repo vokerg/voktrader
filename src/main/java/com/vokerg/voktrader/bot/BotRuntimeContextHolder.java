@@ -1,7 +1,7 @@
 package com.vokerg.voktrader.bot;
 
 import com.vokerg.voktrader.market.TrackedMarketState;
-import com.vokerg.voktrader.pricing.LatestPriceState;
+import com.vokerg.voktrader.marketdata.LatestPriceState;
 
 import java.util.Optional;
 
