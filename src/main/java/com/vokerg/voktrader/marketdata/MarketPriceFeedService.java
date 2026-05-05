@@ -28,6 +28,7 @@ public class MarketPriceFeedService {
     private final PolymarketWebSocketClient webSocketClient;
     private final MarketOrderBookMonitor orderBookMonitor;
     private final PriceSnapshotService priceSnapshotService;
+    private final MarketDepthSnapshotService marketDepthSnapshotService;
     private final TradingEventLogger eventLogger;
 
     private final Map<String, MarketPriceFeed> feedsByMarketId = new ConcurrentHashMap<>();
@@ -60,7 +61,7 @@ public class MarketPriceFeedService {
         }
         log.info("{}Market price feed acquired marketId={} botId={} subscribers={}{}",
                 LogColors.MARKET, market.id(), botId, feed.subscriberCount(), LogColors.RESET);
-        return new MarketPriceFeedHandle(this, market.id(), botId, market, feed.latestPriceState());
+        return new MarketPriceFeedHandle(this, market.id(), botId, market, feed.latestPriceState(), feed.orderBookState());
     }
 
     void release(String marketId, Long botId) {
@@ -93,6 +94,7 @@ public class MarketPriceFeedService {
     private final class MarketPriceFeed {
         private final MarketTokenMap tokenMap;
         private final LatestPriceState latestPriceState = new LatestPriceState();
+        private final OrderBookState orderBookState = new OrderBookState();
         private final Map<Long, MarketResolutionListener> resolutionListenersByBotId = new ConcurrentHashMap<>();
         private final Map<String, Instant> lastPriceLogByTokenId = new ConcurrentHashMap<>();
         private volatile GammaMarketDto market;
@@ -109,6 +111,10 @@ public class MarketPriceFeedService {
 
         private LatestPriceState latestPriceState() {
             return latestPriceState;
+        }
+
+        private OrderBookState orderBookState() {
+            return orderBookState;
         }
 
         private void start() {
@@ -154,6 +160,7 @@ public class MarketPriceFeedService {
             }
             webSocketSubscription = null;
             latestPriceState.clear();
+            orderBookState.clear();
             orderBookMonitor.stopMonitoring(market.id());
             eventLogger.market(
                     "MARKET_PRICE_FEED_STOPPED",
@@ -212,6 +219,7 @@ public class MarketPriceFeedService {
                     false
             );
             priceSnapshotService.saveSnapshot(null, market.id(), remainingDuration, up, down, capturedAt);
+            marketDepthSnapshotService.saveSnapshots(market.id(), remainingDuration, orderBookState, capturedAt);
         }
 
         private void seedStateFromRestOrderBooks() {
@@ -232,6 +240,8 @@ public class MarketPriceFeedService {
                         );
                         return;
                     }
+                    Instant updatedAt = Instant.now();
+                    orderBookState.update(tokenId, outcome, book.bids(), book.asks(), updatedAt);
                     latestPriceState.update(tokenId, outcome, book.bestBid().orElse(null), book.bestAsk().orElse(null));
                     log.info("{}Seeded market price state marketId={} outcome={} tokenId={} bid={} ask={} spread={}{}",
                             LogColors.MARKET, market.id(), outcome, tokenId,
@@ -292,6 +302,14 @@ public class MarketPriceFeedService {
             }
             BigDecimal bid = message.effectiveBestBid().orElse(null);
             BigDecimal ask = message.effectiveBestAsk().orElse(null);
+            if (message.isBook() && (message.bids() != null || message.asks() != null)) {
+                orderBookState.update(tokenId, outcome, message.bids(), message.asks(), Instant.now());
+                OutcomeOrderBook book = orderBookState.byTokenId(tokenId).orElse(null);
+                if (book != null) {
+                    bid = book.bestBid().map(OrderBookLevel::price).orElse(bid);
+                    ask = book.bestAsk().map(OrderBookLevel::price).orElse(ask);
+                }
+            }
             latestPriceState.update(tokenId, outcome, bid, ask);
             logPriceUpdate(message.eventType(), tokenId, outcome, bid, ask);
         }
@@ -306,6 +324,14 @@ public class MarketPriceFeedService {
                 if (outcome == null) {
                     return;
                 }
+                orderBookState.applyPriceChange(
+                        tokenId,
+                        outcome,
+                        change.side(),
+                        change.price(),
+                        change.size(),
+                        Instant.now()
+                );
                 BigDecimal bid = parseDecimal(change.bestBid()).orElse(null);
                 BigDecimal ask = parseDecimal(change.bestAsk()).orElse(null);
                 latestPriceState.update(tokenId, outcome, bid, ask);

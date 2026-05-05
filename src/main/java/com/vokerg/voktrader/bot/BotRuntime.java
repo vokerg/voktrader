@@ -9,6 +9,7 @@ import com.vokerg.voktrader.marketdata.LatestPriceState;
 import com.vokerg.voktrader.marketdata.MarketPriceFeedHandle;
 import com.vokerg.voktrader.marketdata.MarketPriceFeedService;
 import com.vokerg.voktrader.marketdata.MarketTokenMap;
+import com.vokerg.voktrader.marketdata.OrderBookState;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.polymarket.dto.MarketWsMessageDto;
 import com.vokerg.voktrader.resolution.MarketResolutionService;
@@ -38,6 +39,7 @@ public class BotRuntime {
     private final TradingEventLogger eventLogger;
     private final AtomicBoolean rolloverInProgress = new AtomicBoolean(false);
     private final LatestPriceState fallbackPriceState = new LatestPriceState();
+    private final OrderBookState fallbackOrderBookState = new OrderBookState();
     private final TrackedMarketState trackedMarketState = new TrackedMarketState();
     private MarketPriceFeedHandle currentPriceFeed;
 
@@ -70,11 +72,22 @@ public class BotRuntime {
     }
 
     public BotRuntimeContext context() {
-        return new BotRuntimeContext(botId(), config.getMarketFamily(), config.getStrategyId(), trackedMarketState, currentLatestPriceState());
+        return new BotRuntimeContext(
+                botId(),
+                config.getMarketFamily(),
+                config.getStrategyId(),
+                trackedMarketState,
+                currentLatestPriceState(),
+                currentOrderBookState()
+        );
     }
 
     private LatestPriceState currentLatestPriceState() {
         return currentPriceFeed == null ? fallbackPriceState : currentPriceFeed.latestPriceState();
+    }
+
+    private OrderBookState currentOrderBookState() {
+        return currentPriceFeed == null ? fallbackOrderBookState : currentPriceFeed.orderBookState();
     }
 
     public void start(String reason) {
@@ -222,6 +235,7 @@ public class BotRuntime {
         marketPersistenceService.markStopped(marketId);
         trackedMarketState.clearIfCurrent(marketId);
         fallbackPriceState.clear();
+        fallbackOrderBookState.clear();
         rollToNextMarket(reason);
     }
 
@@ -275,6 +289,7 @@ public class BotRuntime {
         }
         releaseCurrentPriceFeed();
         fallbackPriceState.clear();
+        fallbackOrderBookState.clear();
         trackedMarketState.startTracking(market);
         var savedMarket = marketPersistenceService.saveOrUpdate(market);
         List<String> tokenIds = market.tokenIds(objectMapper);

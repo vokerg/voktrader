@@ -8,6 +8,7 @@ public final class MarketPriceFeedHandle implements AutoCloseable {
     private final Long botId;
     private final GammaMarketDto market;
     private final LatestPriceState latestPriceState;
+    private final OrderBookState orderBookState;
     private boolean closed;
 
     MarketPriceFeedHandle(
@@ -15,13 +16,15 @@ public final class MarketPriceFeedHandle implements AutoCloseable {
             String marketId,
             Long botId,
             GammaMarketDto market,
-            LatestPriceState latestPriceState
+            LatestPriceState latestPriceState,
+            OrderBookState orderBookState
     ) {
         this.owner = owner;
         this.marketId = marketId;
         this.botId = botId;
         this.market = market;
         this.latestPriceState = latestPriceState;
+        this.orderBookState = orderBookState;
     }
 
     public String marketId() {
@@ -38,6 +41,10 @@ public final class MarketPriceFeedHandle implements AutoCloseable {
 
     public LatestPriceState latestPriceState() {
         return latestPriceState;
+    }
+
+    public OrderBookState orderBookState() {
+        return orderBookState;
     }
 
     @Override

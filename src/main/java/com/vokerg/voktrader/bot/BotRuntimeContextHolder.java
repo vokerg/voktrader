@@ -2,6 +2,7 @@ package com.vokerg.voktrader.bot;
 
 import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.marketdata.LatestPriceState;
+import com.vokerg.voktrader.marketdata.OrderBookState;
 
 import java.util.Optional;
 
@@ -21,6 +22,10 @@ public final class BotRuntimeContextHolder {
 
     public static Optional<LatestPriceState> currentLatestPriceState() {
         return current().map(BotRuntimeContext::latestPriceState);
+    }
+
+    public static Optional<OrderBookState> currentOrderBookState() {
+        return current().map(BotRuntimeContext::orderBookState);
     }
 
     public static Optional<TrackedMarketState> currentTrackedMarketState() {
