@@ -1,19 +1,21 @@
 package com.vokerg.voktrader.strategy;
 
+import com.vokerg.voktrader.economy.ExitEconomy;
+import com.vokerg.voktrader.economy.LiquidityRole;
+import com.vokerg.voktrader.economy.TradeEconomy;
 import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.LatestPriceState;
 import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.ExecutionRouter;
-import com.vokerg.voktrader.trade.PaperFeeCalculator;
 import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradeOrderStatus;
 import com.vokerg.voktrader.trade.TradeRepository;
 import com.vokerg.voktrader.trade.TradeStatus;
-import com.vokerg.voktrader.trade.TradingProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -26,6 +28,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -38,6 +41,8 @@ class CostAwareMomentumStrategyTest {
     private final StrategyTimeWindow strategyTimeWindow = mock(StrategyTimeWindow.class);
     private final ExecutionRouter executionRouter = mock(ExecutionRouter.class);
     private final TradeRepository tradeRepository = mock(TradeRepository.class);
+    private final TradeEconomy tradeEconomy = mock(TradeEconomy.class);
+    private final TradingEventLogger eventLogger = mock(TradingEventLogger.class);
     private final MutableClock clock = new MutableClock(Instant.parse("2026-04-30T10:00:00Z"));
     private CostAwareMomentumStrategy strategy;
     private GammaMarketDto market;
@@ -49,17 +54,23 @@ class CostAwareMomentumStrategyTest {
                 1000L,
                 null,
                 null,
+                null,
                 null
         );
+        StrategyTradeSupport tradeSupport = new StrategyTradeSupport(tradeRepository);
         strategy = new CostAwareMomentumStrategy(
-                latestPriceState,
-                trackedMarketState,
-                strategyTimeWindow,
-                executionRouter,
-                tradeRepository,
+                new StrategyEntrySupport(
+                        latestPriceState,
+                        trackedMarketState,
+                        strategyTimeWindow,
+                        tradeSupport,
+                        executionRouter,
+                        eventLogger,
+                        clock
+                ),
+                new StrategyExitSupport(trackedMarketState, latestPriceState, tradeSupport, executionRouter, tradeEconomy, eventLogger),
+                tradeSupport,
                 properties,
-                new PaperFeeCalculator(),
-                new TradingProperties(),
                 clock
         );
         market = marketEndingIn(60);
@@ -72,10 +83,9 @@ class CostAwareMomentumStrategyTest {
                 market.id(),
                 TradeStatus.OPEN
         )).thenReturn(Optional.empty());
-        when(tradeRepository.countByStrategyIdAndMarketIdAndStatusIn(
-                any(),
-                any(),
-                any()
+        when(tradeRepository.countByStrategyIdAndMarketId(
+                CostAwareMomentumStrategy.ID,
+                market.id()
         )).thenReturn(0L);
         when(tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(
                 any(),
@@ -99,6 +109,13 @@ class CostAwareMomentumStrategyTest {
         when(latestPriceState.byOutcome("Up")).thenReturn(Optional.empty());
         when(latestPriceState.byOutcome("Down")).thenReturn(Optional.empty());
         when(latestPriceState.byTokenId(any())).thenReturn(Optional.empty());
+        when(tradeEconomy.estimateExit(any(TradeEntity.class), any(BigDecimal.class), any(BigDecimal.class), any()))
+                .thenAnswer(invocation -> {
+                    TradeEntity trade = invocation.getArgument(0);
+                    BigDecimal exitPrice = invocation.getArgument(1);
+                    BigDecimal minimumProfit = invocation.getArgument(2);
+                    return exitEconomy(trade, exitPrice, minimumProfit);
+                });
     }
 
     @Test
@@ -194,12 +211,11 @@ class CostAwareMomentumStrategyTest {
     }
 
     @Test
-    void doesNotReenterMarketAfterCompletedTradeLimitReached() {
-        when(tradeRepository.countByStrategyIdAndMarketIdAndStatusIn(
-                any(),
-                any(),
-                any()
-        )).thenReturn(3L);
+    void doesNotReenterMarketAfterPerBotTradeLimitReached() {
+        when(tradeRepository.countByStrategyIdAndMarketId(
+                CostAwareMomentumStrategy.ID,
+                market.id()
+        )).thenReturn(5L);
         seedMomentum();
         clock.advance(Duration.ofSeconds(11));
         setOutcomePrices(price("up", "Up", "0.59", "0.61"), price("down", "Down", "0.39", "0.41"));
@@ -313,7 +329,7 @@ class CostAwareMomentumStrategyTest {
         clock.advance(Duration.ofSeconds(11));
         TradeEntity open = openTrade("up", "Up", "0.50", "2.00000000", 12);
         when(tradeRepository.findByStrategyIdAndStatus(CostAwareMomentumStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of(open));
-        OutcomePrice up = price("up", "Up", "0.45", "0.47");
+        OutcomePrice up = price("up", "Up", "0.38", "0.40");
         when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(up));
 
         strategy.tick();
@@ -385,6 +401,20 @@ class CostAwareMomentumStrategyTest {
         verify(executionRouter, never()).route(any());
     }
 
+    @Test
+    void evaluatesSellEvenOutsideBuyTradingWindow() {
+        when(strategyTimeWindow.isInsideTradingWindow()).thenReturn(false);
+        TradeEntity open = openTrade("up", "Up", "0.50", "2.00000000");
+        when(tradeRepository.findByStrategyIdAndStatus(CostAwareMomentumStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of(open));
+        when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(price("up", "Up", "0.58", "0.60")));
+        strategy.tick();
+        when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(price("up", "Up", "0.54", "0.56")));
+
+        strategy.tick();
+
+        verify(executionRouter).route(any(TradeIntent.class));
+    }
+
     private void seedMomentum() {
         setOutcomePrices(
                 price("up", "Up", "0.53", "0.55"),
@@ -421,6 +451,21 @@ class CostAwareMomentumStrategyTest {
         );
     }
 
+    private ExitEconomy exitEconomy(TradeEntity trade, BigDecimal exitPrice, BigDecimal minimumProfit) {
+        BigDecimal shares = trade.getEntryFilledShares() == null ? BigDecimal.ZERO : trade.getEntryFilledShares();
+        BigDecimal entryCost = trade.getEntryFilledUsd() == null ? BigDecimal.ZERO : trade.getEntryFilledUsd();
+        BigDecimal netPnl = shares.multiply(exitPrice).subtract(entryCost);
+        return new ExitEconomy(
+                LiquidityRole.TAKER,
+                shares.multiply(exitPrice),
+                BigDecimal.ZERO,
+                trade.getEntryFeeUsd() == null ? BigDecimal.ZERO : trade.getEntryFeeUsd(),
+                netPnl,
+                minimumProfit,
+                netPnl.compareTo(minimumProfit) >= 0
+        );
+    }
+
     private TradeEntity openTrade(String tokenId, String outcome, String entryPrice, String paperShares) {
         return openTrade(tokenId, outcome, entryPrice, paperShares, 5);
     }
@@ -451,6 +496,7 @@ class CostAwareMomentumStrategyTest {
             long secondsAgo
     ) {
         TradeEntity trade = TradeEntity.fromIntent(new TradeIntent(
+                null,
                 CostAwareMomentumStrategy.ID,
                 "cost-aware-momentum",
                 market.id(),

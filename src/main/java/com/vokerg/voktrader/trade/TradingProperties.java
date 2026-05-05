@@ -29,7 +29,13 @@ public class TradingProperties {
     private int maxTradesPerMarket = 1;
     private int minSecondsToExpiry = 30;
     private BigDecimal paperFeeRate = new BigDecimal("0.072");
-    private Set<String> allowedStrategyIds = new LinkedHashSet<>(Set.of("simple-down-cheap-tight-spread"));
+    private BigDecimal makerFeeRate = BigDecimal.ZERO;
+    private BigDecimal takerFeeRate = new BigDecimal("0.072");
+    private boolean estimateLiveFeesWhenMissing = true;
+    private Set<String> allowedStrategyIds = new LinkedHashSet<>(Set.of(
+            "cost-aware-momentum-paper",
+            "flip-catcher-reversal"
+    ));
 
     public ExecutionMode getMode() {
         return mode;
@@ -109,6 +115,30 @@ public class TradingProperties {
 
     public void setPaperFeeRate(BigDecimal paperFeeRate) {
         this.paperFeeRate = paperFeeRate;
+    }
+
+    public BigDecimal getTakerFeeRate() {
+        return takerFeeRate;
+    }
+
+    public BigDecimal getMakerFeeRate() {
+        return makerFeeRate;
+    }
+
+    public void setMakerFeeRate(BigDecimal makerFeeRate) {
+        this.makerFeeRate = makerFeeRate;
+    }
+
+    public void setTakerFeeRate(BigDecimal takerFeeRate) {
+        this.takerFeeRate = takerFeeRate;
+    }
+
+    public boolean isEstimateLiveFeesWhenMissing() {
+        return estimateLiveFeesWhenMissing;
+    }
+
+    public void setEstimateLiveFeesWhenMissing(boolean estimateLiveFeesWhenMissing) {
+        this.estimateLiveFeesWhenMissing = estimateLiveFeesWhenMissing;
     }
 
     public Set<String> getAllowedStrategyIds() {

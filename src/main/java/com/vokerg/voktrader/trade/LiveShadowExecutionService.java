@@ -1,5 +1,7 @@
 package com.vokerg.voktrader.trade;
 
+import com.vokerg.voktrader.telemetry.TelemetryData;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,7 @@ public class LiveShadowExecutionService {
     private final TradeOrderRepository tradeOrderRepository;
     private final TradeRiskCheckRepository riskCheckRepository;
     private final TradeEventRepository eventRepository;
+    private final TradingEventLogger eventLogger;
 
     @Transactional
     public TradeExecutionResult execute(TradeIntent intent) {
@@ -29,6 +32,19 @@ public class LiveShadowExecutionService {
         RiskAssessment risk = riskCheckService.assess(intent, mode, null, null, idempotencyKey);
         riskCheckRepository.saveAll(risk.checks());
         if (!risk.passed()) {
+            eventLogger.execution(
+                    "TRADE_REJECTED",
+                    "EXECUTION",
+                    intent.strategyId(),
+                    intent.ruleId(),
+                    intent.botId(),
+                    intent.marketId(),
+                    intent.tokenId(),
+                    intent.outcome(),
+                    risk.firstBlockMessage(),
+                    TelemetryData.data("mode", mode, "side", intent.side()),
+                    true
+            );
             return TradeExecutionResult.rejected(mode, null, null, null, null, risk.firstBlockMessage());
         }
 
@@ -58,11 +74,39 @@ public class LiveShadowExecutionService {
                 "LIVE_SHADOW RECORDED: tradeId={} orderId={} strategy={} marketId={} outcome={} side={} limitPrice={} amountUsd={} expectedShares={} expectedFee={} spread={} priceAgeMs={} reason={}",
                 trade.getId(), order.getId(), trade.getStrategyId(), trade.getMarketId(), trade.getOutcome(), intent.side(),
                 intent.expectedPrice(), intent.amountUsd(), expectedShares, expectedFee, intent.observedSpread(), intent.priceAgeMs(), intent.reason());
+        eventLogger.execution(
+                "LIVE_SHADOW_RECORDED",
+                "EXECUTION",
+                trade.getStrategyId(),
+                trade.getRuleId(),
+                trade.getBotId(),
+                trade.getMarketId(),
+                trade.getTokenId(),
+                trade.getOutcome(),
+                intent.reason(),
+                TelemetryData.data(
+                        "mode", mode,
+                        "tradeId", trade.getId(),
+                        "orderId", order.getId(),
+                        "side", intent.side(),
+                        "limitPrice", intent.expectedPrice(),
+                        "amountUsd", intent.amountUsd(),
+                        "expectedShares", expectedShares,
+                        "expectedFeeUsd", expectedFee,
+                        "spread", intent.observedSpread(),
+                        "priceAgeMs", intent.priceAgeMs()
+                ),
+                true
+        );
 
         return TradeExecutionResult.accepted(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "live-shadow order recorded");
     }
 
     private String idempotencyKey(TradeIntent intent, ExecutionMode mode) {
-        return mode + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side();
+        return mode + ":" + botScope(intent.botId()) + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side();
+    }
+
+    private String botScope(Long botId) {
+        return botId == null ? "default" : botId.toString();
     }
 }

@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.pricing;
 
+import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -10,44 +11,61 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class LatestPriceState {
-
     private final Map<String, OutcomePrice> byTokenId = new ConcurrentHashMap<>();
 
     public void update(String tokenId, String outcome, BigDecimal bid, BigDecimal ask) {
+        Optional<LatestPriceState> delegate = delegate();
+        if (delegate.isPresent()) {
+            delegate.get().update(tokenId, outcome, bid, ask);
+            return;
+        }
         if (tokenId == null || outcome == null) {
             return;
         }
-
         BigDecimal spread = null;
         if (bid != null && ask != null) {
             spread = ask.subtract(bid);
         }
-
-        byTokenId.put(tokenId, new OutcomePrice(
-                tokenId,
-                outcome,
-                bid,
-                ask,
-                spread,
-                Instant.now()
-        ));
+        byTokenId.put(tokenId, new OutcomePrice(tokenId, outcome, bid, ask, spread, Instant.now()));
     }
 
     public Optional<OutcomePrice> byTokenId(String tokenId) {
+        Optional<LatestPriceState> delegate = delegate();
+        if (delegate.isPresent()) {
+            return delegate.get().byTokenId(tokenId);
+        }
         return Optional.ofNullable(byTokenId.get(tokenId));
     }
 
     public Optional<OutcomePrice> byOutcome(String outcome) {
+        Optional<LatestPriceState> delegate = delegate();
+        if (delegate.isPresent()) {
+            return delegate.get().byOutcome(outcome);
+        }
         return byTokenId.values().stream()
                 .filter(price -> price.outcome().equalsIgnoreCase(outcome))
                 .findFirst();
     }
 
     public Map<String, OutcomePrice> allByTokenId() {
+        Optional<LatestPriceState> delegate = delegate();
+        if (delegate.isPresent()) {
+            return delegate.get().allByTokenId();
+        }
         return Map.copyOf(byTokenId);
     }
 
     public void clear() {
+        Optional<LatestPriceState> delegate = delegate();
+        if (delegate.isPresent()) {
+            delegate.get().clear();
+            return;
+        }
         byTokenId.clear();
+    }
+
+    private Optional<LatestPriceState> delegate() {
+        return BotRuntimeContextHolder.currentLatestPriceState()
+                .filter(state -> state != this);
     }
 }

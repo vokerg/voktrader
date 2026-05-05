@@ -55,18 +55,13 @@ public class RiskCheckService {
                 intent.secondsToExpiryAtDecision(), properties.getMinSecondsToExpiry(),
                 expiryOk ? "market not too close to expiry" : "market too close to expiry"));
 
-        long activeTradeCount = tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(
-                intent.marketId(), intent.tokenId(), intent.strategyId(), ACTIVE_STATUSES);
+        long activeTradeCount = countActiveForToken(intent);
         boolean duplicateIntent = activeTradeCount > 0;
         assessment.add(check(tradeId, orderId, mode, "DUPLICATE_OPEN_TRADE", !duplicateIntent,
                 activeTradeCount, "0 active trades before execution",
                 duplicateIntent ? "another active trade already exists for this market/token/strategy" : "no active duplicate trade"));
 
-        long activeTradesForMarketIncludingCurrent = tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(
-                intent.marketId(),
-                intent.strategyId(),
-                ACTIVE_STATUSES
-        );
+        long activeTradesForMarketIncludingCurrent = countActiveForMarket(intent);
         boolean maxTradesOk = activeTradesForMarketIncludingCurrent < properties.getMaxTradesPerMarket();
         assessment.add(check(tradeId, orderId, mode, "MAX_TRADES_PER_MARKET", maxTradesOk,
                 activeTradesForMarketIncludingCurrent, properties.getMaxTradesPerMarket(),
@@ -103,7 +98,7 @@ public class RiskCheckService {
         return assessment;
     }
 
-    private TradeRiskCheckEntity check(Long tradeId, Long orderId, ExecutionMode mode, String name, boolean passed, Object observed, Object limit, String message) {
+    private long countActiveForToken(TradeIntent intent) { if (intent.botId() != null) { return tradeRepository.countByBotIdAndMarketIdAndTokenIdAndStrategyIdAndStatusIn(intent.botId(), intent.marketId(), intent.tokenId(), intent.strategyId(), ACTIVE_STATUSES); } return tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(intent.marketId(), intent.tokenId(), intent.strategyId(), ACTIVE_STATUSES); } private long countActiveForMarket(TradeIntent intent) { if (intent.botId() != null) { return tradeRepository.countByBotIdAndMarketIdAndStrategyIdAndStatusIn(intent.botId(), intent.marketId(), intent.strategyId(), ACTIVE_STATUSES); } return tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(intent.marketId(), intent.strategyId(), ACTIVE_STATUSES); } private TradeRiskCheckEntity check(Long tradeId, Long orderId, ExecutionMode mode, String name, boolean passed, Object observed, Object limit, String message) {
         return TradeRiskCheckEntity.of(
                 tradeId,
                 orderId,

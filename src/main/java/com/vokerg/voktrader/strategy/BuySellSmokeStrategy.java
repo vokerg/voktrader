@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.strategy;
 
+import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.pricing.LatestPriceState;
 import com.vokerg.voktrader.pricing.OutcomePrice;
@@ -20,6 +21,7 @@ import java.util.Optional;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@Deprecated
 public class BuySellSmokeStrategy implements TradingStrategy {
 
     public static final String ID = "buy-sell-smoke";
@@ -54,8 +56,12 @@ public class BuySellSmokeStrategy implements TradingStrategy {
         }
 
         var config = strategyProperties.buySellSmokeOrDefault();
+        Long botId = currentBotId();
 
         for (TradeEntity trade : tradeRepository.findByStrategyIdAndStatus(ID, TradeStatus.OPEN)) {
+            if (!sameBotScope(trade, botId)) {
+                continue;
+            }
             if (!market.id().equals(trade.getMarketId())) {
                 continue;
             }
@@ -96,11 +102,9 @@ public class BuySellSmokeStrategy implements TradingStrategy {
             return;
         }
 
-        if (tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(
-                ID,
-                market.id(),
-                TradeStatus.OPEN
-        ).isPresent()) {
+        Long botId = currentBotId();
+
+        if (findOpenTrade(botId, market.id()).isPresent()) {
             return;
         }
 
@@ -168,5 +172,19 @@ public class BuySellSmokeStrategy implements TradingStrategy {
             StrategyProperties.BuySellSmoke config
     ) {
         return price.spread().compareTo(config.maxSpreadOrDefault()) <= 0;
+    }
+
+    private Optional<TradeEntity> findOpenTrade(Long botId, String marketId) {
+        return botId == null
+                ? tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(ID, marketId, TradeStatus.OPEN)
+                : tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(botId, ID, marketId, TradeStatus.OPEN);
+    }
+
+    private Long currentBotId() {
+        return BotRuntimeContextHolder.currentBotId().orElse(null);
+    }
+
+    private boolean sameBotScope(TradeEntity trade, Long botId) {
+        return trade.getBotId() == null ? botId == null : trade.getBotId().equals(botId);
     }
 }

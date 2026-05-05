@@ -25,6 +25,9 @@ public class PriceSnapshotEntity {
     @JoinColumn(name = "market_entity_id")
     private MarketEntity market;
 
+    @Column(name = "bot_id")
+    private Long botId;
+
     private Long marketId;
     private Long remainingSeconds;
 
@@ -53,6 +56,7 @@ public class PriceSnapshotEntity {
 
     public static PriceSnapshotEntity snapshot(
             MarketEntity market,
+            Long botId,
             Long marketId,
             Long remainingSeconds,
             OutcomePrice up,
@@ -61,6 +65,7 @@ public class PriceSnapshotEntity {
     ) {
         PriceSnapshotEntity entity = new PriceSnapshotEntity();
         entity.market = market;
+        entity.botId = botId;
         entity.marketId = marketId;
         entity.remainingSeconds = remainingSeconds;
         entity.upBid = up.bid();
@@ -79,6 +84,10 @@ public class PriceSnapshotEntity {
 
     public MarketEntity getMarket() {
         return market;
+    }
+
+    public Long getBotId() {
+        return botId;
     }
 
     public Long getMarketId() {

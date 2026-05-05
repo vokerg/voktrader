@@ -1,0 +1,223 @@
+package com.vokerg.voktrader.trade;
+
+import com.vokerg.voktrader.executor.ExecutorOrderCommand;
+import com.vokerg.voktrader.executor.ExecutorOrderResponse;
+import com.vokerg.voktrader.executor.ExecutorProperties;
+import com.vokerg.voktrader.executor.PythonExecutorClient;
+import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
+import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+class LiveExecutionServiceTest {
+    private final RiskCheckService riskCheckService = mock(RiskCheckService.class);
+    private final TradeRiskCheckRepository riskCheckRepository = mock(TradeRiskCheckRepository.class);
+    private final TradeRepository tradeRepository = mock(TradeRepository.class);
+    private final TradeOrderRepository tradeOrderRepository = mock(TradeOrderRepository.class);
+    private final TradeFillRepository tradeFillRepository = mock(TradeFillRepository.class);
+    private final TradeEventRepository tradeEventRepository = mock(TradeEventRepository.class);
+    private final PythonExecutorClient pythonExecutorClient = mock(PythonExecutorClient.class);
+    private final ExecutorProperties executorProperties = new ExecutorProperties();
+    private final TradingProperties tradingProperties = new TradingProperties();
+    private final LiveExecutionService service = new LiveExecutionService(
+            riskCheckService,
+            riskCheckRepository,
+            tradeRepository,
+            tradeOrderRepository,
+            tradeFillRepository,
+            tradeEventRepository,
+            pythonExecutorClient,
+            executorProperties,
+            tradingProperties,
+            new PolymarketFeeCalculator(),
+            mock(TradingEventLogger.class)
+    );
+
+    @BeforeEach
+    void setUp() {
+        RiskAssessment passed = new RiskAssessment();
+        when(riskCheckService.assess(any(), any(), any(), any(), any())).thenReturn(passed);
+        when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tradeOrderRepository.save(any(TradeOrderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tradeFillRepository.save(any(TradeFillEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tradeEventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    @Test
+    void filledBuyEstimatesMissingExecutorFee() {
+        when(pythonExecutorClient.submit(any(ExecutorOrderCommand.class))).thenReturn(response(
+                new BigDecimal("0.60"),
+                new BigDecimal("1.666665"),
+                new BigDecimal("0.999999"),
+                null
+        ));
+
+        service.execute(TradeIntent.buy(
+                market(),
+                price("down", "Down", "0.59", "0.60"),
+                new BigDecimal("1.00"),
+                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
+                "entry"
+        ), ExecutionMode.LIVE_TINY);
+
+        ArgumentCaptor<TradeEntity> tradeCaptor = ArgumentCaptor.forClass(TradeEntity.class);
+        ArgumentCaptor<TradeFillEntity> fillCaptor = ArgumentCaptor.forClass(TradeFillEntity.class);
+        org.mockito.Mockito.verify(tradeRepository, org.mockito.Mockito.atLeastOnce()).save(tradeCaptor.capture());
+        org.mockito.Mockito.verify(tradeFillRepository).save(fillCaptor.capture());
+
+        TradeEntity savedTrade = tradeCaptor.getAllValues().getLast();
+        assertThat(savedTrade.getEntryFeeUsd()).isEqualByComparingTo("0.02879997");
+        assertThat(savedTrade.getTotalFeeUsd()).isEqualByComparingTo("0.02879997");
+        assertThat(fillCaptor.getValue().getFeeUsd()).isEqualByComparingTo("0.02879997");
+    }
+
+    @Test
+    void filledSellEstimatesMissingExecutorFeeAndPersistsNetPnl() {
+        TradeEntity open = TradeEntity.fromIntent(TradeIntent.buy(
+                market(),
+                price("down", "Down", "0.57", "0.57999983"),
+                new BigDecimal("1.00"),
+                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
+                "entry"
+        ), ExecutionMode.LIVE_TINY);
+        open.markOpen(
+                new BigDecimal("0.57999983"),
+                new BigDecimal("1.724135"),
+                new BigDecimal("0.999998"),
+                new BigDecimal("0.03023995"),
+                Instant.parse("2026-04-30T10:00:00Z")
+        );
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+                "cost-aware-momentum-paper",
+                "market-id",
+                "down",
+                TradeStatus.OPEN
+        )).thenReturn(Optional.of(open));
+        when(pythonExecutorClient.submit(any(ExecutorOrderCommand.class))).thenReturn(response(
+                new BigDecimal("0.53"),
+                new BigDecimal("1.72"),
+                new BigDecimal("0.911600"),
+                null
+        ));
+
+        service.execute(TradeIntent.sell(
+                market(),
+                price("down", "Down", "0.53", "0.54"),
+                new BigDecimal("1.72"),
+                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
+                "exit"
+        ), ExecutionMode.LIVE_TINY);
+
+        assertThat(open.getExitFeeUsd()).isEqualByComparingTo("0.03084854");
+        assertThat(open.getTotalFeeUsd()).isEqualByComparingTo("0.06108849");
+        assertThat(open.getFinalPnlUsd()).isEqualByComparingTo("-0.14948649");
+    }
+
+    @Test
+    void explicitExecutorZeroFeeIsPreserved() {
+        when(pythonExecutorClient.submit(any(ExecutorOrderCommand.class))).thenReturn(response(
+                new BigDecimal("0.60"),
+                new BigDecimal("1.666665"),
+                new BigDecimal("0.999999"),
+                BigDecimal.ZERO
+        ));
+
+        service.execute(TradeIntent.buy(
+                market(),
+                price("down", "Down", "0.59", "0.60"),
+                new BigDecimal("1.00"),
+                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
+                "entry"
+        ), ExecutionMode.LIVE_TINY);
+
+        ArgumentCaptor<TradeEntity> tradeCaptor = ArgumentCaptor.forClass(TradeEntity.class);
+        org.mockito.Mockito.verify(tradeRepository, org.mockito.Mockito.atLeastOnce()).save(tradeCaptor.capture());
+        assertThat(tradeCaptor.getAllValues().getLast().getEntryFeeUsd()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void missingExecutorFeeCanBeStoredAsZeroWhenEstimationDisabled() {
+        tradingProperties.setEstimateLiveFeesWhenMissing(false);
+        when(pythonExecutorClient.submit(any(ExecutorOrderCommand.class))).thenReturn(response(
+                new BigDecimal("0.60"),
+                new BigDecimal("1.666665"),
+                new BigDecimal("0.999999"),
+                null
+        ));
+
+        service.execute(TradeIntent.buy(
+                market(),
+                price("down", "Down", "0.59", "0.60"),
+                new BigDecimal("1.00"),
+                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
+                "entry"
+        ), ExecutionMode.LIVE_TINY);
+
+        ArgumentCaptor<TradeEntity> tradeCaptor = ArgumentCaptor.forClass(TradeEntity.class);
+        org.mockito.Mockito.verify(tradeRepository, org.mockito.Mockito.atLeastOnce()).save(tradeCaptor.capture());
+        assertThat(tradeCaptor.getAllValues().getLast().getEntryFeeUsd()).isEqualByComparingTo("0");
+    }
+
+    private ExecutorOrderResponse response(BigDecimal avgPrice, BigDecimal shares, BigDecimal amountUsd, BigDecimal feeUsd) {
+        return new ExecutorOrderResponse(
+                true,
+                true,
+                "MATCHED",
+                "exchange-order",
+                avgPrice,
+                shares,
+                amountUsd,
+                feeUsd,
+                "matched",
+                "{}",
+                Instant.now()
+        );
+    }
+
+    private GammaMarketDto market() {
+        return new GammaMarketDto(
+                "market-id",
+                "BTC Up or Down?",
+                "condition-id",
+                "btc-updown",
+                Instant.parse("2026-04-30T10:05:00Z"),
+                true,
+                false,
+                true,
+                false,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    private OutcomePrice price(String tokenId, String outcome, String bid, String ask) {
+        BigDecimal bidValue = new BigDecimal(bid);
+        BigDecimal askValue = new BigDecimal(ask);
+        return new OutcomePrice(
+                tokenId,
+                outcome,
+                bidValue,
+                askValue,
+                askValue.subtract(bidValue),
+                Instant.parse("2026-04-30T10:00:01Z")
+        );
+    }
+}

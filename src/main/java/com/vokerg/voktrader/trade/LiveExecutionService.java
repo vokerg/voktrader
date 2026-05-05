@@ -4,6 +4,8 @@ import com.vokerg.voktrader.executor.ExecutorOrderCommand;
 import com.vokerg.voktrader.executor.ExecutorOrderResponse;
 import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.executor.PythonExecutorClient;
+import com.vokerg.voktrader.telemetry.TelemetryData;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,9 @@ public class LiveExecutionService {
     private final TradeEventRepository tradeEventRepository;
     private final PythonExecutorClient pythonExecutorClient;
     private final ExecutorProperties executorProperties;
+    private final TradingProperties tradingProperties;
+    private final PolymarketFeeCalculator feeCalculator;
+    private final TradingEventLogger eventLogger;
 
     @Transactional
     public TradeExecutionResult execute(TradeIntent intent, ExecutionMode mode) {
@@ -39,6 +44,7 @@ public class LiveExecutionService {
         RiskAssessment risk = riskCheckService.assess(intent, mode, null, null, idempotencyKey);
         riskCheckRepository.saveAll(risk.checks());
         if (!risk.passed()) {
+            emitRejected(intent, mode, null, null, risk.firstBlockMessage(), TelemetryData.data("side", intent.side()));
             return TradeExecutionResult.rejected(mode, null, null, null, null, risk.firstBlockMessage());
         }
 
@@ -63,6 +69,7 @@ public class LiveExecutionService {
             tradeOrderRepository.save(order);
             tradeRepository.save(trade);
             tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "LIVE_ORDER_REJECTED", message, response.rawResponse()));
+            emitRejected(intent, mode, trade, order, message, TelemetryData.data("executorStatus", response.status(), "executorMessage", response.safeMessage()));
             return TradeExecutionResult.rejected(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), message);
         }
 
@@ -74,6 +81,7 @@ public class LiveExecutionService {
                 tradeOrderRepository.save(order);
                 tradeRepository.save(trade);
                 tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "LIVE_ORDER_UNFILLED", message, response.rawResponse()));
+                emitRejected(intent, mode, trade, order, message, TelemetryData.data("executorStatus", response.status(), "executorMessage", response.safeMessage()));
                 return TradeExecutionResult.rejected(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), message);
             }
 
@@ -82,13 +90,22 @@ public class LiveExecutionService {
             tradeOrderRepository.save(order);
             tradeRepository.save(trade);
             tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "LIVE_ORDER_SUBMITTED", response.safeMessage(), response.rawResponse()));
+            emitExecution(
+                    "LIVE_ORDER_SUBMITTED",
+                    intent,
+                    mode,
+                    trade,
+                    order,
+                    "live order submitted",
+                    TelemetryData.data("exchangeOrderId", response.exchangeOrderId(), "executorStatus", response.status())
+            );
             return TradeExecutionResult.accepted(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "live order submitted");
         }
 
         BigDecimal fillPrice = firstNonNull(response.averagePrice(), intent.expectedPrice());
         BigDecimal fillShares = firstNonNull(response.filledShares(), intent.shares());
         BigDecimal fillAmountUsd = firstNonNull(response.filledAmountUsd(), intent.amountUsd());
-        BigDecimal feeUsd = firstNonNull(response.feeUsd(), BigDecimal.ZERO);
+        BigDecimal feeUsd = resolveFeeUsd(response, fillShares, fillPrice);
 
         TradeFillEntity fill = tradeFillRepository.save(TradeFillEntity.polymarket(
                 trade.getId(),
@@ -107,25 +124,37 @@ public class LiveExecutionService {
         tradeOrderRepository.save(order);
         tradeRepository.save(trade);
         tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), fill.getId(), "LIVE_ORDER_FILLED", response.safeMessage(), response.rawResponse()));
+        emitExecution(
+                "LIVE_ORDER_FILLED",
+                intent,
+                mode,
+                trade,
+                order,
+                response.safeMessage(),
+                TelemetryData.data(
+                        "fillId", fill.getId(),
+                        "exchangeOrderId", response.exchangeOrderId(),
+                        "fillPrice", fillPrice,
+                        "fillShares", fillShares,
+                        "fillAmountUsd", fillAmountUsd,
+                        "feeUsd", feeUsd
+                )
+        );
 
         return TradeExecutionResult.accepted(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "live order filled");
     }
 
     private TradeExecutionResult executeSell(TradeIntent intent, ExecutionMode mode) {
         if (intent.shares() == null || intent.shares().compareTo(BigDecimal.ZERO) <= 0) {
+            emitRejected(intent, mode, null, null, "LIVE exit rejected before executor call: sell intent has no positive shares",
+                    TelemetryData.data("shares", intent.shares()));
             return TradeExecutionResult.rejected(mode, null, null, null, null,
                     "LIVE exit rejected before executor call: sell intent has no positive shares");
         }
 
-        TradeEntity trade = tradeRepository
-                .findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
-                        intent.strategyId(),
-                        intent.marketId(),
-                        intent.tokenId(),
-                        TradeStatus.OPEN
-                )
-                .orElse(null);
+        TradeEntity trade = findLatestTokenTrade(intent, TradeStatus.OPEN).orElse(null);
         if (trade == null) {
+            emitRejected(intent, mode, null, null, "No open live trade to close for marketId=" + intent.marketId(), TelemetryData.data("side", intent.side()));
             return TradeExecutionResult.rejected(mode, null, null, null, null,
                     "No open live trade to close for marketId=" + intent.marketId());
         }
@@ -147,6 +176,7 @@ public class LiveExecutionService {
             order.markFailed(message, response.rawResponse());
             tradeOrderRepository.save(order);
             tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "LIVE_EXIT_REJECTED", message, response.rawResponse()));
+            emitRejected(intent, mode, trade, order, message, TelemetryData.data("executorStatus", response.status(), "executorMessage", response.safeMessage()));
             return TradeExecutionResult.rejected(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), message);
         }
 
@@ -156,19 +186,29 @@ public class LiveExecutionService {
                 order.markFailed(message, response.rawResponse());
                 tradeOrderRepository.save(order);
                 tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "LIVE_EXIT_UNFILLED", message, response.rawResponse()));
+                emitRejected(intent, mode, trade, order, message, TelemetryData.data("executorStatus", response.status(), "executorMessage", response.safeMessage()));
                 return TradeExecutionResult.rejected(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), message);
             }
 
             order.markSubmitted(response.exchangeOrderId(), response.rawResponse());
             tradeOrderRepository.save(order);
             tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "LIVE_EXIT_SUBMITTED", response.safeMessage(), response.rawResponse()));
+            emitExecution(
+                    "LIVE_EXIT_SUBMITTED",
+                    intent,
+                    mode,
+                    trade,
+                    order,
+                    response.safeMessage(),
+                    TelemetryData.data("exchangeOrderId", response.exchangeOrderId(), "executorStatus", response.status())
+            );
             return TradeExecutionResult.accepted(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "live exit submitted");
         }
 
         BigDecimal fillPrice = firstNonNull(response.averagePrice(), intent.expectedPrice());
         BigDecimal fillShares = firstNonNull(response.filledShares(), firstNonNull(intent.shares(), trade.getEntryFilledShares()));
         BigDecimal fillAmountUsd = firstNonNull(response.filledAmountUsd(), fillPrice.multiply(fillShares));
-        BigDecimal feeUsd = firstNonNull(response.feeUsd(), BigDecimal.ZERO);
+        BigDecimal feeUsd = resolveFeeUsd(response, fillShares, fillPrice);
 
         TradeFillEntity fill = tradeFillRepository.save(TradeFillEntity.polymarket(
                 trade.getId(),
@@ -187,18 +227,127 @@ public class LiveExecutionService {
         tradeOrderRepository.save(order);
         tradeRepository.save(trade);
         tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), fill.getId(), "LIVE_EXIT_FILLED", response.safeMessage(), response.rawResponse()));
+        emitExecution(
+                "LIVE_EXIT_FILLED",
+                intent,
+                mode,
+                trade,
+                order,
+                response.safeMessage(),
+                TelemetryData.data(
+                        "fillId", fill.getId(),
+                        "exchangeOrderId", response.exchangeOrderId(),
+                        "fillPrice", fillPrice,
+                        "fillShares", fillShares,
+                        "fillAmountUsd", fillAmountUsd,
+                        "feeUsd", feeUsd,
+                        "finalPnlUsd", trade.getFinalPnlUsd()
+                )
+        );
 
         return TradeExecutionResult.accepted(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "live exit filled");
     }
 
+    private void emitRejected(
+            TradeIntent intent,
+            ExecutionMode mode,
+            TradeEntity trade,
+            TradeOrderEntity order,
+            String reason,
+            java.util.Map<String, Object> data
+    ) {
+        emitExecution("TRADE_REJECTED", intent, mode, trade, order, reason, data);
+    }
+
+    private void emitExecution(
+            String type,
+            TradeIntent intent,
+            ExecutionMode mode,
+            TradeEntity trade,
+            TradeOrderEntity order,
+            String reason,
+            java.util.Map<String, Object> data
+    ) {
+        data.put("mode", mode);
+        data.put("side", intent.side());
+        data.put("tradeId", trade == null ? null : trade.getId());
+        data.put("orderId", order == null ? null : order.getId());
+        eventLogger.execution(
+                type,
+                "EXECUTION",
+                intent.strategyId(),
+                intent.ruleId(),
+                intent.botId(),
+                intent.marketId(),
+                intent.tokenId(),
+                intent.outcome(),
+                reason,
+                data,
+                true
+        );
+    }
+
     private String idempotencyKey(TradeIntent intent, ExecutionMode mode) {
         Instant decisionAt = intent.decisionAt() != null ? intent.decisionAt() : Instant.now();
-        return mode + ":" + intent.strategyId() + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.side() + ":" + decisionAt.toEpochMilli();
+        return mode + ":" + botScope(intent.botId()) + ":" + intent.strategyId() + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.side() + ":" + decisionAt.toEpochMilli();
     }
 
     private String idempotencyKey(TradeIntent intent, ExecutionMode mode, Long tradeId) {
         Instant decisionAt = intent.decisionAt() != null ? intent.decisionAt() : Instant.now();
-        return mode + ":" + intent.strategyId() + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.side() + ":" + tradeId + ":" + decisionAt.toEpochMilli();
+        return mode + ":" + botScope(intent.botId()) + ":" + intent.strategyId() + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.side() + ":" + tradeId + ":" + decisionAt.toEpochMilli();
+    }
+
+    private java.util.Optional<TradeEntity> findLatestTokenTrade(TradeIntent intent, TradeStatus status) {
+        if (intent.botId() != null) {
+            return tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+                    intent.botId(),
+                    intent.strategyId(),
+                    intent.marketId(),
+                    intent.tokenId(),
+                    status
+            );
+        }
+        return tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+                intent.strategyId(),
+                intent.marketId(),
+                intent.tokenId(),
+                status
+        );
+    }
+
+    private String botScope(Long botId) {
+        return botId == null ? "default" : botId.toString();
+    }
+
+    private BigDecimal resolveFeeUsd(ExecutorOrderResponse response, BigDecimal shares, BigDecimal price) {
+        if (response.feeUsd() != null) {
+            return response.feeUsd();
+        }
+        if (!tradingProperties.isEstimateLiveFeesWhenMissing()) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal feeUsd = feeCalculator.estimateTakerFeeUsd(shares, price, tradingProperties.getTakerFeeRate());
+        log.info(
+                "LIVE fee missing from executor; estimated taker fee feeUsd={} shares={} price={} feeRate={}",
+                feeUsd,
+                shares,
+                price,
+                tradingProperties.getTakerFeeRate()
+        );
+        eventLogger.execution(
+                "LIVE_FEE_ESTIMATED",
+                "EXECUTION",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "executor omitted fee",
+                TelemetryData.data("feeUsd", feeUsd, "shares", shares, "price", price, "feeRate", tradingProperties.getTakerFeeRate()),
+                true
+        );
+        return feeUsd;
     }
 
     private static <T> T firstNonNull(T primary, T fallback) {

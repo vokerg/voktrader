@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.trade;
 
+import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.OutcomePrice;
 
@@ -9,6 +10,7 @@ import java.time.Instant;
 import java.util.Objects;
 
 public record TradeIntent(
+        Long botId,
         String strategyId,
         String ruleId,
         String marketId,
@@ -50,21 +52,18 @@ public record TradeIntent(
         return side == TradeSide.BUY ? observedAsk : observedBid;
     }
 
-    public static TradeIntent buy(
-            GammaMarketDto market,
-            OutcomePrice price,
-            BigDecimal amountUsd,
-            String strategyId,
-            String ruleId,
-            String reason
-    ) {
+    public static TradeIntent buy(GammaMarketDto market, OutcomePrice price, BigDecimal amountUsd, String strategyId, String ruleId, String reason) {
+        return buy(BotRuntimeContextHolder.currentBotId().orElse(null), market, price, amountUsd, strategyId, ruleId, reason);
+    }
+
+    public static TradeIntent buy(Long botId, GammaMarketDto market, OutcomePrice price, BigDecimal amountUsd, String strategyId, String ruleId, String reason) {
         Instant now = Instant.now();
         Instant updatedAt = price.updatedAt();
         Long ageMs = updatedAt == null ? null : Duration.between(updatedAt, now).toMillis();
         Long secondsToExpiry = market.endDate() == null ? null : Duration.between(now, market.endDate()).toSeconds();
         BigDecimal midpoint = midpoint(price.bid(), price.ask());
-
         return new TradeIntent(
+                botId,
                 strategyId,
                 ruleId,
                 market.id(),
@@ -91,22 +90,19 @@ public record TradeIntent(
         );
     }
 
-    public static TradeIntent sell(
-            GammaMarketDto market,
-            OutcomePrice price,
-            BigDecimal shares,
-            String strategyId,
-            String ruleId,
-            String reason
-    ) {
+    public static TradeIntent sell(GammaMarketDto market, OutcomePrice price, BigDecimal shares, String strategyId, String ruleId, String reason) {
+        return sell(BotRuntimeContextHolder.currentBotId().orElse(null), market, price, shares, strategyId, ruleId, reason);
+    }
+
+    public static TradeIntent sell(Long botId, GammaMarketDto market, OutcomePrice price, BigDecimal shares, String strategyId, String ruleId, String reason) {
         Instant now = Instant.now();
         Instant updatedAt = price.updatedAt();
         Long ageMs = updatedAt == null ? null : Duration.between(updatedAt, now).toMillis();
         Long secondsToExpiry = market.endDate() == null ? null : Duration.between(now, market.endDate()).toSeconds();
         BigDecimal midpoint = midpoint(price.bid(), price.ask());
         BigDecimal amountUsd = price.bid() == null || shares == null ? null : shares.multiply(price.bid());
-
         return new TradeIntent(
+                botId,
                 strategyId,
                 ruleId,
                 market.id(),

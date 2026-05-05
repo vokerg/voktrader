@@ -46,7 +46,7 @@ class OrderResponse(BaseModel):
     averagePrice: Decimal | None = None
     filledShares: Decimal = Decimal("0")
     filledAmountUsd: Decimal = Decimal("0")
-    feeUsd: Decimal = Decimal("0")
+    feeUsd: Decimal | None = None
     message: str | None = None
     rawResponse: str | None = None
     exchangeTimestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -14,7 +14,7 @@ public class MarketPersistenceService {
     private final MarketRepository marketRepository;
 
     @Transactional
-    public MarketEntity saveOrUpdate(GammaMarketDto market) {
+    public synchronized MarketEntity saveOrUpdate(GammaMarketDto market) {
         Instant now = Instant.now();
 
         MarketEntity entity = marketRepository.findByPolymarketMarketId(market.id())
@@ -41,11 +41,11 @@ public class MarketPersistenceService {
         }
         entity.setLastSeenAt(now);
 
-        return marketRepository.save(entity);
+        return marketRepository.saveAndFlush(entity);
     }
 
     @Transactional
-    public void markResolved(
+    public synchronized void markResolved(
             String polymarketMarketId,
             String winningOutcome,
             String winningAssetId
@@ -75,7 +75,7 @@ public class MarketPersistenceService {
         entity.setResolvedAt(now);
         entity.setLastSeenAt(now);
 
-        marketRepository.save(entity);
+        marketRepository.saveAndFlush(entity);
     }
 
     @Transactional

@@ -2,6 +2,7 @@ package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -33,7 +34,8 @@ class PaperExecutionServiceTest {
             tradeOrderRepository,
             tradeFillRepository,
             riskCheckRepository,
-            eventRepository
+            eventRepository,
+            mock(TradingEventLogger.class)
     );
 
     @Test
@@ -55,7 +57,7 @@ class PaperExecutionServiceTest {
                 eq(ExecutionMode.PAPER),
                 eq(null),
                 eq(null),
-                eq("PAPER:market-id:up:cost-aware-momentum-paper:BUY")
+                eq("PAPER:default:market-id:up:cost-aware-momentum-paper:BUY")
         )).thenReturn(blocked);
 
         TradeExecutionResult result = service.execute(TradeIntent.buy(

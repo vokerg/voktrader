@@ -28,9 +28,7 @@ import java.time.Instant;
 public class TradeOrderEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    private Long tradeId;
+    private Long id; private Long botId; private Long tradeId;
     private String clientOrderId;
     private String idempotencyKey;
     private String exchangeOrderId;
@@ -96,7 +94,7 @@ public class TradeOrderEntity {
             String clientOrderId
     ) {
         TradeOrderEntity entity = new TradeOrderEntity();
-        entity.tradeId = tradeId;
+        entity.botId = intent.botId(); entity.tradeId = tradeId;
         entity.clientOrderId = clientOrderId;
         entity.idempotencyKey = clientOrderId;
         entity.strategyId = intent.strategyId();
@@ -219,7 +217,7 @@ public class TradeOrderEntity {
         return id;
     }
 
-    public Long getTradeId() {
+    public Long getBotId() { return botId; } public Long getTradeId() {
         return tradeId;
     }
 

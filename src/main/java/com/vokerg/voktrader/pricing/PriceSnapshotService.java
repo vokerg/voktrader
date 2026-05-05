@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.pricing;
 
+import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.market.MarketEntity;
 import com.vokerg.voktrader.market.MarketRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class PriceSnapshotService {
 
         priceSnapshotRepository.save(PriceSnapshotEntity.snapshot(
                 findMarket(marketId),
+                BotRuntimeContextHolder.currentBotId().orElse(null),
                 parseMarketId(marketId),
                 remaining == null ? null : remaining.getSeconds(),
                 up,
