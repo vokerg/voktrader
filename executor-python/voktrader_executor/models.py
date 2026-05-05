@@ -27,6 +27,7 @@ class OrderCommand(BaseModel):
     shares: Decimal | None = None
     limitPrice: Decimal = Field(gt=Decimal("0"), lt=Decimal("1"))
     timeInForce: str = "FOK"
+    postOnly: bool = False
     dryRun: bool = True
     decisionAt: datetime | None = None
 

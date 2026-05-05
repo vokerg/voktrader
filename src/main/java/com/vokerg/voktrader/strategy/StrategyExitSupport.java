@@ -40,7 +40,23 @@ public class StrategyExitSupport {
             PriceRecorder priceRecorder,
             ExitEvaluator evaluator
     ) {
-        evaluateOpenTrades(
+        evaluateCurrentMarketOpenTradesWithDecision(
+                strategyId,
+                ruleId,
+                minimumProfitUsd,
+                priceRecorder,
+                analysis -> evaluator.evaluate(analysis).map(ExitDecision::sellNow)
+        );
+    }
+
+    public void evaluateCurrentMarketOpenTradesWithDecision(
+            String strategyId,
+            String ruleId,
+            BigDecimal minimumProfitUsd,
+            PriceRecorder priceRecorder,
+            ExitDecisionEvaluator evaluator
+    ) {
+        evaluateOpenTradesWithDecision(
                 strategyId,
                 ruleId,
                 trackedMarketState.currentMarket().orElse(null),
@@ -57,6 +73,24 @@ public class StrategyExitSupport {
             BigDecimal minimumProfitUsd,
             PriceRecorder priceRecorder,
             ExitEvaluator evaluator
+    ) {
+        evaluateOpenTradesWithDecision(
+                strategyId,
+                ruleId,
+                market,
+                minimumProfitUsd,
+                priceRecorder,
+                analysis -> evaluator.evaluate(analysis).map(ExitDecision::sellNow)
+        );
+    }
+
+    public void evaluateOpenTradesWithDecision(
+            String strategyId,
+            String ruleId,
+            GammaMarketDto market,
+            BigDecimal minimumProfitUsd,
+            PriceRecorder priceRecorder,
+            ExitDecisionEvaluator evaluator
     ) {
         if (market == null || market.id() == null) {
             return;
@@ -79,7 +113,33 @@ public class StrategyExitSupport {
             );
 
             evaluator.evaluate(new ExitAnalysis(market, trade, price, mid(price), economy))
-                    .ifPresent(reason -> {
+                    .ifPresent(decision -> {
+                        if (decision.action() == ExitAction.WAIT_FOR_RESOLUTION) {
+                            eventLogger.execution(
+                                    "EXIT_WAIT_FOR_RESOLUTION",
+                                    "EXIT",
+                                    strategyId,
+                                    ruleId,
+                                    trade.getBotId(),
+                                    market.id(),
+                                    price.tokenId(),
+                                    price.outcome(),
+                                    decision.reason(),
+                                    TelemetryData.data(
+                                            "tradeId", trade.getId(),
+                                            "entryAvgPrice", trade.getEntryAvgPrice(),
+                                            "entryShares", trade.getEntryFilledShares(),
+                                            "exitBid", price.bid(),
+                                            "estimatedNetPnlUsd", economy.estimatedNetPnlUsd(),
+                                            "minimumProfitUsd", economy.minimumProfitUsd(),
+                                            "secondsToExpiry", market.endDate() == null ? null : java.time.Duration.between(java.time.Instant.now(), market.endDate()).toSeconds(),
+                                            "action", decision.action()
+                                    ),
+                                    true
+                            );
+                            return;
+                        }
+                        String reason = decision.reason();
                         eventLogger.exitSignal(
                                 strategyId,
                                 ruleId,
@@ -160,6 +220,11 @@ public class StrategyExitSupport {
     }
 
     @FunctionalInterface
+    public interface ExitDecisionEvaluator {
+        Optional<ExitDecision> evaluate(ExitAnalysis analysis);
+    }
+
+    @FunctionalInterface
     public interface PriceRecorder {
         void record(OutcomePrice price);
     }
@@ -171,5 +236,33 @@ public class StrategyExitSupport {
             BigDecimal mid,
             ExitEconomy economy
     ) {
+        public long secondsToExpiry() {
+            if (market == null || market.endDate() == null) {
+                return Long.MAX_VALUE;
+            }
+            return java.time.Duration.between(java.time.Instant.now(), market.endDate()).toSeconds();
+        }
+
+        public boolean canWaitForResolutionWithin(long seconds) {
+            return secondsToExpiry() <= seconds;
+        }
+    }
+
+    public enum ExitAction {
+        SELL_NOW,
+        WAIT_FOR_RESOLUTION
+    }
+
+    public record ExitDecision(
+            ExitAction action,
+            String reason
+    ) {
+        public static ExitDecision sellNow(String reason) {
+            return new ExitDecision(ExitAction.SELL_NOW, reason);
+        }
+
+        public static ExitDecision waitForResolution(String reason) {
+            return new ExitDecision(ExitAction.WAIT_FOR_RESOLUTION, reason);
+        }
     }
 }

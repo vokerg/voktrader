@@ -52,7 +52,7 @@ def health() -> dict[str, object]:
 def create_order(command: OrderCommand, _: None = Depends(require_auth)) -> OrderResponse:
     effective_dry_run = command.dryRun or settings.executor_dry_run
     logger.info(
-        "EXECUTOR ORDER RECEIVED: dryRun=%s strategy=%s marketId=%s outcome=%s tokenId=%s side=%s amountUsd=%s shares=%s limitPrice=%s tif=%s idempotencyKey=%s",
+        "EXECUTOR ORDER RECEIVED: dryRun=%s strategy=%s marketId=%s outcome=%s tokenId=%s side=%s amountUsd=%s shares=%s limitPrice=%s tif=%s postOnly=%s idempotencyKey=%s",
         effective_dry_run,
         command.strategyId,
         command.marketId,
@@ -63,6 +63,7 @@ def create_order(command: OrderCommand, _: None = Depends(require_auth)) -> Orde
         command.shares,
         command.limitPrice,
         command.timeInForce,
+        command.postOnly,
         command.idempotencyKey,
     )
 

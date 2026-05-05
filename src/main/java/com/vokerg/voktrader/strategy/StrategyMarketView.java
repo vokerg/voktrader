@@ -14,9 +14,10 @@ import java.util.Optional;
  * fee services. The intent is to make strategy code small and explicit: choose an outcome, inspect price,
  * inspect book depth, compare taker/maker costs, then return a decision.</p>
  *
- * <p>Important execution note: the current router submits FOK-style intents. The view exposes maker economics
- * because they are useful for comparing edge and future strategy work, but a strategy should only assume taker
- * execution is actually available until the execution layer supports maker orders end to end.</p>
+ * <p>Order style note: strategies can now express both immediate taker-style orders and resting maker-style
+ * orders through {@link StrategyEntrySupport.EntrySignal}. FOK/FAK should be treated as executable-now taker
+ * intents. GTC/GTD maker intents can rest on the book and may avoid taker fees, but live use requires order
+ * reconciliation and cancellation policy because a resting order may remain unfilled.</p>
  */
 public interface StrategyMarketView {
 

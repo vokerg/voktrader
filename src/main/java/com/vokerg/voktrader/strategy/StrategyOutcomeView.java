@@ -19,7 +19,7 @@ import java.util.Optional;
  *     <li>{@link #estimateTakerBuy(BigDecimal)} walks asks and estimates whether a FOK/taker buy can fill.</li>
  *     <li>{@link #estimateTakerSell(BigDecimal)} walks bids and estimates whether a FOK/taker sell can fill.</li>
  *     <li>{@link #estimateTakerFee(FillEstimate)} estimates fee from the estimated filled shares and average price.</li>
- *     <li>{@link #estimateMakerBuyFee(BigDecimal)} estimates fee for posting at best bid; use as comparison only until maker execution exists.</li>
+ *     <li>{@link #estimateMakerBuyFee(BigDecimal)} estimates fee for posting at best bid as a resting maker order.</li>
  * </ul>
  */
 public interface StrategyOutcomeView {
@@ -75,6 +75,6 @@ public interface StrategyOutcomeView {
     /** Taker fee estimate for a fill estimate produced by this view. */
     Optional<FeeEstimate> estimateTakerFee(FillEstimate estimate);
 
-    /** Maker fee estimate for buying at the current best bid. Comparison only until maker execution is implemented. */
+    /** Maker fee estimate for buying at the current best bid as a resting GTC/GTD-style order. */
     Optional<FeeEstimate> estimateMakerBuyFee(BigDecimal amountUsd);
 }

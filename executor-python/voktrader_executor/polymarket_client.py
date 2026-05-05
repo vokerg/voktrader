@@ -22,7 +22,7 @@ class PolymarketExecutor:
             return self._dry_run_response(command)
 
         client = self._get_client()
-        raw_response = self._submit_market_order(client, command)
+        raw_response = self._submit_order(client, command)
         return self._normalize_response(command, raw_response)
 
     def _validate_guardrails(self, command: OrderCommand) -> None:
@@ -77,6 +77,11 @@ class PolymarketExecutor:
         self._client = client
         return client
 
+    def _submit_order(self, client: Any, command: OrderCommand) -> Any:
+        if command.timeInForce.upper() in {"GTC", "GTD"} or command.postOnly:
+            return self._submit_limit_order(client, command)
+        return self._submit_market_order(client, command)
+
     def _submit_market_order(self, client: Any, command: OrderCommand) -> Any:
         from py_clob_client_v2 import MarketOrderArgs, OrderType, Side
 
@@ -96,6 +101,25 @@ class PolymarketExecutor:
 
         args = MarketOrderArgs(**kwargs)
         return client.create_and_post_market_order(args, order_type=order_type)
+
+    def _submit_limit_order(self, client: Any, command: OrderCommand) -> Any:
+        from py_clob_client_v2 import OrderArgs, OrderType, Side
+
+        side = Side.BUY if command.side == TradeSide.BUY else Side.SELL
+        order_type = getattr(OrderType, command.timeInForce.upper(), OrderType.GTC)
+        size = command.shares
+        if size is None and command.amountUsd is not None:
+            size = (command.amountUsd / command.limitPrice).quantize(Decimal("0.000001"))
+        if size is None or size <= 0:
+            raise ValueError("Limit orders require positive shares or amountUsd convertible to shares")
+
+        args = OrderArgs(
+            token_id=command.tokenId,
+            side=side,
+            price=float(command.limitPrice),
+            size=float(size),
+        )
+        return client.create_and_post_order(args, order_type=order_type, post_only=command.postOnly)
 
     def _normalize_response(self, command: OrderCommand, raw_response: Any) -> OrderResponse:
         data = raw_response if isinstance(raw_response, dict) else {}
@@ -180,17 +204,20 @@ class PolymarketExecutor:
             "limitPrice": str(command.limitPrice),
             "amountUsd": str(command.amountUsd) if command.amountUsd is not None else None,
             "shares": str(command.shares) if command.shares is not None else None,
+            "timeInForce": command.timeInForce,
+            "postOnly": command.postOnly,
         }
         return OrderResponse(
             accepted=True,
-            filled=True,
-            status="DRY_RUN_FILLED",
+            filled=not command.postOnly and command.timeInForce.upper() in {"FOK", "FAK"},
+            status="DRY_RUN_FILLED" if command.timeInForce.upper() in {"FOK", "FAK"} else "DRY_RUN_SUBMITTED",
             exchangeOrderId="dryrun-" + uuid4().hex,
             averagePrice=command.limitPrice,
-            filledShares=filled_shares or Decimal("0"),
-            filledAmountUsd=filled_amount or Decimal("0"),
+            filledShares=(filled_shares or Decimal("0")) if command.timeInForce.upper() in {"FOK", "FAK"} else Decimal("0"),
+            filledAmountUsd=(filled_amount or Decimal("0")) if command.timeInForce.upper() in {"FOK", "FAK"} else Decimal("0"),
             feeUsd=Decimal("0"),
-            message="dry-run fill; no exchange call was made",
+            message="dry-run fill; no exchange call was made" if command.timeInForce.upper() in {"FOK", "FAK"}
+            else "dry-run resting order submitted; no exchange call was made",
             rawResponse=json.dumps(payload, sort_keys=True),
         )
 

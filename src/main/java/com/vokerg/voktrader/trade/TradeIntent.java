@@ -57,6 +57,28 @@ public record TradeIntent(
     }
 
     public static TradeIntent buy(Long botId, GammaMarketDto market, OutcomePrice price, BigDecimal amountUsd, String strategyId, String ruleId, String reason) {
+        return buy(botId, market, price, amountUsd, TradeOrderType.FOK, price.ask(), strategyId, ruleId, reason);
+    }
+
+    public static TradeIntent buyMaker(GammaMarketDto market, OutcomePrice price, BigDecimal amountUsd, String strategyId, String ruleId, String reason) {
+        return buyMaker(BotRuntimeContextHolder.currentBotId().orElse(null), market, price, amountUsd, strategyId, ruleId, reason);
+    }
+
+    public static TradeIntent buyMaker(Long botId, GammaMarketDto market, OutcomePrice price, BigDecimal amountUsd, String strategyId, String ruleId, String reason) {
+        return buy(botId, market, price, amountUsd, TradeOrderType.GTC, price.bid(), strategyId, ruleId, reason);
+    }
+
+    public static TradeIntent buy(
+            Long botId,
+            GammaMarketDto market,
+            OutcomePrice price,
+            BigDecimal amountUsd,
+            TradeOrderType orderType,
+            BigDecimal limitPrice,
+            String strategyId,
+            String ruleId,
+            String reason
+    ) {
         Instant now = Instant.now();
         Instant updatedAt = price.updatedAt();
         Long ageMs = updatedAt == null ? null : Duration.between(updatedAt, now).toMillis();
@@ -75,8 +97,8 @@ public record TradeIntent(
                 TradeSide.BUY,
                 amountUsd,
                 null,
-                TradeOrderType.FOK,
-                price.ask(),
+                orderType,
+                limitPrice,
                 price.bid(),
                 price.ask(),
                 price.spread(),
@@ -95,12 +117,34 @@ public record TradeIntent(
     }
 
     public static TradeIntent sell(Long botId, GammaMarketDto market, OutcomePrice price, BigDecimal shares, String strategyId, String ruleId, String reason) {
+        return sell(botId, market, price, shares, TradeOrderType.FOK, price.bid(), strategyId, ruleId, reason);
+    }
+
+    public static TradeIntent sellMaker(GammaMarketDto market, OutcomePrice price, BigDecimal shares, String strategyId, String ruleId, String reason) {
+        return sellMaker(BotRuntimeContextHolder.currentBotId().orElse(null), market, price, shares, strategyId, ruleId, reason);
+    }
+
+    public static TradeIntent sellMaker(Long botId, GammaMarketDto market, OutcomePrice price, BigDecimal shares, String strategyId, String ruleId, String reason) {
+        return sell(botId, market, price, shares, TradeOrderType.GTC, price.ask(), strategyId, ruleId, reason);
+    }
+
+    public static TradeIntent sell(
+            Long botId,
+            GammaMarketDto market,
+            OutcomePrice price,
+            BigDecimal shares,
+            TradeOrderType orderType,
+            BigDecimal limitPrice,
+            String strategyId,
+            String ruleId,
+            String reason
+    ) {
         Instant now = Instant.now();
         Instant updatedAt = price.updatedAt();
         Long ageMs = updatedAt == null ? null : Duration.between(updatedAt, now).toMillis();
         Long secondsToExpiry = market.endDate() == null ? null : Duration.between(now, market.endDate()).toSeconds();
         BigDecimal midpoint = midpoint(price.bid(), price.ask());
-        BigDecimal amountUsd = price.bid() == null || shares == null ? null : shares.multiply(price.bid());
+        BigDecimal amountUsd = limitPrice == null || shares == null ? null : shares.multiply(limitPrice);
         return new TradeIntent(
                 botId,
                 strategyId,
@@ -114,8 +158,8 @@ public record TradeIntent(
                 TradeSide.SELL,
                 amountUsd,
                 shares,
-                TradeOrderType.FOK,
-                price.bid(),
+                orderType,
+                limitPrice,
                 price.bid(),
                 price.ask(),
                 price.spread(),

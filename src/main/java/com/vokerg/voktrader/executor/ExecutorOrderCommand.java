@@ -21,6 +21,7 @@ public record ExecutorOrderCommand(
         BigDecimal shares,
         BigDecimal limitPrice,
         String timeInForce,
+        boolean postOnly,
         boolean dryRun,
         Instant decisionAt
 ) {
@@ -40,6 +41,7 @@ public record ExecutorOrderCommand(
                 intent.shares(),
                 intent.expectedPrice(),
                 intent.orderType().name(),
+                intent.orderType().prefersMaker(),
                 dryRun,
                 intent.decisionAt()
         );

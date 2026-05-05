@@ -1,21 +1,21 @@
 package com.vokerg.voktrader.strategy;
 
-import com.vokerg.voktrader.economy.FeeEstimate;
+import com.vokerg.voktrader.economy.ExitEconomy;
 import com.vokerg.voktrader.economy.LiquidityRole;
 import com.vokerg.voktrader.economy.TradeEconomy;
 import com.vokerg.voktrader.market.TrackedMarketState;
-import com.vokerg.voktrader.marketdata.FillEstimate;
 import com.vokerg.voktrader.marketdata.LatestPriceState;
-import com.vokerg.voktrader.marketdata.OrderBookSide;
 import com.vokerg.voktrader.marketdata.OutcomeOrderBook;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.ExecutionRouter;
+import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradeOrderStatus;
+import com.vokerg.voktrader.trade.TradeOrderType;
 import com.vokerg.voktrader.trade.TradeRepository;
 import com.vokerg.voktrader.trade.TradeStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,12 +32,13 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class OrderBookLiquidityStrategyTest {
+class MakerResolutionCarryStrategyTest {
     private final LatestPriceState latestPriceState = mock(LatestPriceState.class);
     private final TrackedMarketState trackedMarketState = mock(TrackedMarketState.class);
     private final StrategyTimeWindow strategyTimeWindow = mock(StrategyTimeWindow.class);
@@ -48,37 +49,14 @@ class OrderBookLiquidityStrategyTest {
     private final StrategyMarketDataProvider marketDataProvider = mock(StrategyMarketDataProvider.class);
     private final MutableClock clock = new MutableClock(Instant.parse("2026-04-30T10:00:00Z"));
     private GammaMarketDto market;
-    private OrderBookLiquidityStrategy strategy;
+    private MakerResolutionCarryStrategy strategy;
 
     @BeforeEach
     void setUp() {
-        market = new GammaMarketDto(
-                "market-id",
-                "BTC Up or Down?",
-                "condition-id",
-                "btc-updown",
-                clock.instant().plusSeconds(240),
-                true,
-                false,
-                true,
-                false,
-                null,
-                null,
-                null,
-                null
-        );
+        market = marketEndingIn(240);
         StrategyTradeSupport tradeSupport = new StrategyTradeSupport(tradeRepository);
-        StrategyProperties properties = new StrategyProperties(
-                OrderBookLiquidityStrategy.ID,
-                1000L,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        );
-        strategy = new OrderBookLiquidityStrategy(
+        StrategyProperties properties = new StrategyProperties(MakerResolutionCarryStrategy.ID, 1000L, null, null, null, null, null, null);
+        strategy = new MakerResolutionCarryStrategy(
                 new StrategyEntrySupport(
                         latestPriceState,
                         trackedMarketState,
@@ -91,20 +69,15 @@ class OrderBookLiquidityStrategyTest {
                 ),
                 new StrategyExitSupport(trackedMarketState, latestPriceState, tradeSupport, executionRouter, tradeEconomy, eventLogger),
                 tradeSupport,
-                marketDataProvider,
                 properties,
                 clock
         );
-
         when(strategyTimeWindow.isInsideTradingWindow()).thenReturn(true);
         when(trackedMarketState.currentMarket()).thenReturn(Optional.of(market));
-        when(tradeRepository.findByStrategyIdAndStatus(OrderBookLiquidityStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of());
-        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(
-                OrderBookLiquidityStrategy.ID,
-                market.id(),
-                TradeStatus.OPEN
-        )).thenReturn(Optional.empty());
-        when(tradeRepository.countByStrategyIdAndMarketId(OrderBookLiquidityStrategy.ID, market.id())).thenReturn(0L);
+        when(tradeRepository.findByStrategyIdAndStatus(MakerResolutionCarryStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of());
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(MakerResolutionCarryStrategy.ID, market.id(), TradeStatus.OPEN))
+                .thenReturn(Optional.empty());
+        when(tradeRepository.countByStrategyIdAndMarketId(MakerResolutionCarryStrategy.ID, market.id())).thenReturn(0L);
         when(tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(any(), any(), any()))
                 .thenReturn(Optional.empty());
         when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(any(), any(), any(), any()))
@@ -120,85 +93,79 @@ class OrderBookLiquidityStrategyTest {
     }
 
     @Test
-    void buysOnlyAfterMomentumAndOrderBookLiquidityPass() {
+    void makerEntryRoutesGtcAtBid() {
         OutcomePrice upStart = price("up", "Up", "0.48", "0.50");
         OutcomePrice downStart = price("down", "Down", "0.50", "0.52");
-        publish(upStart, downStart, view(upStart, false), view(downStart, false));
-
+        publish(upStart, downStart, view(upStart, true), view(downStart, false));
         strategy.tick();
-
-        verify(executionRouter, never()).route(any());
 
         clock.advance(Duration.ofSeconds(6));
         OutcomePrice upNow = price("up", "Up", "0.51", "0.53");
         OutcomePrice downNow = price("down", "Down", "0.47", "0.49");
         publish(upNow, downNow, view(upNow, true), view(downNow, false));
-
         strategy.tick();
 
         ArgumentCaptor<TradeIntent> intent = ArgumentCaptor.forClass(TradeIntent.class);
         verify(executionRouter).route(intent.capture());
-        assertThat(intent.getValue().strategyId()).isEqualTo(OrderBookLiquidityStrategy.ID);
-        assertThat(intent.getValue().tokenId()).isEqualTo("up");
-        assertThat(intent.getValue().limitPrice()).isEqualByComparingTo("0.53500000");
-        assertThat(intent.getValue().observedSpread()).isEqualByComparingTo("0.02500000");
+        assertThat(intent.getValue().orderType()).isEqualTo(TradeOrderType.GTC);
+        assertThat(intent.getValue().limitPrice()).isEqualByComparingTo("0.51");
     }
 
-    private void publish(
-            OutcomePrice up,
-            OutcomePrice down,
-            StrategyOutcomeView upView,
-            StrategyOutcomeView downView
-    ) {
+    @Test
+    void nearExpiryPoorExitExplicitlyWaitsForResolution() {
+        market = marketEndingIn(10);
+        when(trackedMarketState.currentMarket()).thenReturn(Optional.of(market));
+        TradeEntity open = openTrade("up", "Up", "0.51", "1.96078431");
+        when(tradeRepository.findByStrategyIdAndStatus(MakerResolutionCarryStrategy.ID, TradeStatus.OPEN)).thenReturn(List.of(open));
+        when(latestPriceState.byTokenId("up")).thenReturn(Optional.of(price("up", "Up", "0.30", "0.32")));
+        when(tradeEconomy.estimateExit(any(TradeEntity.class), any(BigDecimal.class), any(BigDecimal.class), any()))
+                .thenReturn(new ExitEconomy(
+                        LiquidityRole.TAKER,
+                        new BigDecimal("0.58823529"),
+                        BigDecimal.ZERO,
+                        BigDecimal.ZERO,
+                        new BigDecimal("-0.41176471"),
+                        new BigDecimal("0.08"),
+                        false
+                ));
+
+        strategy.tick();
+
+        verify(executionRouter, never()).route(any());
+        verify(eventLogger).execution(
+                eq("EXIT_WAIT_FOR_RESOLUTION"),
+                eq("EXIT"),
+                eq(MakerResolutionCarryStrategy.ID),
+                eq("maker-resolution-carry"),
+                any(),
+                eq(market.id()),
+                eq("up"),
+                eq("Up"),
+                any(),
+                any(),
+                eq(true)
+        );
+    }
+
+    private void publish(OutcomePrice up, OutcomePrice down, StrategyOutcomeView upView, StrategyOutcomeView downView) {
         when(latestPriceState.byOutcome("Up")).thenReturn(Optional.of(up));
         when(latestPriceState.byOutcome("Down")).thenReturn(Optional.of(down));
         StrategyMarketView marketView = mock(StrategyMarketView.class);
-        when(marketView.market()).thenReturn(market);
-        when(marketView.now()).thenReturn(clock.instant());
         when(marketView.up()).thenReturn(upView);
         when(marketView.down()).thenReturn(downView);
-        when(marketView.outcomes()).thenReturn(List.of(upView, downView));
-        when(marketView.token("up")).thenReturn(Optional.of(upView));
-        when(marketView.token("down")).thenReturn(Optional.of(downView));
         when(marketDataProvider.currentUpDownMarket()).thenReturn(Optional.of(marketView));
     }
 
     private StrategyOutcomeView view(OutcomePrice price, boolean liquid) {
         StrategyOutcomeView view = mock(StrategyOutcomeView.class);
-        when(view.outcome()).thenReturn(price.outcome());
-        when(view.tokenId()).thenReturn(price.tokenId());
         when(view.price()).thenReturn(price);
+        when(view.tokenId()).thenReturn(price.tokenId());
+        when(view.outcome()).thenReturn(price.outcome());
         when(view.mid()).thenReturn(price.bid().add(price.ask()).divide(new BigDecimal("2"), 8, java.math.RoundingMode.HALF_UP));
         when(view.spread()).thenReturn(price.spread());
         when(view.orderBook()).thenReturn(Optional.of(mock(OutcomeOrderBook.class)));
         when(view.bookAgeMs()).thenReturn(Optional.of(100L));
         when(view.bidDepthWithin(any())).thenReturn(new BigDecimal(liquid ? "5.0" : "1.0"));
-        when(view.askDepthWithin(any())).thenReturn(new BigDecimal(liquid ? "5.0" : "1.0"));
-        FillEstimate fill = new FillEstimate(
-                price.tokenId(),
-                price.outcome(),
-                OrderBookSide.BUY,
-                new BigDecimal("1.00"),
-                null,
-                new BigDecimal("1.86915888"),
-                new BigDecimal("1.00"),
-                new BigDecimal("0.53500000"),
-                new BigDecimal("0.54"),
-                liquid,
-                2,
-                clock.instant()
-        );
-        when(view.estimateTakerBuy(any())).thenReturn(Optional.of(fill));
-        when(view.estimateTakerFee(fill)).thenReturn(Optional.of(new FeeEstimate(
-                LiquidityRole.TAKER,
-                new BigDecimal("0.072"),
-                new BigDecimal("0.02000000")
-        )));
-        when(view.estimateMakerBuyFee(any())).thenReturn(Optional.of(new FeeEstimate(
-                LiquidityRole.MAKER,
-                BigDecimal.ZERO,
-                BigDecimal.ZERO
-        )));
         return view;
     }
 
@@ -208,30 +175,30 @@ class OrderBookLiquidityStrategyTest {
         return new OutcomePrice(tokenId, outcome, bidValue, askValue, askValue.subtract(bidValue), clock.instant());
     }
 
+    private TradeEntity openTrade(String tokenId, String outcome, String entryPrice, String shares) {
+        TradeEntity trade = TradeEntity.fromIntent(TradeIntent.buyMaker(
+                null,
+                market,
+                price(tokenId, outcome, entryPrice, new BigDecimal(entryPrice).add(new BigDecimal("0.02")).toPlainString()),
+                new BigDecimal("1.00"),
+                MakerResolutionCarryStrategy.ID,
+                "maker-resolution-carry",
+                "test"
+        ), ExecutionMode.PAPER);
+        trade.markOpen(new BigDecimal(entryPrice), new BigDecimal(shares), new BigDecimal("1.00"), BigDecimal.ZERO, clock.instant().minusSeconds(5));
+        return trade;
+    }
+
+    private GammaMarketDto marketEndingIn(long seconds) {
+        return new GammaMarketDto("market-id", "BTC Up or Down?", "condition-id", "btc-updown", clock.instant().plusSeconds(seconds), true, false, true, false, null, null, null, null);
+    }
+
     private static class MutableClock extends Clock {
         private Instant instant;
-
-        private MutableClock(Instant instant) {
-            this.instant = instant;
-        }
-
-        void advance(Duration duration) {
-            instant = instant.plus(duration);
-        }
-
-        @Override
-        public ZoneId getZone() {
-            return ZoneId.of("UTC");
-        }
-
-        @Override
-        public Clock withZone(ZoneId zone) {
-            return this;
-        }
-
-        @Override
-        public Instant instant() {
-            return instant;
-        }
+        private MutableClock(Instant instant) { this.instant = instant; }
+        void advance(Duration duration) { instant = instant.plus(duration); }
+        @Override public ZoneId getZone() { return ZoneId.of("UTC"); }
+        @Override public Clock withZone(ZoneId zone) { return this; }
+        @Override public Instant instant() { return instant; }
     }
 }

@@ -24,6 +24,10 @@ public interface TradingStrategy {
 
     /**
      * One strategy evaluation cycle.
+     *
+     * <p>A strategy can now express three distinct outcomes during a tick:
+     * no decision, route an order intent, or deliberately wait for market resolution through
+     * {@link StrategyExitSupport.ExitDecision#waitForResolution(String)}.</p>
      */
     void tick();
 

@@ -8,6 +8,7 @@ import com.vokerg.voktrader.telemetry.TelemetryData;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import com.vokerg.voktrader.trade.ExecutionRouter;
 import com.vokerg.voktrader.trade.TradeIntent;
+import com.vokerg.voktrader.trade.TradeOrderType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -222,9 +223,12 @@ public class StrategyEntrySupport {
 
     private void routeBuy(String strategyId, String ruleId, GammaMarketDto market, EntrySignal signal) {
         var result = executionRouter.route(TradeIntent.buy(
+                tradeSupport.currentBotId(),
                 market,
                 signal.candidate(),
                 signal.paperSizeUsd(),
+                signal.orderType(),
+                signal.limitPrice() == null ? signal.candidate().ask() : signal.limitPrice(),
                 strategyId,
                 ruleId,
                 signal.reason()
@@ -289,8 +293,17 @@ public class StrategyEntrySupport {
     public record EntrySignal(
             OutcomePrice candidate,
             BigDecimal paperSizeUsd,
+            TradeOrderType orderType,
+            BigDecimal limitPrice,
             String reason
     ) {
+        public EntrySignal(OutcomePrice candidate, BigDecimal paperSizeUsd, String reason) {
+            this(candidate, paperSizeUsd, TradeOrderType.FOK, candidate == null ? null : candidate.ask(), reason);
+        }
+
+        public static EntrySignal makerBuy(OutcomePrice candidate, BigDecimal paperSizeUsd, String reason) {
+            return new EntrySignal(candidate, paperSizeUsd, TradeOrderType.GTC, candidate == null ? null : candidate.bid(), reason);
+        }
     }
 
     private record LegacyStrategyMarketView(

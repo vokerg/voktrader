@@ -40,6 +40,7 @@ curl -sS \
     "amountUsd":"1.00",
     "limitPrice":"0.50",
     "timeInForce":"FOK",
+    "postOnly":false,
     "dryRun":true
   }' \
   http://127.0.0.1:8099/v1/orders
@@ -55,4 +56,6 @@ Only after dry-run testing:
 4. Keep `MAX_ORDER_AMOUNT_USD` tiny until reconciliation and operations are proven.
 5. Start Java with `spring.profiles.active=live`.
 
-This package does not add a background order reconciliation worker. With `require-immediate-fill=true`, accepted-but-unfilled live orders are treated as failed in the JVM ledger to avoid pretending there is an open filled position.
+For taker-style FOK/FAK orders the sidecar uses the SDK market-order path. For resting maker-style GTC/GTD orders it uses the SDK limit-order path and sends `postOnly=true` when requested by the JVM.
+
+This package does not add a background order reconciliation worker. With `require-immediate-fill=true`, accepted-but-unfilled live orders are treated as failed in the JVM ledger to avoid pretending there is an open filled position. To experiment with maker orders, use dry-run or disable immediate-fill only when you also have a reconciliation plan.

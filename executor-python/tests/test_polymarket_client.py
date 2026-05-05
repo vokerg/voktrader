@@ -135,3 +135,47 @@ def test_dry_run_response_keeps_explicit_zero_fee():
     response = PolymarketExecutor(Settings())._dry_run_response(command)
 
     assert response.feeUsd == Decimal("0")
+
+
+def test_dry_run_gtc_post_only_is_submitted_not_filled():
+    command = OrderCommand(
+        idempotencyKey="maker-test",
+        strategyId="maker-resolution-carry",
+        marketId="2127144",
+        tokenId="token",
+        side="BUY",
+        amountUsd=Decimal("1.00"),
+        limitPrice=Decimal("0.50"),
+        timeInForce="GTC",
+        postOnly=True,
+        dryRun=True,
+    )
+
+    response = PolymarketExecutor(Settings())._dry_run_response(command)
+
+    assert response.accepted is True
+    assert response.filled is False
+    assert response.status == "DRY_RUN_SUBMITTED"
+    assert response.filledShares == Decimal("0")
+    assert response.filledAmountUsd == Decimal("0")
+
+
+def test_limit_order_rejects_when_size_cannot_be_derived():
+    command = OrderCommand(
+        idempotencyKey="maker-test",
+        strategyId="maker-resolution-carry",
+        marketId="2127144",
+        tokenId="token",
+        side="SELL",
+        limitPrice=Decimal("0.55"),
+        timeInForce="GTC",
+        postOnly=True,
+        dryRun=False,
+    )
+
+    try:
+        PolymarketExecutor(Settings())._submit_limit_order(object(), command)
+    except ValueError as exc:
+        assert str(exc) == "Limit orders require positive shares or amountUsd convertible to shares"
+    else:
+        raise AssertionError("Expected missing size to be rejected")

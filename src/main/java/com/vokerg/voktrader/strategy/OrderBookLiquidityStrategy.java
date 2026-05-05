@@ -85,7 +85,7 @@ public class OrderBookLiquidityStrategy implements TradingStrategy {
                 "Best suited for avoiding paper wins that would fail in a thin real book. It is explicit about fill completeness, slippage, depth, and commissions. "
                         + "It is also the clearest starting point for AI agents because the strategy-facing API lists most available building blocks.",
                 "Weak when the visible order book is stale, spoofed, or changes faster than the tick cadence. It may reject good trades if depth thresholds are too strict. "
-                        + "It still routes through the current FOK/taker-style execution path; maker fee estimates are informational until maker execution is implemented. "
+                        + "It intentionally routes through the FOK/taker-style execution path even though maker estimates are available, because this strategy optimizes immediate fill quality. "
                         + "It can also overfit to near-top depth and ignore broader market structure unless additional signals are added.",
                 "Tune near-top range, minimum near depths, maximum taker slippage, and worst-price cap together. For live work, next improvement should be sell-side book-walk exits and maker-order support."
         );
