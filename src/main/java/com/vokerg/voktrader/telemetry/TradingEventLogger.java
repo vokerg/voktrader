@@ -1,7 +1,5 @@
 package com.vokerg.voktrader.telemetry;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.pricing.OutcomePrice;
@@ -10,6 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
 import java.util.Map;
@@ -185,7 +185,7 @@ public class TradingEventLogger {
             } else {
                 events.debug(json);
             }
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             events.warn("Could not serialize trading event type={} reason={}", event.type(), event.reason(), e);
         }
     }

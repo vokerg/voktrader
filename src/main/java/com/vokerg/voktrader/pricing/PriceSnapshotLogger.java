@@ -91,7 +91,7 @@ public class PriceSnapshotLogger {
                         "downAsk", down.ask(),
                         "downSpread", down.spread()
                 ),
-                true
+                false
         );
 
         priceSnapshotService.saveSnapshot(marketId, remainingDuration, up, down, capturedAt);
