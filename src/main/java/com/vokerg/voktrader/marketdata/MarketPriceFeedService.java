@@ -27,6 +27,7 @@ public class MarketPriceFeedService {
     private final ClobClient clobClient;
     private final PolymarketWebSocketClient webSocketClient;
     private final MarketOrderBookMonitor orderBookMonitor;
+    private final PriceSnapshotService priceSnapshotService;
     private final TradingEventLogger eventLogger;
 
     private final Map<String, MarketPriceFeed> feedsByMarketId = new ConcurrentHashMap<>();
@@ -82,6 +83,11 @@ public class MarketPriceFeedService {
     public void shutdown() {
         feedsByMarketId.values().forEach(MarketPriceFeed::stop);
         feedsByMarketId.clear();
+    }
+
+    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 2000)
+    public void snapshotFeeds() {
+        feedsByMarketId.values().forEach(MarketPriceFeed::snapshot);
     }
 
     private final class MarketPriceFeed {
@@ -157,6 +163,55 @@ public class MarketPriceFeedService {
                     Map.of(),
                     false
             );
+        }
+
+        private void snapshot() {
+            OutcomePrice up = latestPriceState.byOutcome("Up").orElse(null);
+            OutcomePrice down = latestPriceState.byOutcome("Down").orElse(null);
+            if (up == null || down == null) {
+                return;
+            }
+
+            Instant capturedAt = Instant.now();
+            Duration remainingDuration = market.endDate() == null
+                    ? null
+                    : Duration.between(capturedAt, market.endDate());
+            String remaining = formatRemaining(remainingDuration);
+
+            log.info(
+                    "{}SNAPSHOT scope=market marketId={} remaining={} | Up {}/{} spread={} | Down {}/{} spread={}{}",
+                    LogColors.SNAPSHOT,
+                    market.id(),
+                    remaining,
+                    up.bid(),
+                    up.ask(),
+                    up.spread(),
+                    down.bid(),
+                    down.ask(),
+                    down.spread(),
+                    LogColors.RESET
+            );
+            eventLogger.market(
+                    "PRICE_SNAPSHOT",
+                    null,
+                    market,
+                    "scheduled market feed snapshot",
+                    TelemetryData.data(
+                            "scope", "market",
+                            "remaining", remaining,
+                            "remainingSeconds", remainingDuration == null ? null : remainingDuration.getSeconds(),
+                            "upTokenId", up.tokenId(),
+                            "upBid", up.bid(),
+                            "upAsk", up.ask(),
+                            "upSpread", up.spread(),
+                            "downTokenId", down.tokenId(),
+                            "downBid", down.bid(),
+                            "downAsk", down.ask(),
+                            "downSpread", down.spread()
+                    ),
+                    false
+            );
+            priceSnapshotService.saveSnapshot(null, market.id(), remainingDuration, up, down, capturedAt);
         }
 
         private void seedStateFromRestOrderBooks() {
@@ -304,5 +359,27 @@ public class MarketPriceFeedService {
                 return Optional.empty();
             }
         }
+    }
+
+    private String formatRemaining(Duration remaining) {
+        if (remaining == null) {
+            return null;
+        }
+
+        long seconds = remaining.getSeconds();
+        boolean negative = seconds < 0;
+        seconds = Math.abs(seconds);
+
+        long hours = seconds / 3600;
+        long minutes = (seconds % 3600) / 60;
+        long remainingSeconds = seconds % 60;
+
+        String prefix = negative ? "-" : "";
+
+        if (hours > 0) {
+            return "%s%dh%02dm%02ds".formatted(prefix, hours, minutes, remainingSeconds);
+        }
+
+        return "%s%dm%02ds".formatted(prefix, minutes, remainingSeconds);
     }
 }
