@@ -38,7 +38,21 @@ public class BotConfigService {
 
     @Transactional
     public BotConfigEntity create(String name, MarketFamily family, String strategyId, boolean enabled) {
-        return repository.save(BotConfigEntity.create(name, family, strategyId, enabled));
+        String normalizedName = name == null ? null : name.trim();
+        return repository.findByName(normalizedName)
+                .map(existing -> {
+                    existing.switchTo(family, strategyId, enabled);
+                    log.info(
+                            "Updated existing bot config during create: id={} name={} family={} strategy={} enabled={}",
+                            existing.getId(),
+                            existing.getName(),
+                            existing.getMarketFamily(),
+                            existing.getStrategyId(),
+                            existing.isEnabled()
+                    );
+                    return repository.save(existing);
+                })
+                .orElseGet(() -> repository.save(BotConfigEntity.create(normalizedName, family, strategyId, enabled)));
     }
 
     @Transactional
