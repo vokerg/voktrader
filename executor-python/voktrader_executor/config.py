@@ -19,4 +19,4 @@ class Settings(BaseSettings):
     polymarket_api_passphrase: str | None = Field(default=None, alias="POLYMARKET_API_PASSPHRASE")
 
     max_order_amount_usd: float = Field(default=5.0, alias="MAX_ORDER_AMOUNT_USD")
-    require_fok: bool = Field(default=True, alias="REQUIRE_FOK")
+    require_fok: bool = Field(default=False, alias="REQUIRE_FOK")

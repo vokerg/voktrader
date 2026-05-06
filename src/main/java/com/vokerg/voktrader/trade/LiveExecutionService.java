@@ -40,6 +40,14 @@ public class LiveExecutionService {
     }
 
     private TradeExecutionResult executeBuy(TradeIntent intent, ExecutionMode mode) {
+        if (intent.orderType().canRestOnBook() && executorProperties.isRequireImmediateFill()) {
+            String message = "LIVE maker entry rejected before executor call: "
+                    + "orderType=" + intent.orderType()
+                    + " can rest on the book while voktrader.executor.require-immediate-fill=true";
+            emitRejected(intent, mode, null, null, message, TelemetryData.data("orderType", intent.orderType()));
+            return TradeExecutionResult.rejected(mode, null, null, null, null, message);
+        }
+
         String idempotencyKey = idempotencyKey(intent, mode);
         RiskAssessment risk = riskCheckService.assess(intent, mode, null, null, idempotencyKey);
         riskCheckRepository.saveAll(risk.checks());
@@ -150,6 +158,13 @@ public class LiveExecutionService {
                     TelemetryData.data("shares", intent.shares()));
             return TradeExecutionResult.rejected(mode, null, null, null, null,
                     "LIVE exit rejected before executor call: sell intent has no positive shares");
+        }
+        if (intent.orderType().canRestOnBook() && executorProperties.isRequireImmediateFill()) {
+            String message = "LIVE maker exit rejected before executor call: "
+                    + "orderType=" + intent.orderType()
+                    + " can rest on the book while voktrader.executor.require-immediate-fill=true";
+            emitRejected(intent, mode, null, null, message, TelemetryData.data("orderType", intent.orderType()));
+            return TradeExecutionResult.rejected(mode, null, null, null, null, message);
         }
 
         TradeEntity trade = findLatestTokenTrade(intent, TradeStatus.OPEN).orElse(null);

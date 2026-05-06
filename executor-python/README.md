@@ -8,8 +8,8 @@ This sidecar is intentionally separated from the JVM strategy/risk engine. The J
 - Java live profile has `voktrader.executor.enabled=true` and `voktrader.executor.dry-run=false`.
 - Sidecar has `EXECUTOR_DRY_RUN=false`.
 - Sidecar locally caps `MAX_ORDER_AMOUNT_USD=5`.
-- Sidecar defaults to FOK-only orders through `REQUIRE_FOK=true`.
-- The JVM live lifecycle defaults to `voktrader.executor.require-immediate-fill=true` because no async exchange-reconciliation loop is included here.
+- Sidecar lets the JVM strategy choose order type through `REQUIRE_FOK=false`.
+- The JVM live lifecycle lets resting maker orders enter `ENTRY_PENDING` through `voktrader.executor.require-immediate-fill=false`.
 
 With the auth values blank, the sidecar is live-ready but cannot place an order. A trade attempt should fail with `POLYMARKET_PRIVATE_KEY is required when EXECUTOR_DRY_RUN=false`.
 
@@ -58,4 +58,4 @@ Only after dry-run testing:
 
 For taker-style FOK/FAK orders the sidecar uses the SDK market-order path. For resting maker-style GTC/GTD orders it uses the SDK limit-order path and sends `postOnly=true` when requested by the JVM.
 
-This package does not add a background order reconciliation worker. With `require-immediate-fill=true`, accepted-but-unfilled live orders are treated as failed in the JVM ledger to avoid pretending there is an open filled position. To experiment with maker orders, use dry-run or disable immediate-fill only when you also have a reconciliation plan.
+This package does not add a background order reconciliation worker. With `REQUIRE_FOK=false` and `voktrader.executor.require-immediate-fill=false`, strategies can submit resting maker orders; accepted-but-unfilled orders are stored as `ENTRY_PENDING` until reconciliation is added. Use FOK/FAK strategies when you need immediate filled ledger entries.
