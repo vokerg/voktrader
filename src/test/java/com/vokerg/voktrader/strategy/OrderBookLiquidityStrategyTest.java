@@ -76,6 +76,7 @@ class OrderBookLiquidityStrategyTest {
                 null,
                 null,
                 null,
+                null,
                 null
         );
         strategy = new OrderBookLiquidityStrategy(

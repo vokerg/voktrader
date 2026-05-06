@@ -57,6 +57,7 @@ class CostAwareMomentumStrategyTest {
                 null,
                 null,
                 null,
+                null,
                 null
         );
         StrategyTradeSupport tradeSupport = new StrategyTradeSupport(tradeRepository);

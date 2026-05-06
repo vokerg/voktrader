@@ -25,6 +25,7 @@ import com.vokerg.voktrader.trade.TradeRepository;
 import com.vokerg.voktrader.trade.TradeStatus;
 import com.vokerg.voktrader.trade.TradingProperties;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class BacktestReplayService {
     private final StrategyRegistry strategyRegistry;
     private final PriceSnapshotRepository priceSnapshotRepository;
@@ -81,16 +83,41 @@ public class BacktestReplayService {
 
         for (Long marketId : numericMarketIds) {
             List<PriceSnapshotEntity> snapshots = snapshotsByMarket.getOrDefault(marketId, List.of());
+            MarketEntity marketEntity = marketRepository.findByPolymarketMarketId(marketId.toString()).orElse(null);
+            log.info(
+                    "TIME MACHINE market picked up: runId={} strategy={} marketId={} slug={} snapshots={} firstCapturedAt={} lastCapturedAt={} endDate={}",
+                    runId,
+                    strategy.id(),
+                    marketId,
+                    marketEntity == null ? null : marketEntity.getSlug(),
+                    snapshots.size(),
+                    snapshots.isEmpty() ? null : snapshots.getFirst().getCapturedAt(),
+                    snapshots.isEmpty() ? null : snapshots.getLast().getCapturedAt(),
+                    marketEntity == null ? null : marketEntity.getEndDate()
+            );
+            long marketSnapshotsSeen = 0;
+            long skippedTicks = 0;
             for (PriceSnapshotEntity snapshot : snapshots) {
                 List<MarketDepthSnapshotEntity> depthRows = depthSnapshotRepository.findByMarketIdAndCapturedAt(marketId, snapshot.getCapturedAt());
                 ReplayTick tick = tick(marketId, snapshot, depthRows);
                 if (tick == null) {
+                    skippedTicks++;
                     continue;
                 }
                 snapshotsSeen++;
+                marketSnapshotsSeen++;
                 runTick(botId, strategy, executor, diagnostics, tick);
             }
             resolveRemainingOpenTrades(runId, marketId);
+            log.info(
+                    "TIME MACHINE market finished: runId={} strategy={} marketId={} replayedSnapshots={} skippedTicks={} totalReplayedSnapshots={}",
+                    runId,
+                    strategy.id(),
+                    marketId,
+                    marketSnapshotsSeen,
+                    skippedTicks,
+                    snapshotsSeen
+            );
         }
 
         BacktestSummary summary = summarize(runId);
