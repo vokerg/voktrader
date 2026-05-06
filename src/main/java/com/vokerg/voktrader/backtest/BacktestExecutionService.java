@@ -36,6 +36,10 @@ class BacktestExecutionService {
         return intent.side() == TradeSide.BUY ? buy(intent) : sell(intent);
     }
 
+    String runId() {
+        return runId;
+    }
+
     private TradeExecutionResult buy(TradeIntent intent) {
         TradeEntity trade = TradeEntity.fromIntent(intent, ExecutionMode.TESTING);
         trade.attachBacktestRun(runId);

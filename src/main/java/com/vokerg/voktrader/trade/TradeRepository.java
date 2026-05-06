@@ -29,4 +29,10 @@ public interface TradeRepository extends JpaRepository<TradeEntity, Long> {
     Optional<TradeEntity> findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(Long botId, String strategyId, String marketId, String tokenId, Collection<TradeStatus> statuses);
 
     List<TradeEntity> findByBacktestRunId(String backtestRunId);
+    List<TradeEntity> findByBacktestRunIdAndStrategyIdAndStatus(String backtestRunId, String strategyId, TradeStatus status);
+    long countByBacktestRunIdAndStrategyIdAndMarketId(String backtestRunId, String strategyId, String marketId);
+    Optional<TradeEntity> findFirstByBacktestRunIdAndStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(String backtestRunId, String strategyId, String marketId, TradeStatus status);
+    Optional<TradeEntity> findFirstByBacktestRunIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(String backtestRunId, String strategyId, String marketId, String tokenId, TradeStatus status);
+    Optional<TradeEntity> findFirstByBacktestRunIdAndStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(String backtestRunId, String strategyId, String marketId, Collection<TradeStatus> statuses);
+    Optional<TradeEntity> findFirstByBacktestRunIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(String backtestRunId, String strategyId, String marketId, String tokenId, Collection<TradeStatus> statuses);
 }

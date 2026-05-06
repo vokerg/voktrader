@@ -20,6 +20,7 @@ import com.vokerg.voktrader.trade.ExecutionOverrideContext;
 import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
 import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.trade.TradeFillRepository;
+import com.vokerg.voktrader.trade.TradeHistoryScopeContext;
 import com.vokerg.voktrader.trade.TradeOrderRepository;
 import com.vokerg.voktrader.trade.TradeRepository;
 import com.vokerg.voktrader.trade.TradeStatus;
@@ -109,13 +110,17 @@ public class BacktestReplayService {
                 runTick(botId, strategy, executor, diagnostics, tick);
             }
             resolveRemainingOpenTrades(runId, marketId);
+            MarketTradeCounts tradeCounts = countMarketTrades(runId, marketId);
             log.info(
-                    "TIME MACHINE market finished: runId={} strategy={} marketId={} replayedSnapshots={} skippedTicks={} totalReplayedSnapshots={}",
+                    "TIME MACHINE market finished: runId={} strategy={} marketId={} replayedSnapshots={} skippedTicks={} trades={} closedTrades={} openTrades={} totalReplayedSnapshots={}",
                     runId,
                     strategy.id(),
                     marketId,
                     marketSnapshotsSeen,
                     skippedTicks,
+                    tradeCounts.total(),
+                    tradeCounts.closed(),
+                    tradeCounts.open(),
                     snapshotsSeen
             );
         }
@@ -169,9 +174,12 @@ public class BacktestReplayService {
             );
             BotRuntimeContextHolder.runWith(
                     context,
-                    () -> BacktestDiagnosticsContext.runWith(
-                            diagnostics,
-                            () -> ExecutionOverrideContext.runWith(executor::execute, strategy::tick)
+                    () -> TradeHistoryScopeContext.runWithBacktestRunId(
+                            executor.runId(),
+                            () -> BacktestDiagnosticsContext.runWith(
+                                    diagnostics,
+                                    () -> ExecutionOverrideContext.runWith(executor::execute, strategy::tick)
+                            )
                     )
             );
         });
@@ -251,6 +259,20 @@ public class BacktestReplayService {
         return new BacktestSummary(trades.size(), closed, open, fees, pnl);
     }
 
+    private MarketTradeCounts countMarketTrades(String runId, Long marketId) {
+        String marketIdText = marketId.toString();
+        List<TradeEntity> trades = tradeRepository.findByBacktestRunId(runId).stream()
+                .filter(trade -> marketIdText.equals(trade.getMarketId()))
+                .toList();
+        long closed = trades.stream()
+                .filter(trade -> trade.getStatus() == TradeStatus.CLOSED || trade.getStatus() == TradeStatus.RESOLVED)
+                .count();
+        long open = trades.stream()
+                .filter(trade -> trade.getStatus() == TradeStatus.OPEN)
+                .count();
+        return new MarketTradeCounts(trades.size(), closed, open);
+    }
+
     private Map<Long, List<PriceSnapshotEntity>> groupByMarket(List<PriceSnapshotEntity> snapshots) {
         Map<Long, List<PriceSnapshotEntity>> grouped = new LinkedHashMap<>();
         snapshots.stream()
@@ -276,5 +298,8 @@ public class BacktestReplayService {
             String downTokenId,
             Instant capturedAt
     ) {
+    }
+
+    private record MarketTradeCounts(long total, long closed, long open) {
     }
 }

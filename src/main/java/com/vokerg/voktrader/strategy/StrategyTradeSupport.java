@@ -2,6 +2,7 @@ package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.trade.TradeEntity;
+import com.vokerg.voktrader.trade.TradeHistoryScopeContext;
 import com.vokerg.voktrader.trade.TradeRepository;
 import com.vokerg.voktrader.trade.TradeStatus;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,13 @@ public class StrategyTradeSupport {
     }
 
     public List<TradeEntity> openTrades(String strategyId, Long botId, String marketId) {
+        Optional<String> backtestRunId = TradeHistoryScopeContext.currentBacktestRunId();
+        if (backtestRunId.isPresent()) {
+            return tradeRepository.findByBacktestRunIdAndStrategyIdAndStatus(backtestRunId.get(), strategyId, TradeStatus.OPEN)
+                    .stream()
+                    .filter(trade -> marketId.equals(trade.getMarketId()))
+                    .toList();
+        }
         return tradeRepository.findByStrategyIdAndStatus(strategyId, TradeStatus.OPEN)
                 .stream()
                 .filter(trade -> sameBotScope(trade, botId))
@@ -32,6 +40,15 @@ public class StrategyTradeSupport {
     }
 
     public boolean hasOpenTrade(String strategyId, Long botId, String marketId) {
+        Optional<String> backtestRunId = TradeHistoryScopeContext.currentBacktestRunId();
+        if (backtestRunId.isPresent()) {
+            return tradeRepository.findFirstByBacktestRunIdAndStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(
+                    backtestRunId.get(),
+                    strategyId,
+                    marketId,
+                    TradeStatus.OPEN
+            ).isPresent();
+        }
         return (botId == null
                 ? tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(
                 strategyId,
@@ -52,9 +69,12 @@ public class StrategyTradeSupport {
             return false;
         }
 
-        long trades = botId == null
+        Optional<String> backtestRunId = TradeHistoryScopeContext.currentBacktestRunId();
+        long trades = backtestRunId
+                .map(runId -> tradeRepository.countByBacktestRunIdAndStrategyIdAndMarketId(runId, strategyId, marketId))
+                .orElseGet(() -> botId == null
                 ? tradeRepository.countByStrategyIdAndMarketId(strategyId, marketId)
-                : tradeRepository.countByBotIdAndStrategyIdAndMarketId(botId, strategyId, marketId);
+                : tradeRepository.countByBotIdAndStrategyIdAndMarketId(botId, strategyId, marketId));
 
         return trades >= maxTrades;
     }
@@ -77,6 +97,19 @@ public class StrategyTradeSupport {
     }
 
     public boolean sameOutcomeLossLockoutActive(String strategyId, Long botId, String marketId, String tokenId) {
+        Optional<String> backtestRunId = TradeHistoryScopeContext.currentBacktestRunId();
+        if (backtestRunId.isPresent()) {
+            return tradeRepository.findFirstByBacktestRunIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(
+                            backtestRunId.get(),
+                            strategyId,
+                            marketId,
+                            tokenId,
+                            List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED)
+                    )
+                    .map(TradeEntity::getFinalPnlUsd)
+                    .filter(pnl -> pnl.compareTo(BigDecimal.ZERO) < 0)
+                    .isPresent();
+        }
         return (botId == null
                 ? tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(
                 strategyId,
@@ -97,6 +130,15 @@ public class StrategyTradeSupport {
     }
 
     private Optional<TradeEntity> lastFinishedTrade(String strategyId, Long botId, String marketId) {
+        Optional<String> backtestRunId = TradeHistoryScopeContext.currentBacktestRunId();
+        if (backtestRunId.isPresent()) {
+            return tradeRepository.findFirstByBacktestRunIdAndStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(
+                    backtestRunId.get(),
+                    strategyId,
+                    marketId,
+                    List.of(TradeStatus.CLOSED, TradeStatus.RESOLVED, TradeStatus.FAILED)
+            );
+        }
         return botId == null
                 ? tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(
                 strategyId,
