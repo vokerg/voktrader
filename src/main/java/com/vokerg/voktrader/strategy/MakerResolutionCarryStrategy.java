@@ -1,6 +1,8 @@
 package com.vokerg.voktrader.strategy;
 
+import com.vokerg.voktrader.backtest.BacktestDiagnosticsContext;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
+import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.TradeEntity;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -135,14 +137,36 @@ public class MakerResolutionCarryStrategy implements TradingStrategy {
                 ? context.upOutcome()
                 : context.downOutcome();
         Optional<BigDecimal> midMove = moveSince(selected.tokenId(), MID_MOMENTUM_WINDOW);
-        if (selected.orderBook().isEmpty()
-                || selected.bookAgeMs().map(age -> age > config.maxBookAgeMsOrDefault()).orElse(true)
-                || selected.spread().compareTo(config.maxSpreadOrDefault()) > 0
-                || selected.price().bid().compareTo(config.minBidOrDefault()) < 0
-                || selected.price().bid().compareTo(config.maxMakerBidOrDefault()) > 0
-                || selected.bidDepthWithin(config.nearTopRangeOrDefault()).compareTo(config.minNearBidDepthSharesOrDefault()) < 0
-                || midMove.isEmpty()
-                || midMove.get().compareTo(config.minMidMove5sOrDefault()) < 0) {
+        if (selected.orderBook().isEmpty()) {
+            skip("no order book for selected outcome");
+            return Optional.empty();
+        }
+        if (selected.bookAgeMs().map(age -> age > config.maxBookAgeMsOrDefault()).orElse(true)) {
+            skip("book too stale or missing age");
+            return Optional.empty();
+        }
+        if (selected.spread().compareTo(config.maxSpreadOrDefault()) > 0) {
+            skip("spread too wide");
+            return Optional.empty();
+        }
+        if (selected.price().bid().compareTo(config.minBidOrDefault()) < 0) {
+            skip("bid below min bid");
+            return Optional.empty();
+        }
+        if (selected.price().bid().compareTo(config.maxMakerBidOrDefault()) > 0) {
+            skip("bid above max maker bid");
+            return Optional.empty();
+        }
+        if (selected.bidDepthWithin(config.nearTopRangeOrDefault()).compareTo(config.minNearBidDepthSharesOrDefault()) < 0) {
+            skip("near bid depth too low");
+            return Optional.empty();
+        }
+        if (midMove.isEmpty()) {
+            skip("missing 5s midpoint move");
+            return Optional.empty();
+        }
+        if (midMove.get().compareTo(config.minMidMove5sOrDefault()) < 0) {
+            skip("5s midpoint move below threshold");
             return Optional.empty();
         }
         return Optional.of(StrategyEntrySupport.EntrySignal.makerBuy(
@@ -152,10 +176,14 @@ public class MakerResolutionCarryStrategy implements TradingStrategy {
         ));
     }
 
+    private void skip(String reason) {
+        BacktestDiagnosticsContext.recordStrategySkip(ID, reason);
+    }
+
     private void recordSample(OutcomePrice price) {
         Deque<PriceSample> samples = samplesByTokenId.computeIfAbsent(sampleKey(price.tokenId()), ignored -> new ArrayDeque<>());
         samples.addLast(new PriceSample(mid(price), price.updatedAt()));
-        Instant cutoff = clock.instant().minus(SAMPLE_WINDOW);
+        Instant cutoff = TimeMachine.now(clock).minus(SAMPLE_WINDOW);
         while (!samples.isEmpty() && samples.peekFirst().updatedAt().isBefore(cutoff)) {
             samples.removeFirst();
         }

@@ -3,6 +3,7 @@ package com.vokerg.voktrader.trade;
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
+import com.vokerg.voktrader.time.TimeMachine;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -79,7 +80,7 @@ public record TradeIntent(
             String ruleId,
             String reason
     ) {
-        Instant now = Instant.now();
+        Instant now = TimeMachine.now();
         Instant updatedAt = price.updatedAt();
         Long ageMs = updatedAt == null ? null : Duration.between(updatedAt, now).toMillis();
         Long secondsToExpiry = market.endDate() == null ? null : Duration.between(now, market.endDate()).toSeconds();
@@ -139,7 +140,7 @@ public record TradeIntent(
             String ruleId,
             String reason
     ) {
-        Instant now = Instant.now();
+        Instant now = TimeMachine.now();
         Instant updatedAt = price.updatedAt();
         Long ageMs = updatedAt == null ? null : Duration.between(updatedAt, now).toMillis();
         Long secondsToExpiry = market.endDate() == null ? null : Duration.between(now, market.endDate()).toSeconds();

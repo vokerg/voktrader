@@ -14,6 +14,11 @@ public class ExecutionRouter {
     private final LiveExecutionService liveExecutionService;
 
     public TradeExecutionResult route(TradeIntent intent) {
+        TradeIntentExecutor override = ExecutionOverrideContext.current();
+        if (override != null) {
+            return override.execute(intent);
+        }
+
         ExecutionMode mode = properties.getMode() == null ? ExecutionMode.PAPER : properties.getMode();
         log.debug("Routing trade intent: mode={} strategy={} marketId={} tokenId={} outcome={} side={} amountUsd={} limitPrice={} reason={}",
                 mode, intent.strategyId(), intent.marketId(), intent.tokenId(), intent.outcome(), intent.side(), intent.amountUsd(), intent.expectedPrice(), intent.reason());
@@ -21,6 +26,7 @@ public class ExecutionRouter {
             case PAPER -> paperExecutionService.execute(intent);
             case LIVE_SHADOW -> liveShadowExecutionService.execute(intent);
             case LIVE_TINY, LIVE -> liveExecutionService.execute(intent, mode);
+            case TESTING -> TradeExecutionResult.rejected(mode, null, null, null, null, "TESTING mode requires execution override");
         };
     }
 }

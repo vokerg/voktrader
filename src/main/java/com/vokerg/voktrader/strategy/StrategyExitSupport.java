@@ -12,6 +12,7 @@ import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import com.vokerg.voktrader.trade.ExecutionRouter;
 import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.trade.TradeIntent;
+import com.vokerg.voktrader.time.TimeMachine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -132,7 +133,7 @@ public class StrategyExitSupport {
                                             "exitBid", price.bid(),
                                             "estimatedNetPnlUsd", economy.estimatedNetPnlUsd(),
                                             "minimumProfitUsd", economy.minimumProfitUsd(),
-                                            "secondsToExpiry", market.endDate() == null ? null : java.time.Duration.between(java.time.Instant.now(), market.endDate()).toSeconds(),
+                                            "secondsToExpiry", market.endDate() == null ? null : java.time.Duration.between(TimeMachine.now(), market.endDate()).toSeconds(),
                                             "action", decision.action()
                                     ),
                                     true
@@ -240,7 +241,7 @@ public class StrategyExitSupport {
             if (market == null || market.endDate() == null) {
                 return Long.MAX_VALUE;
             }
-            return java.time.Duration.between(java.time.Instant.now(), market.endDate()).toSeconds();
+            return java.time.Duration.between(TimeMachine.now(), market.endDate()).toSeconds();
         }
 
         public boolean canWaitForResolutionWithin(long seconds) {

@@ -1,6 +1,7 @@
 package com.vokerg.voktrader.trade;
 
 import jakarta.persistence.*;
+import com.vokerg.voktrader.time.TimeMachine;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -147,6 +148,9 @@ public class TradeEntity {
     @Column(name = "resolved_at")
     private Instant resolvedAt;
 
+    @Column(name = "backtest_run_id", length = 64)
+    private String backtestRunId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -184,7 +188,7 @@ public class TradeEntity {
         entity.intendedEntryPrice = intent.side() == TradeSide.BUY ? intent.expectedPrice() : null;
         entity.intendedExitPrice = intent.side() == TradeSide.SELL ? intent.expectedPrice() : null;
         entity.entryOrderType = intent.side() == TradeSide.BUY ? intent.orderType() : null;
-        entity.createdAt = Instant.now();
+        entity.createdAt = TimeMachine.now();
         entity.updatedAt = entity.createdAt;
         return entity;
     }
@@ -251,8 +255,13 @@ public class TradeEntity {
         touch();
     }
 
+    public void attachBacktestRun(String backtestRunId) {
+        this.backtestRunId = backtestRunId;
+        touch();
+    }
+
     private void touch() {
-        this.updatedAt = Instant.now();
+        this.updatedAt = TimeMachine.now();
     }
 
     public Long getId() { return id; }
@@ -299,6 +308,7 @@ public class TradeEntity {
     public BigDecimal getFinalPnlUsd() { return finalPnlUsd; }
     public String getWinningOutcome() { return winningOutcome; }
     public Instant getResolvedAt() { return resolvedAt; }
+    public String getBacktestRunId() { return backtestRunId; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }

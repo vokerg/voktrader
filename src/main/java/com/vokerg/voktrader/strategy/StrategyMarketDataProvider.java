@@ -11,6 +11,7 @@ import com.vokerg.voktrader.marketdata.OrderBookState;
 import com.vokerg.voktrader.marketdata.OutcomeOrderBook;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
+import com.vokerg.voktrader.time.TimeMachine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -50,7 +51,7 @@ public class StrategyMarketDataProvider {
         if (market == null || up == null || down == null) {
             return Optional.empty();
         }
-        Instant now = clock.instant();
+        Instant now = TimeMachine.now(clock);
         OrderBookState orderBookState = currentOrderBookState();
         StrategyOutcomeView upView = new DefaultStrategyOutcomeView(up, orderBookState.byTokenId(up.tokenId()).orElse(null), tradeEconomy, now);
         StrategyOutcomeView downView = new DefaultStrategyOutcomeView(down, orderBookState.byTokenId(down.tokenId()).orElse(null), tradeEconomy, now);

@@ -9,6 +9,7 @@ import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import com.vokerg.voktrader.trade.ExecutionRouter;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradeOrderType;
+import com.vokerg.voktrader.time.TimeMachine;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -105,7 +106,7 @@ public class StrategyEntrySupport {
         priceRecorder.record(up);
         priceRecorder.record(down);
 
-        Instant now = clock.instant();
+        Instant now = TimeMachine.now(clock);
         if (isStale(up, now, rules) || isStale(down, now, rules)) {
             eventLogger.entryRejected(
                     strategyId,

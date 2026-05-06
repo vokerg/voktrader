@@ -3,6 +3,7 @@ package com.vokerg.voktrader.strategy;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.trade.TradeEntity;
+import com.vokerg.voktrader.time.TimeMachine;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -217,7 +218,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
             StrategyProperties.CostAwareMomentum config
     ) {
         return market.endDate() != null
-                && Duration.between(clock.instant(), market.endDate()).compareTo(
+                && Duration.between(TimeMachine.now(clock), market.endDate()).compareTo(
                 Duration.ofSeconds(config.forceDecisionSecondsOrDefault())
         ) < 0;
     }
@@ -228,7 +229,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
     ) {
         Instant heldSince = trade.getEntryCompletedAt() == null ? trade.getCreatedAt() : trade.getEntryCompletedAt();
         return heldSince != null
-                && Duration.between(heldSince, clock.instant()).compareTo(
+                && Duration.between(heldSince, TimeMachine.now(clock)).compareTo(
                 Duration.ofSeconds(config.minHoldSecondsOrDefault())
         ) >= 0;
     }
@@ -271,7 +272,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
         );
         samples.addLast(new PriceSample(price.bid(), price.ask(), mid(price), price.updatedAt()));
 
-        Instant cutoff = clock.instant().minus(SAMPLE_WINDOW);
+        Instant cutoff = TimeMachine.now(clock).minus(SAMPLE_WINDOW);
         while (!samples.isEmpty() && samples.peekFirst().updatedAt().isBefore(cutoff)) {
             samples.removeFirst();
         }

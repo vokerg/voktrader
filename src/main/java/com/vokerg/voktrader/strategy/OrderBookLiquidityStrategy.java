@@ -4,6 +4,7 @@ import com.vokerg.voktrader.economy.FeeEstimate;
 import com.vokerg.voktrader.marketdata.FillEstimate;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
+import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.TradeEntity;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -247,13 +248,13 @@ public class OrderBookLiquidityStrategy implements TradingStrategy {
     private boolean heldForAtLeast(TradeEntity trade, long seconds) {
         Instant heldSince = trade.getEntryCompletedAt() == null ? trade.getCreatedAt() : trade.getEntryCompletedAt();
         return heldSince != null
-                && Duration.between(heldSince, clock.instant()).compareTo(Duration.ofSeconds(seconds)) >= 0;
+                && Duration.between(heldSince, TimeMachine.now(clock)).compareTo(Duration.ofSeconds(seconds)) >= 0;
     }
 
     private void recordSample(OutcomePrice price) {
         Deque<PriceSample> samples = samplesByTokenId.computeIfAbsent(sampleKey(price.tokenId()), ignored -> new ArrayDeque<>());
         samples.addLast(new PriceSample(mid(price), price.updatedAt()));
-        Instant cutoff = clock.instant().minus(SAMPLE_WINDOW);
+        Instant cutoff = TimeMachine.now(clock).minus(SAMPLE_WINDOW);
         while (!samples.isEmpty() && samples.peekFirst().updatedAt().isBefore(cutoff)) {
             samples.removeFirst();
         }
