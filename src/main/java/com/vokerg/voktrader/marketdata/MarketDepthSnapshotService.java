@@ -15,6 +15,7 @@ import java.time.Instant;
 @Slf4j
 public class MarketDepthSnapshotService {
     private final MarketDepthSnapshotRepository repository;
+    private final MarketDepthSnapshotLevelRepository levelRepository;
     private final MarketRepository marketRepository;
     private final TradingProperties tradingProperties;
     private final MarketDepthSnapshotProperties properties;
@@ -28,18 +29,56 @@ public class MarketDepthSnapshotService {
         Long numericMarketId = parseMarketId(marketId);
         Long remainingSeconds = remaining == null ? null : remaining.getSeconds();
 
-        orderBookState.allByTokenId().values().stream()
-                .map(book -> MarketDepthSnapshotEntity.snapshot(
-                        market,
-                        numericMarketId,
-                        remainingSeconds,
-                        book,
-                        properties.nearTopRange(),
-                        tradingProperties.getMaxOrderUsd(),
-                        tradingProperties.getMaxPriceAgeMs(),
-                        capturedAt
-                ))
-                .forEach(repository::save);
+        orderBookState.allByTokenId().values().forEach(book -> {
+            repository.save(MarketDepthSnapshotEntity.snapshot(
+                    market,
+                    numericMarketId,
+                    remainingSeconds,
+                    book,
+                    properties.nearTopRange(),
+                    tradingProperties.getMaxOrderUsd(),
+                    tradingProperties.getMaxPriceAgeMs(),
+                    capturedAt
+            ));
+            saveLevels(market, numericMarketId, remainingSeconds, book, capturedAt);
+        });
+    }
+
+    private void saveLevels(
+            MarketEntity market,
+            Long numericMarketId,
+            Long remainingSeconds,
+            OutcomeOrderBook book,
+            Instant capturedAt
+    ) {
+        int levelsPerSide = properties.levelsPerSide();
+        saveLevels(market, numericMarketId, remainingSeconds, book, OrderBookSide.BUY, book.bids(), levelsPerSide, capturedAt);
+        saveLevels(market, numericMarketId, remainingSeconds, book, OrderBookSide.SELL, book.asks(), levelsPerSide, capturedAt);
+    }
+
+    private void saveLevels(
+            MarketEntity market,
+            Long numericMarketId,
+            Long remainingSeconds,
+            OutcomeOrderBook book,
+            OrderBookSide side,
+            java.util.List<OrderBookLevel> levels,
+            int levelsPerSide,
+            Instant capturedAt
+    ) {
+        int limit = Math.min(levelsPerSide, levels.size());
+        for (int i = 0; i < limit; i++) {
+            levelRepository.save(MarketDepthSnapshotLevelEntity.snapshot(
+                    market,
+                    numericMarketId,
+                    remainingSeconds,
+                    book,
+                    side,
+                    i + 1,
+                    levels.get(i),
+                    capturedAt
+            ));
+        }
     }
 
     private MarketEntity findMarket(String marketId) {

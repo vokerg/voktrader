@@ -86,7 +86,7 @@ public class MarketPriceFeedService {
         feedsByMarketId.clear();
     }
 
-    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 2000)
+    @org.springframework.scheduling.annotation.Scheduled(fixedRateString = "${voktrader.market-data.snapshot-ms:2000}")
     public void snapshotFeeds() {
         feedsByMarketId.values().forEach(MarketPriceFeed::snapshot);
     }

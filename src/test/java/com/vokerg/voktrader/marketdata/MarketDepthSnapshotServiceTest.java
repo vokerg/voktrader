@@ -23,15 +23,17 @@ class MarketDepthSnapshotServiceTest {
     @Test
     void savesCompactDepthFactsForEachCurrentBook() {
         MarketDepthSnapshotRepository repository = mock(MarketDepthSnapshotRepository.class);
+        MarketDepthSnapshotLevelRepository levelRepository = mock(MarketDepthSnapshotLevelRepository.class);
         MarketRepository marketRepository = mock(MarketRepository.class);
         TradingProperties tradingProperties = new TradingProperties();
         tradingProperties.setMaxOrderUsd(new BigDecimal("1.00"));
         tradingProperties.setMaxPriceAgeMs(1500);
         MarketDepthSnapshotService service = new MarketDepthSnapshotService(
                 repository,
+                levelRepository,
                 marketRepository,
                 tradingProperties,
-                new MarketDepthSnapshotProperties(new BigDecimal("0.02"))
+                new MarketDepthSnapshotProperties(new BigDecimal("0.02"), 2)
         );
         when(marketRepository.findByPolymarketMarketId("215")).thenReturn(Optional.empty());
         OrderBookState orderBookState = new OrderBookState();
@@ -74,5 +76,22 @@ class MarketDepthSnapshotServiceTest {
         assertEquals(2, snapshot.getEstimateBuyLevelsConsumed());
         assertEquals(250L, snapshot.getBookAgeMs());
         assertFalse(snapshot.getStale());
+
+        ArgumentCaptor<MarketDepthSnapshotLevelEntity> levelCaptor = ArgumentCaptor.forClass(MarketDepthSnapshotLevelEntity.class);
+        verify(levelRepository, org.mockito.Mockito.times(4)).save(levelCaptor.capture());
+        List<MarketDepthSnapshotLevelEntity> levels = levelCaptor.getAllValues();
+        assertEquals(OrderBookSide.BUY, levels.get(0).getSide());
+        assertEquals(1, levels.get(0).getLevelIndex());
+        assertEquals(new BigDecimal("0.49"), levels.get(0).getPrice());
+        assertEquals(new BigDecimal("2"), levels.get(0).getSize());
+        assertEquals(OrderBookSide.BUY, levels.get(1).getSide());
+        assertEquals(2, levels.get(1).getLevelIndex());
+        assertEquals(new BigDecimal("0.46"), levels.get(1).getPrice());
+        assertEquals(OrderBookSide.SELL, levels.get(2).getSide());
+        assertEquals(1, levels.get(2).getLevelIndex());
+        assertEquals(new BigDecimal("0.51"), levels.get(2).getPrice());
+        assertEquals(OrderBookSide.SELL, levels.get(3).getSide());
+        assertEquals(2, levels.get(3).getLevelIndex());
+        assertEquals(new BigDecimal("0.52"), levels.get(3).getPrice());
     }
 }
