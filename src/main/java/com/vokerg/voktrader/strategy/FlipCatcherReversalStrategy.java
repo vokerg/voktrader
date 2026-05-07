@@ -2,10 +2,7 @@ package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
-<<<<<<< Updated upstream
 import com.vokerg.voktrader.time.TimeMachine;
-=======
->>>>>>> Stashed changes
 import com.vokerg.voktrader.trade.TradeEntity;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;

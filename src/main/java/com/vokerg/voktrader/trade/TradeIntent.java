@@ -4,10 +4,7 @@ import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.economy.LiquidityRole;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
-<<<<<<< Updated upstream
 import com.vokerg.voktrader.time.TimeMachine;
-=======
->>>>>>> Stashed changes
 
 import java.math.BigDecimal;
 import java.time.Duration;
