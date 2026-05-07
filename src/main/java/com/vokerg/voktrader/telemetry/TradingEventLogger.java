@@ -1,8 +1,9 @@
 package com.vokerg.voktrader.telemetry;
 
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
+import com.vokerg.voktrader.backtest.BacktestDiagnosticsContext;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
-import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.marketdata.OutcomePrice;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -119,6 +120,7 @@ public class TradingEventLogger {
                 data == null ? Map.of() : data
         );
         eventPublisher.publishEvent(event);
+        BacktestDiagnosticsContext.record(event);
         logJson(event, important);
     }
 
@@ -174,6 +176,7 @@ public class TradingEventLogger {
                 data == null ? Map.of() : data
         );
         eventPublisher.publishEvent(event);
+        BacktestDiagnosticsContext.record(event);
         logJson(event, important);
     }
 

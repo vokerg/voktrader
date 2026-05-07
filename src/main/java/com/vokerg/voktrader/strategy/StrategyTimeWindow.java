@@ -2,6 +2,7 @@ package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.config.MarketSelectionProperties;
 import com.vokerg.voktrader.market.TrackedMarketState;
+import com.vokerg.voktrader.time.TimeMachine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -22,7 +23,7 @@ public class StrategyTimeWindow {
             return false;
         }
 
-        Duration remaining = Duration.between(Instant.now(), endDate);
+        Duration remaining = Duration.between(TimeMachine.now(), endDate);
 
         boolean afterMaxRemaining = remaining.compareTo(marketSelectionProperties.maxRemaining()) <= 0;
         boolean beforeMinRemaining = remaining.compareTo(marketSelectionProperties.minRemaining()) >= 0;

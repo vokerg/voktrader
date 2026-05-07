@@ -1,7 +1,7 @@
 package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.market.TrackedMarketState;
-import com.vokerg.voktrader.pricing.LatestPriceState;
+import com.vokerg.voktrader.marketdata.LatestPriceState;
 import com.vokerg.voktrader.trade.ExecutionRouter;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeIntent;
@@ -26,6 +26,23 @@ public class SimpleDownCheapTightSpreadStrategy implements TradingStrategy {
     @Override
     public String id() {
         return ID;
+    }
+
+    @Override
+    public StrategyDescription description() {
+        return new StrategyDescription(
+                "Simple Down cheap tight-spread",
+                "Deprecated scaffold. Kept available as legacy behavior, not recommended as a template for new strategies.",
+                "Buys Down when Down ask is below a configured cheap threshold and spread is tight.",
+                "Uses only latest top-of-book Down price and current market. It does not inspect Up, order book depth, fees, open trade limits, cooldowns, or market structure.",
+                "Single-condition entry: Down ask <= max ask and Down spread <= max spread. No momentum, no opposite-side confirmation, no depth check.",
+                "No dedicated exit logic in this strategy. It depends on external/manual lifecycle behavior and is therefore incomplete as an autonomous strategy.",
+                "Very easy to understand and useful as a smoke test for routing a basic buy intent.",
+                "Extremely weak as a trading strategy. It can buy a cheap Down for a good reason: the market may already strongly favor Up. "
+                        + "It ignores commissions, slippage, order book depth, price age, open trade duplication, trend, reversal context, and exit quality. "
+                        + "Because it only cares about Down, it is structurally biased and should not be used for real evaluation.",
+                "Do not tune this for production. Keep only as a minimal routing example, or remove once no longer needed."
+        );
     }
 
     @Override

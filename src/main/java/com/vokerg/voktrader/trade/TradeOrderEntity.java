@@ -15,6 +15,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import com.vokerg.voktrader.time.TimeMachine;
 
 @Entity
 @Table(
@@ -117,13 +118,13 @@ public class TradeOrderEntity {
     public void markRiskRejected(String reason) {
         this.status = TradeOrderStatus.RISK_REJECTED;
         this.rejectReason = reason;
-        this.completedAt = Instant.now();
+        this.completedAt = TimeMachine.now();
         touch();
     }
 
     public void markShadowRecorded() {
         this.status = TradeOrderStatus.SHADOW_RECORDED;
-        this.submittedAt = Instant.now();
+        this.submittedAt = TimeMachine.now();
         this.acknowledgedAt = this.submittedAt;
         this.completedAt = this.submittedAt;
         this.latencyMs = 0L;
@@ -137,7 +138,7 @@ public class TradeOrderEntity {
             this.idempotencyKey = clientOrderId;
         }
         this.rawRequest = rawRequest;
-        this.submittedAt = Instant.now();
+        this.submittedAt = TimeMachine.now();
         touch();
     }
 
@@ -152,7 +153,7 @@ public class TradeOrderEntity {
             this.exchangeOrderId = exchangeOrderId;
         }
         this.rawResponse = rawResponse;
-        this.acknowledgedAt = Instant.now();
+        this.acknowledgedAt = TimeMachine.now();
         if (this.submittedAt != null) {
             this.latencyMs = Duration.between(this.submittedAt, this.acknowledgedAt).toMillis();
         }
@@ -165,7 +166,7 @@ public class TradeOrderEntity {
         this.filledPrice = price;
         this.filledShares = shares;
         this.filledAmountUsd = amountUsd;
-        this.acknowledgedAt = Instant.now();
+        this.acknowledgedAt = TimeMachine.now();
         this.completedAt = this.acknowledgedAt;
         if (this.submittedAt != null) {
             this.latencyMs = Duration.between(this.submittedAt, this.completedAt).toMillis();
@@ -176,7 +177,7 @@ public class TradeOrderEntity {
     public void markFailed(String errorMessage) {
         this.status = TradeOrderStatus.FAILED;
         this.errorMessage = errorMessage;
-        this.completedAt = Instant.now();
+        this.completedAt = TimeMachine.now();
         touch();
     }
 
@@ -186,12 +187,12 @@ public class TradeOrderEntity {
     }
 
     private void touch() {
-        this.updatedAt = Instant.now();
+        this.updatedAt = TimeMachine.now();
     }
 
     @PrePersist
     void prePersist() {
-        Instant now = Instant.now();
+        Instant now = TimeMachine.now();
         if (this.idempotencyKey == null || this.idempotencyKey.isBlank()) {
             this.idempotencyKey = this.clientOrderId;
         }
@@ -210,7 +211,7 @@ public class TradeOrderEntity {
 
     @PreUpdate
     void preUpdate() {
-        this.updatedAt = Instant.now();
+        this.updatedAt = TimeMachine.now();
     }
 
     public Long getId() {

@@ -2,8 +2,8 @@ package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.market.TrackedMarketState;
-import com.vokerg.voktrader.pricing.LatestPriceState;
-import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.marketdata.LatestPriceState;
+import com.vokerg.voktrader.marketdata.OutcomePrice;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -36,6 +36,22 @@ public class BuySellSmokeStrategy implements TradingStrategy {
     @Override
     public String id() {
         return ID;
+    }
+
+    @Override
+    public StrategyDescription description() {
+        return new StrategyDescription(
+                "Buy/sell smoke",
+                "Deprecated scaffold. Useful for exercising buy and sell plumbing, not recommended for strategy research.",
+                "Buys a configurable outcome, or any outcome, when ask is either very low or very high and spread is tight. Sells an open trade when simple paper PnL exceeds a threshold.",
+                "Uses latest top-of-book prices, current market, trade repository state, and simple paper PnL. It does not use StrategyMarketView, order book depth, fee-aware economy, or advanced trade guards.",
+                "Finds the cheapest matching candidate whose ask crosses configured low/high thresholds and whose spread is tight. It prevents one open trade per bot/market, but does not use cooldowns or loss lockouts.",
+                "Sells when bid multiplied by shares minus entry filled USD reaches configured minimum profit. This ignores fee drag and does not estimate executable depth.",
+                "Good for confirming the system can open and close paper trades through the router. Slightly more complete than the one-way simple strategy because it has an exit path.",
+                "Weak for actual trading because the buy rule is arbitrary and can select extreme prices without context. High ask can mean chasing; low ask can mean buying a dying side. "
+                        + "Exit PnL ignores fees, slippage, stale prices, and book size. It can look profitable in logs while a real taker exit would not fill cleanly.",
+                "Do not adapt this into a production strategy. Use it only as operational smoke coverage, then prefer StrategyMarketView-based strategies for new work."
+        );
     }
 
     @Override

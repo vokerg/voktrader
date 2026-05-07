@@ -1,4 +1,4 @@
-package com.vokerg.voktrader.pricing;
+package com.vokerg.voktrader.marketdata;
 
 import java.math.BigDecimal;
 import java.time.Instant;

@@ -2,12 +2,14 @@ package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
-import com.vokerg.voktrader.pricing.LatestPriceState;
-import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.marketdata.LatestPriceState;
+import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.telemetry.TelemetryData;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import com.vokerg.voktrader.trade.ExecutionRouter;
 import com.vokerg.voktrader.trade.TradeIntent;
+import com.vokerg.voktrader.trade.TradeOrderType;
+import com.vokerg.voktrader.time.TimeMachine;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -33,6 +35,7 @@ public class StrategyEntrySupport {
     private final StrategyTradeSupport tradeSupport;
     private final ExecutionRouter executionRouter;
     private final TradingEventLogger eventLogger;
+    private final StrategyMarketDataProvider marketDataProvider;
     private final Clock clock;
 
     @Autowired
@@ -42,9 +45,10 @@ public class StrategyEntrySupport {
             StrategyTimeWindow strategyTimeWindow,
             StrategyTradeSupport tradeSupport,
             ExecutionRouter executionRouter,
-            TradingEventLogger eventLogger
+            TradingEventLogger eventLogger,
+            StrategyMarketDataProvider marketDataProvider
     ) {
-        this(latestPriceState, trackedMarketState, strategyTimeWindow, tradeSupport, executionRouter, eventLogger, Clock.systemUTC());
+        this(latestPriceState, trackedMarketState, strategyTimeWindow, tradeSupport, executionRouter, eventLogger, marketDataProvider, Clock.systemUTC());
     }
 
     StrategyEntrySupport(
@@ -54,6 +58,7 @@ public class StrategyEntrySupport {
             StrategyTradeSupport tradeSupport,
             ExecutionRouter executionRouter,
             TradingEventLogger eventLogger,
+            StrategyMarketDataProvider marketDataProvider,
             Clock clock
     ) {
         this.latestPriceState = latestPriceState;
@@ -62,6 +67,7 @@ public class StrategyEntrySupport {
         this.tradeSupport = tradeSupport;
         this.executionRouter = executionRouter;
         this.eventLogger = eventLogger;
+        this.marketDataProvider = marketDataProvider;
         this.clock = clock;
     }
 
@@ -100,7 +106,7 @@ public class StrategyEntrySupport {
         priceRecorder.record(up);
         priceRecorder.record(down);
 
-        Instant now = clock.instant();
+        Instant now = TimeMachine.now(clock);
         if (isStale(up, now, rules) || isStale(down, now, rules)) {
             eventLogger.entryRejected(
                     strategyId,
@@ -129,7 +135,12 @@ public class StrategyEntrySupport {
             return;
         }
 
-        EntryContext context = new EntryContext(market, up, down, mid(up), mid(down), now);
+        Optional<StrategyMarketView> providedMarketView = marketDataProvider == null
+                ? Optional.empty()
+                : Optional.ofNullable(marketDataProvider.currentUpDownMarket()).flatMap(optional -> optional);
+        StrategyMarketView marketView = providedMarketView
+                .orElseGet(() -> new LegacyStrategyMarketView(market, up, down, now));
+        EntryContext context = new EntryContext(market, up, down, mid(up), mid(down), now, marketView);
         evaluator.evaluate(context)
                 .ifPresentOrElse(signal -> {
                     if (!entryAllowed(strategyId, ruleId, market, signal.candidate(), rules, now)) {
@@ -213,9 +224,13 @@ public class StrategyEntrySupport {
 
     private void routeBuy(String strategyId, String ruleId, GammaMarketDto market, EntrySignal signal) {
         var result = executionRouter.route(TradeIntent.buy(
+                tradeSupport.currentBotId(),
                 market,
                 signal.candidate(),
                 signal.paperSizeUsd(),
+                signal.orderType(),
+                signal.postOnly(),
+                signal.limitPrice() == null ? signal.candidate().ask() : signal.limitPrice(),
                 strategyId,
                 ruleId,
                 signal.reason()
@@ -265,14 +280,100 @@ public class StrategyEntrySupport {
             OutcomePrice down,
             BigDecimal upMid,
             BigDecimal downMid,
-            Instant now
+            Instant now,
+            StrategyMarketView marketView
     ) {
+        public StrategyOutcomeView upOutcome() {
+            return marketView.up();
+        }
+
+        public StrategyOutcomeView downOutcome() {
+            return marketView.down();
+        }
     }
 
     public record EntrySignal(
             OutcomePrice candidate,
             BigDecimal paperSizeUsd,
+            TradeOrderType orderType,
+            boolean postOnly,
+            BigDecimal limitPrice,
             String reason
     ) {
+        public EntrySignal(OutcomePrice candidate, BigDecimal paperSizeUsd, String reason) {
+            this(candidate, paperSizeUsd, TradeOrderType.FOK, false, candidate == null ? null : candidate.ask(), reason);
+        }
+
+        public EntrySignal(OutcomePrice candidate, BigDecimal paperSizeUsd, TradeOrderType orderType, BigDecimal limitPrice, String reason) {
+            this(candidate, paperSizeUsd, orderType, orderType.prefersMaker(), limitPrice, reason);
+        }
+
+        public static EntrySignal makerBuy(OutcomePrice candidate, BigDecimal paperSizeUsd, String reason) {
+            return new EntrySignal(candidate, paperSizeUsd, TradeOrderType.GTC, true, candidate == null ? null : candidate.bid(), reason);
+        }
+    }
+
+    private record LegacyStrategyMarketView(
+            GammaMarketDto market,
+            OutcomePrice upPrice,
+            OutcomePrice downPrice,
+            Instant now
+    ) implements StrategyMarketView {
+        @Override
+        public StrategyOutcomeView up() {
+            return new LegacyStrategyOutcomeView(upPrice, now);
+        }
+
+        @Override
+        public StrategyOutcomeView down() {
+            return new LegacyStrategyOutcomeView(downPrice, now);
+        }
+
+        @Override
+        public java.util.List<StrategyOutcomeView> outcomes() {
+            return java.util.List.of(up(), down());
+        }
+
+        @Override
+        public Optional<StrategyOutcomeView> outcome(String outcome) {
+            return outcomes().stream()
+                    .filter(view -> view.outcome().equalsIgnoreCase(outcome))
+                    .findFirst();
+        }
+
+        @Override
+        public Optional<StrategyOutcomeView> token(String tokenId) {
+            return outcomes().stream()
+                    .filter(view -> view.tokenId().equals(tokenId))
+                    .findFirst();
+        }
+
+        @Override
+        public Optional<Long> secondsToExpiry() {
+            if (market.endDate() == null) {
+                return Optional.empty();
+            }
+            return Optional.of(Duration.between(now, market.endDate()).toSeconds());
+        }
+    }
+
+    private record LegacyStrategyOutcomeView(OutcomePrice price, Instant now) implements StrategyOutcomeView {
+        @Override public String outcome() { return price.outcome(); }
+        @Override public String tokenId() { return price.tokenId(); }
+        @Override public Optional<com.vokerg.voktrader.marketdata.OutcomeOrderBook> orderBook() { return Optional.empty(); }
+        @Override public BigDecimal mid() { return StrategyEntrySupport.mid(price); }
+        @Override public BigDecimal spread() { return price.spread(); }
+        @Override public Optional<Long> priceAgeMs() { return Optional.ofNullable(price.updatedAt()).map(updatedAt -> Duration.between(updatedAt, now).toMillis()); }
+        @Override public Optional<Long> bookAgeMs() { return Optional.empty(); }
+        @Override public BigDecimal bidDepth() { return BigDecimal.ZERO; }
+        @Override public BigDecimal askDepth() { return BigDecimal.ZERO; }
+        @Override public BigDecimal bidDepthWithin(BigDecimal priceRange) { return BigDecimal.ZERO; }
+        @Override public BigDecimal askDepthWithin(BigDecimal priceRange) { return BigDecimal.ZERO; }
+        @Override public Optional<com.vokerg.voktrader.marketdata.OrderBookLevel> bestBidLevel() { return Optional.empty(); }
+        @Override public Optional<com.vokerg.voktrader.marketdata.OrderBookLevel> bestAskLevel() { return Optional.empty(); }
+        @Override public Optional<com.vokerg.voktrader.marketdata.FillEstimate> estimateTakerBuy(BigDecimal amountUsd) { return Optional.empty(); }
+        @Override public Optional<com.vokerg.voktrader.marketdata.FillEstimate> estimateTakerSell(BigDecimal shares) { return Optional.empty(); }
+        @Override public Optional<com.vokerg.voktrader.economy.FeeEstimate> estimateTakerFee(com.vokerg.voktrader.marketdata.FillEstimate estimate) { return Optional.empty(); }
+        @Override public Optional<com.vokerg.voktrader.economy.FeeEstimate> estimateMakerBuyFee(BigDecimal amountUsd) { return Optional.empty(); }
     }
 }

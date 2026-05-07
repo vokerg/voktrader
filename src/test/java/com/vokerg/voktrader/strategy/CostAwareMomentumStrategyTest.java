@@ -5,8 +5,8 @@ import com.vokerg.voktrader.economy.LiquidityRole;
 import com.vokerg.voktrader.economy.TradeEconomy;
 import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
-import com.vokerg.voktrader.pricing.LatestPriceState;
-import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.marketdata.LatestPriceState;
+import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.ExecutionRouter;
@@ -55,6 +55,9 @@ class CostAwareMomentumStrategyTest {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
                 null
         );
         StrategyTradeSupport tradeSupport = new StrategyTradeSupport(tradeRepository);
@@ -66,6 +69,7 @@ class CostAwareMomentumStrategyTest {
                         tradeSupport,
                         executionRouter,
                         eventLogger,
+                        mock(StrategyMarketDataProvider.class),
                         clock
                 ),
                 new StrategyExitSupport(trackedMarketState, latestPriceState, tradeSupport, executionRouter, tradeEconomy, eventLogger),
@@ -509,6 +513,7 @@ class CostAwareMomentumStrategyTest {
                 new BigDecimal("1.00"),
                 null,
                 com.vokerg.voktrader.trade.TradeOrderType.FOK,
+                false,
                 new BigDecimal(entryPrice),
                 new BigDecimal(entryPrice).subtract(new BigDecimal("0.01")),
                 new BigDecimal(entryPrice),

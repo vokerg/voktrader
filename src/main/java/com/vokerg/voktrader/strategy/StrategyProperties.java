@@ -11,7 +11,10 @@ public record StrategyProperties(
         SimpleDownCheapTightSpread simpleDownCheapTightSpread,
         BuySellSmoke buySellSmoke,
         CostAwareMomentum costAwareMomentum,
-        FlipCatcher flipCatcher
+        FlipCatcher flipCatcher,
+        OrderBookLiquidity orderBookLiquidity,
+        MakerResolutionCarry makerResolutionCarry,
+        ResolutionPressureFok resolutionPressureFok
 ) {
 
     public static final String DEFAULT_ACTIVE = "cost-aware-momentum-paper";
@@ -52,6 +55,24 @@ public record StrategyProperties(
         return flipCatcher == null
                 ? new FlipCatcher(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)
                 : flipCatcher;
+    }
+
+    public OrderBookLiquidity orderBookLiquidityOrDefault() {
+        return orderBookLiquidity == null
+                ? new OrderBookLiquidity(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)
+                : orderBookLiquidity;
+    }
+
+    public MakerResolutionCarry makerResolutionCarryOrDefault() {
+        return makerResolutionCarry == null
+                ? new MakerResolutionCarry(null, null, null, null, null, null, null, null, null, null, null, null, null)
+                : makerResolutionCarry;
+    }
+
+    public ResolutionPressureFok resolutionPressureFokOrDefault() {
+        return resolutionPressureFok == null
+                ? new ResolutionPressureFok(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)
+                : resolutionPressureFok;
     }
 
     public record SimpleDownCheapTightSpread(
@@ -249,5 +270,129 @@ public record StrategyProperties(
         public long forceDecisionSecondsOrDefault() { return forceDecisionSeconds == null ? 20L : forceDecisionSeconds; }
         public long closedTradeCooldownSecondsOrDefault() { return closedTradeCooldownSeconds == null ? 90L : closedTradeCooldownSeconds; }
         public int maxTradesPerMarketOrDefault() { return maxTradesPerMarket == null ? 5 : maxTradesPerMarket; }
+    }
+
+    public record OrderBookLiquidity(
+            Long maxDataAgeMs,
+            Long maxBookAgeMs,
+            BigDecimal maxSpread,
+            BigDecimal maxEntryAsk,
+            BigDecimal minBid,
+            BigDecimal minMidMove5s,
+            BigDecimal maxTakerSlippage,
+            BigDecimal maxTakerWorstPrice,
+            BigDecimal maxTakerFeeUsd,
+            BigDecimal minNearAskDepthShares,
+            BigDecimal minNearBidDepthShares,
+            BigDecimal minNearDepthImbalance,
+            BigDecimal nearTopRange,
+            BigDecimal paperSizeUsd,
+            BigDecimal minProfitUsd,
+            BigDecimal minPriceMove,
+            BigDecimal maxLossUsd,
+            BigDecimal stopMid,
+            Long minHoldSeconds,
+            Long closedTradeCooldownSeconds,
+            Integer maxTradesPerMarket
+    ) {
+        public long maxDataAgeMsOrDefault() { return maxDataAgeMs == null ? 1_500L : maxDataAgeMs; }
+        public long maxBookAgeMsOrDefault() { return maxBookAgeMs == null ? 1_500L : maxBookAgeMs; }
+        public BigDecimal maxSpreadOrDefault() { return maxSpread == null ? new BigDecimal("0.02") : maxSpread; }
+        public BigDecimal maxEntryAskOrDefault() { return maxEntryAsk == null ? new BigDecimal("0.62") : maxEntryAsk; }
+        public BigDecimal minBidOrDefault() { return minBid == null ? new BigDecimal("0.45") : minBid; }
+        public BigDecimal minMidMove5sOrDefault() { return minMidMove5s == null ? new BigDecimal("0.015") : minMidMove5s; }
+        public BigDecimal maxTakerSlippageOrDefault() { return maxTakerSlippage == null ? new BigDecimal("0.015") : maxTakerSlippage; }
+        public BigDecimal maxTakerWorstPriceOrDefault() { return maxTakerWorstPrice == null ? new BigDecimal("0.65") : maxTakerWorstPrice; }
+        public BigDecimal maxTakerFeeUsdOrDefault() { return maxTakerFeeUsd == null ? new BigDecimal("0.04") : maxTakerFeeUsd; }
+        public BigDecimal minNearAskDepthSharesOrDefault() { return minNearAskDepthShares == null ? new BigDecimal("2.0") : minNearAskDepthShares; }
+        public BigDecimal minNearBidDepthSharesOrDefault() { return minNearBidDepthShares == null ? new BigDecimal("2.0") : minNearBidDepthShares; }
+        public BigDecimal minNearDepthImbalanceOrDefault() { return minNearDepthImbalance == null ? new BigDecimal("-0.20") : minNearDepthImbalance; }
+        public BigDecimal nearTopRangeOrDefault() { return nearTopRange == null ? new BigDecimal("0.03") : nearTopRange; }
+        public BigDecimal paperSizeUsdOrDefault() { return paperSizeUsd == null ? new BigDecimal("1.00") : paperSizeUsd; }
+        public BigDecimal minProfitUsdOrDefault() { return minProfitUsd == null ? new BigDecimal("0.08") : minProfitUsd; }
+        public BigDecimal minPriceMoveOrDefault() { return minPriceMove == null ? new BigDecimal("0.04") : minPriceMove; }
+        public BigDecimal maxLossUsdOrDefault() { return maxLossUsd == null ? new BigDecimal("0.12") : maxLossUsd; }
+        public BigDecimal stopMidOrDefault() { return stopMid == null ? new BigDecimal("0.43") : stopMid; }
+        public long minHoldSecondsOrDefault() { return minHoldSeconds == null ? 6L : minHoldSeconds; }
+        public long closedTradeCooldownSecondsOrDefault() { return closedTradeCooldownSeconds == null ? 90L : closedTradeCooldownSeconds; }
+        public int maxTradesPerMarketOrDefault() { return maxTradesPerMarket == null ? 5 : maxTradesPerMarket; }
+    }
+
+    public record MakerResolutionCarry(
+            Long maxDataAgeMs,
+            Long maxBookAgeMs,
+            BigDecimal maxSpread,
+            BigDecimal minBid,
+            BigDecimal maxMakerBid,
+            BigDecimal minMidMove5s,
+            BigDecimal minNearBidDepthShares,
+            BigDecimal nearTopRange,
+            BigDecimal paperSizeUsd,
+            BigDecimal minProfitUsd,
+            BigDecimal waitForResolutionBelowExitBid,
+            Long waitForResolutionSeconds,
+            Integer maxTradesPerMarket
+    ) {
+        public long maxDataAgeMsOrDefault() { return maxDataAgeMs == null ? 1_500L : maxDataAgeMs; }
+        public long maxBookAgeMsOrDefault() { return maxBookAgeMs == null ? 1_500L : maxBookAgeMs; }
+        public BigDecimal maxSpreadOrDefault() { return maxSpread == null ? new BigDecimal("0.03") : maxSpread; }
+        public BigDecimal minBidOrDefault() { return minBid == null ? new BigDecimal("0.45") : minBid; }
+        public BigDecimal maxMakerBidOrDefault() { return maxMakerBid == null ? new BigDecimal("0.58") : maxMakerBid; }
+        public BigDecimal minMidMove5sOrDefault() { return minMidMove5s == null ? new BigDecimal("0.010") : minMidMove5s; }
+        public BigDecimal minNearBidDepthSharesOrDefault() { return minNearBidDepthShares == null ? new BigDecimal("2.0") : minNearBidDepthShares; }
+        public BigDecimal nearTopRangeOrDefault() { return nearTopRange == null ? new BigDecimal("0.03") : nearTopRange; }
+        public BigDecimal paperSizeUsdOrDefault() { return paperSizeUsd == null ? new BigDecimal("1.00") : paperSizeUsd; }
+        public BigDecimal minProfitUsdOrDefault() { return minProfitUsd == null ? new BigDecimal("0.08") : minProfitUsd; }
+        public BigDecimal waitForResolutionBelowExitBidOrDefault() { return waitForResolutionBelowExitBid == null ? new BigDecimal("0.35") : waitForResolutionBelowExitBid; }
+        public long waitForResolutionSecondsOrDefault() { return waitForResolutionSeconds == null ? 20L : waitForResolutionSeconds; }
+        public int maxTradesPerMarketOrDefault() { return maxTradesPerMarket == null ? 3 : maxTradesPerMarket; }
+    }
+
+    public record ResolutionPressureFok(
+            Long maxDataAgeMs,
+            Long maxBookAgeMs,
+            Long minSecondsToExpiry,
+            Long maxSecondsToExpiry,
+            BigDecimal maxSpread,
+            BigDecimal minMid,
+            BigDecimal maxEntryAsk,
+            BigDecimal minBid,
+            BigDecimal maxOppositeMid,
+            BigDecimal minMidEdge,
+            BigDecimal minMidMove5s,
+            BigDecimal maxNegativeMove3s,
+            BigDecimal maxTakerSlippage,
+            BigDecimal maxTakerWorstPrice,
+            BigDecimal maxTakerFeeUsd,
+            BigDecimal minNearAskDepthShares,
+            BigDecimal nearTopRange,
+            BigDecimal paperSizeUsd,
+            BigDecimal minProfitUsd,
+            BigDecimal maxLossUsd,
+            Long waitForResolutionSeconds,
+            Integer maxTradesPerMarket
+    ) {
+        public long maxDataAgeMsOrDefault() { return maxDataAgeMs == null ? 1_500L : maxDataAgeMs; }
+        public long maxBookAgeMsOrDefault() { return maxBookAgeMs == null ? 1_500L : maxBookAgeMs; }
+        public long minSecondsToExpiryOrDefault() { return minSecondsToExpiry == null ? 12L : minSecondsToExpiry; }
+        public long maxSecondsToExpiryOrDefault() { return maxSecondsToExpiry == null ? 95L : maxSecondsToExpiry; }
+        public BigDecimal maxSpreadOrDefault() { return maxSpread == null ? new BigDecimal("0.025") : maxSpread; }
+        public BigDecimal minMidOrDefault() { return minMid == null ? new BigDecimal("0.54") : minMid; }
+        public BigDecimal maxEntryAskOrDefault() { return maxEntryAsk == null ? new BigDecimal("0.72") : maxEntryAsk; }
+        public BigDecimal minBidOrDefault() { return minBid == null ? new BigDecimal("0.48") : minBid; }
+        public BigDecimal maxOppositeMidOrDefault() { return maxOppositeMid == null ? new BigDecimal("0.47") : maxOppositeMid; }
+        public BigDecimal minMidEdgeOrDefault() { return minMidEdge == null ? new BigDecimal("0.08") : minMidEdge; }
+        public BigDecimal minMidMove5sOrDefault() { return minMidMove5s == null ? new BigDecimal("0.008") : minMidMove5s; }
+        public BigDecimal maxNegativeMove3sOrDefault() { return maxNegativeMove3s == null ? new BigDecimal("-0.008") : maxNegativeMove3s; }
+        public BigDecimal maxTakerSlippageOrDefault() { return maxTakerSlippage == null ? new BigDecimal("0.020") : maxTakerSlippage; }
+        public BigDecimal maxTakerWorstPriceOrDefault() { return maxTakerWorstPrice == null ? new BigDecimal("0.74") : maxTakerWorstPrice; }
+        public BigDecimal maxTakerFeeUsdOrDefault() { return maxTakerFeeUsd == null ? new BigDecimal("0.06") : maxTakerFeeUsd; }
+        public BigDecimal minNearAskDepthSharesOrDefault() { return minNearAskDepthShares == null ? new BigDecimal("2.0") : minNearAskDepthShares; }
+        public BigDecimal nearTopRangeOrDefault() { return nearTopRange == null ? new BigDecimal("0.03") : nearTopRange; }
+        public BigDecimal paperSizeUsdOrDefault() { return paperSizeUsd == null ? new BigDecimal("1.00") : paperSizeUsd; }
+        public BigDecimal minProfitUsdOrDefault() { return minProfitUsd == null ? new BigDecimal("0.06") : minProfitUsd; }
+        public BigDecimal maxLossUsdOrDefault() { return maxLossUsd == null ? new BigDecimal("0.18") : maxLossUsd; }
+        public long waitForResolutionSecondsOrDefault() { return waitForResolutionSeconds == null ? 18L : waitForResolutionSeconds; }
+        public int maxTradesPerMarketOrDefault() { return maxTradesPerMarket == null ? 3 : maxTradesPerMarket; }
     }
 }

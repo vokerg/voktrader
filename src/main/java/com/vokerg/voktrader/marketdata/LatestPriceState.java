@@ -1,6 +1,7 @@
-package com.vokerg.voktrader.pricing;
+package com.vokerg.voktrader.marketdata;
 
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
+import com.vokerg.voktrader.time.TimeMachine;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -14,9 +15,13 @@ public class LatestPriceState {
     private final Map<String, OutcomePrice> byTokenId = new ConcurrentHashMap<>();
 
     public void update(String tokenId, String outcome, BigDecimal bid, BigDecimal ask) {
+        update(tokenId, outcome, bid, ask, TimeMachine.now());
+    }
+
+    public void update(String tokenId, String outcome, BigDecimal bid, BigDecimal ask, Instant updatedAt) {
         Optional<LatestPriceState> delegate = delegate();
         if (delegate.isPresent()) {
-            delegate.get().update(tokenId, outcome, bid, ask);
+            delegate.get().update(tokenId, outcome, bid, ask, updatedAt);
             return;
         }
         if (tokenId == null || outcome == null) {
@@ -26,7 +31,7 @@ public class LatestPriceState {
         if (bid != null && ask != null) {
             spread = ask.subtract(bid);
         }
-        byTokenId.put(tokenId, new OutcomePrice(tokenId, outcome, bid, ask, spread, Instant.now()));
+        byTokenId.put(tokenId, new OutcomePrice(tokenId, outcome, bid, ask, spread, updatedAt == null ? TimeMachine.now() : updatedAt));
     }
 
     public Optional<OutcomePrice> byTokenId(String tokenId) {

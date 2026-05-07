@@ -4,5 +4,6 @@ public enum ExecutionMode {
     PAPER,
     LIVE_SHADOW,
     LIVE_TINY,
-    LIVE
+    LIVE,
+    TESTING
 }

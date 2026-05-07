@@ -4,17 +4,18 @@ import com.vokerg.voktrader.common.LogColors;
 import com.vokerg.voktrader.config.MarketSelectionProperties;
 import com.vokerg.voktrader.market.MarketPersistenceService;
 import com.vokerg.voktrader.market.TrackedMarketState;
-import com.vokerg.voktrader.polymarket.client.ClobClient;
 import com.vokerg.voktrader.polymarket.client.GammaClient;
-import com.vokerg.voktrader.polymarket.client.PolymarketWebSocketClient;
+import com.vokerg.voktrader.marketdata.LatestPriceState;
+import com.vokerg.voktrader.marketdata.MarketPriceFeedHandle;
+import com.vokerg.voktrader.marketdata.MarketPriceFeedService;
+import com.vokerg.voktrader.marketdata.MarketTokenMap;
+import com.vokerg.voktrader.marketdata.OrderBookState;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.polymarket.dto.MarketWsMessageDto;
-import com.vokerg.voktrader.pricing.LatestPriceState;
 import com.vokerg.voktrader.resolution.MarketResolutionService;
 import com.vokerg.voktrader.telemetry.TelemetryData;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -22,37 +23,30 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.math.BigDecimal;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class BotRuntime {
     private final BotConfigEntity config;
     private final GammaClient gammaClient;
-    private final ClobClient clobClient;
-    private final PolymarketWebSocketClient webSocketClient;
+    private final MarketPriceFeedService marketPriceFeedService;
     private final ObjectMapper objectMapper;
     private final MarketSelectionProperties marketSelectionProperties;
     private final MarketPersistenceService marketPersistenceService;
     private final MarketResolutionService marketResolutionService;
     private final TradingEventLogger eventLogger;
     private final AtomicBoolean rolloverInProgress = new AtomicBoolean(false);
-    private final Map<String, Disposable> resolutionOnlySubscriptions = new ConcurrentHashMap<>();
-    private final LatestPriceState latestPriceState = new LatestPriceState();
+    private final LatestPriceState fallbackPriceState = new LatestPriceState();
+    private final OrderBookState fallbackOrderBookState = new OrderBookState();
     private final TrackedMarketState trackedMarketState = new TrackedMarketState();
-    private final Map<String, Instant> lastPriceLogByTokenId = new ConcurrentHashMap<>();
-    private Disposable webSocketSubscription;
+    private MarketPriceFeedHandle currentPriceFeed;
 
     public BotRuntime(
             BotConfigEntity config,
             GammaClient gammaClient,
-            ClobClient clobClient,
-            PolymarketWebSocketClient webSocketClient,
+            MarketPriceFeedService marketPriceFeedService,
             ObjectMapper objectMapper,
             MarketSelectionProperties marketSelectionProperties,
             MarketPersistenceService marketPersistenceService,
@@ -61,8 +55,7 @@ public class BotRuntime {
     ) {
         this.config = config;
         this.gammaClient = gammaClient;
-        this.clobClient = clobClient;
-        this.webSocketClient = webSocketClient;
+        this.marketPriceFeedService = marketPriceFeedService;
         this.objectMapper = objectMapper;
         this.marketSelectionProperties = marketSelectionProperties;
         this.marketPersistenceService = marketPersistenceService;
@@ -79,7 +72,22 @@ public class BotRuntime {
     }
 
     public BotRuntimeContext context() {
-        return new BotRuntimeContext(botId(), config.getMarketFamily(), config.getStrategyId(), trackedMarketState, latestPriceState);
+        return new BotRuntimeContext(
+                botId(),
+                config.getMarketFamily(),
+                config.getStrategyId(),
+                trackedMarketState,
+                currentLatestPriceState(),
+                currentOrderBookState()
+        );
+    }
+
+    private LatestPriceState currentLatestPriceState() {
+        return currentPriceFeed == null ? fallbackPriceState : currentPriceFeed.latestPriceState();
+    }
+
+    private OrderBookState currentOrderBookState() {
+        return currentPriceFeed == null ? fallbackOrderBookState : currentPriceFeed.orderBookState();
     }
 
     public void start(String reason) {
@@ -223,22 +231,16 @@ public class BotRuntime {
             );
             return;
         }
-        keepCurrentWebSocketForResolution(marketId);
+        detachCurrentPriceFeedForResolution();
         marketPersistenceService.markStopped(marketId);
         trackedMarketState.clearIfCurrent(marketId);
-        latestPriceState.clear();
+        fallbackPriceState.clear();
+        fallbackOrderBookState.clear();
         rollToNextMarket(reason);
     }
 
     public void shutdown() {
-        disposeWebSocketSubscription();
-        resolutionOnlySubscriptions.forEach((marketId, subscription) -> {
-            if (subscription != null && !subscription.isDisposed()) {
-                subscription.dispose();
-                log.info("Disposed resolution-only WebSocket subscription botId={} marketId={}", botId(), marketId);
-            }
-        });
-        resolutionOnlySubscriptions.clear();
+        releaseCurrentPriceFeed();
     }
 
     private Mono<GammaMarketDto> findConfiguredMarket() {
@@ -285,8 +287,9 @@ public class BotRuntime {
         if (market == null) {
             return;
         }
-        disposeWebSocketSubscription();
-        latestPriceState.clear();
+        releaseCurrentPriceFeed();
+        fallbackPriceState.clear();
+        fallbackOrderBookState.clear();
         trackedMarketState.startTracking(market);
         var savedMarket = marketPersistenceService.saveOrUpdate(market);
         List<String> tokenIds = market.tokenIds(objectMapper);
@@ -304,11 +307,11 @@ public class BotRuntime {
             );
             return;
         }
-        Map<String, String> outcomeByTokenId = buildOutcomeMap(tokenIds, outcomes);
+        MarketTokenMap tokenMap = MarketTokenMap.from(tokenIds, outcomes);
         Duration remaining = market.endDate() == null ? null : Duration.between(Instant.now(), market.endDate());
         log.info("{}Tracking bot market botId={} marketId={} dbId={} slug={} family={} endDate={} remaining={} tokenOutcomeMap={}{}",
                 LogColors.MARKET, botId(), market.id(), savedMarket.getId(), market.slug(), config.getMarketFamily(),
-                market.endDate(), remaining, outcomeByTokenId, LogColors.RESET);
+                market.endDate(), remaining, tokenMap.outcomeByTokenId(), LogColors.RESET);
         eventLogger.market(
                 "MARKET_TRACKING_STARTED",
                 botId(),
@@ -320,23 +323,11 @@ public class BotRuntime {
                         "question", market.question(),
                         "endDate", market.endDate(),
                         "remaining", remaining,
-                        "outcomeByTokenId", outcomeByTokenId
+                        "outcomeByTokenId", tokenMap.outcomeByTokenId()
                 ),
                 true
         );
-        seedStateFromRestOrderBooks(outcomeByTokenId);
-        webSocketSubscription = webSocketClient.subscribeToMarketData(
-                tokenIds,
-                message -> handleMarketMessage(message, market.id(), outcomeByTokenId));
-    }
-
-    private Map<String, String> buildOutcomeMap(List<String> tokenIds, List<String> outcomes) {
-        Map<String, String> result = new HashMap<>();
-        int count = Math.min(tokenIds.size(), outcomes.size());
-        for (int i = 0; i < count; i++) {
-            result.put(tokenIds.get(i), outcomes.get(i));
-        }
-        return result;
+        currentPriceFeed = marketPriceFeedService.acquire(botId(), market, tokenMap, this::handleMarketResolved);
     }
 
     private boolean matchesConfiguredMarketFamily(GammaMarketDto market) {
@@ -375,152 +366,7 @@ public class BotRuntime {
         return !sameId && !sameSlug;
     }
 
-    private void seedStateFromRestOrderBooks(Map<String, String> outcomeByTokenId) {
-        outcomeByTokenId.forEach((tokenId, outcome) -> {
-            try {
-                var book = clobClient.getOrderBook(tokenId).block();
-                if (book == null) {
-                    log.warn("{}No REST order book returned for botId={} outcome={} tokenId={}{}",
-                            LogColors.MARKET, botId(), outcome, tokenId, LogColors.RESET);
-                    eventLogger.price(
-                            "PRICE_SEED_MISSING_BOOK",
-                            botId(),
-                            trackedMarketState.currentMarket().orElse(null),
-                            null,
-                            "REST order book missing",
-                            TelemetryData.data("outcome", outcome, "tokenId", tokenId),
-                            true
-                    );
-                    return;
-                }
-                latestPriceState.update(tokenId, outcome, book.bestBid().orElse(null), book.bestAsk().orElse(null));
-                log.info("{}Seeded bot price state botId={} outcome={} tokenId={} bid={} ask={} spread={}{}",
-                        LogColors.MARKET, botId(), outcome, tokenId,
-                        book.bestBid().orElse(null), book.bestAsk().orElse(null), book.spread().orElse(null), LogColors.RESET);
-                eventLogger.price(
-                        "PRICE_SEEDED_FROM_REST",
-                        botId(),
-                        trackedMarketState.currentMarket().orElse(null),
-                        null,
-                        "seeded REST book",
-                        TelemetryData.data(
-                                "outcome", outcome,
-                                "tokenId", tokenId,
-                                "bid", book.bestBid().orElse(null),
-                                "ask", book.bestAsk().orElse(null),
-                                "spread", book.spread().orElse(null)
-                        ),
-                        true
-                );
-            } catch (Exception e) {
-                log.warn("{}Failed to seed REST book for botId={} outcome={} tokenId={}{}",
-                        LogColors.MARKET, botId(), outcome, tokenId, LogColors.RESET, e);
-                eventLogger.price(
-                        "PRICE_SEED_FAILED",
-                        botId(),
-                        trackedMarketState.currentMarket().orElse(null),
-                        null,
-                        "REST seed failed",
-                        TelemetryData.data("outcome", outcome, "tokenId", tokenId, "error", e.getMessage()),
-                        true
-                );
-            }
-        });
-    }
-
-    private void handleMarketMessage(MarketWsMessageDto message, String subscriptionMarketId, Map<String, String> outcomeByTokenId) {
-        if (message == null) {
-            return;
-        }
-        if (!message.isMarketResolved() && !trackedMarketState.isCurrentMarket(subscriptionMarketId)) {
-            log.debug("Ignoring late event for non-current bot market: botId={} marketId={} event={}",
-                    botId(), subscriptionMarketId, message.eventType());
-            eventLogger.market(
-                    "MARKET_LATE_WS_EVENT_IGNORED",
-                    botId(),
-                    trackedMarketState.currentMarket().orElse(null),
-                    "late websocket event",
-                    TelemetryData.data("subscriptionMarketId", subscriptionMarketId, "eventType", message.eventType()),
-                    false
-            );
-            return;
-        }
-        if (message.isBook() || message.isBestBidAsk() || message.isPriceChange()) {
-            handlePriceMessage(message, outcomeByTokenId);
-            return;
-        }
-        if (message.isMarketResolved()) {
-            handleMarketResolved(message, subscriptionMarketId);
-        }
-    }
-
-    private void handlePriceMessage(MarketWsMessageDto message, Map<String, String> outcomeByTokenId) {
-        if (message.isPriceChange()) {
-            handlePriceChangeMessage(message, outcomeByTokenId);
-            return;
-        }
-        String tokenId = message.assetId();
-        String outcome = outcomeByTokenId.get(tokenId);
-        if (outcome == null) {
-            return;
-        }
-        var bid = message.effectiveBestBid().orElse(null);
-        var ask = message.effectiveBestAsk().orElse(null);
-        latestPriceState.update(tokenId, outcome, bid, ask);
-        Instant now = Instant.now();
-        Instant lastLoggedAt = lastPriceLogByTokenId.get(tokenId);
-        if (lastLoggedAt == null || Duration.between(lastLoggedAt, now).compareTo(Duration.ofSeconds(10)) >= 0) {
-            lastPriceLogByTokenId.put(tokenId, now);
-            log.info("{}Live bot price update botId={} event={} outcome={} tokenId={} bid={} ask={} spread={}{}",
-                    LogColors.SNAPSHOT, botId(), message.eventType(), outcome, tokenId, bid, ask,
-                    ask != null && bid != null ? ask.subtract(bid) : null, LogColors.RESET);
-            eventLogger.price(
-                    "PRICE_WS_UPDATE",
-                    botId(),
-                    trackedMarketState.currentMarket().orElse(null),
-                    null,
-                    "websocket price update",
-                    TelemetryData.data(
-                            "eventType", message.eventType(),
-                            "outcome", outcome,
-                            "tokenId", tokenId,
-                            "bid", bid,
-                            "ask", ask,
-                            "spread", ask != null && bid != null ? ask.subtract(bid) : null
-                    ),
-                    true
-            );
-        }
-    }
-
-    private void handlePriceChangeMessage(MarketWsMessageDto message, Map<String, String> outcomeByTokenId) {
-        if (message.priceChanges() == null || message.priceChanges().isEmpty()) {
-            return;
-        }
-        message.priceChanges().forEach(change -> {
-            String tokenId = change.assetId();
-            String outcome = outcomeByTokenId.get(tokenId);
-            if (outcome == null) {
-                return;
-            }
-            BigDecimal bid = parseDecimal(change.bestBid()).orElse(null);
-            BigDecimal ask = parseDecimal(change.bestAsk()).orElse(null);
-            latestPriceState.update(tokenId, outcome, bid, ask);
-        });
-    }
-
-    private Optional<BigDecimal> parseDecimal(String value) {
-        if (value == null || value.isBlank()) {
-            return Optional.empty();
-        }
-        try {
-            return Optional.of(new BigDecimal(value));
-        } catch (NumberFormatException e) {
-            return Optional.empty();
-        }
-    }
-
-    private void handleMarketResolved(MarketWsMessageDto message, String subscriptionMarketId) {
+    private void handleMarketResolved(String subscriptionMarketId, MarketWsMessageDto message) {
         GammaMarketDto market = trackedMarketState.currentMarket().orElse(null);
         String resolvedMarketId = firstPresent(subscriptionMarketId, message.market(), market == null ? null : market.id());
         if (resolvedMarketId == null || resolvedMarketId.isBlank()) {
@@ -563,11 +409,10 @@ public class BotRuntime {
         );
         marketResolutionService.resolveMarket(resolvedMarketId, message.winningAssetId(), message.winningOutcome(), "websocket");
         if (!trackedMarketState.isCurrentMarket(resolvedMarketId)) {
-            disposeResolutionOnlySubscription(resolvedMarketId);
             return;
         }
         trackedMarketState.markResolved(message.winningOutcome());
-        disposeWebSocketSubscription();
+        releaseCurrentPriceFeed();
         rollToNextMarket("market_resolved");
     }
 
@@ -580,53 +425,34 @@ public class BotRuntime {
         return null;
     }
 
-    private void disposeWebSocketSubscription() {
-        if (webSocketSubscription != null && !webSocketSubscription.isDisposed()) {
-            webSocketSubscription.dispose();
-            log.info("Bot WebSocket subscription disposed botId={}", botId());
+    private void releaseCurrentPriceFeed() {
+        if (currentPriceFeed != null) {
+            currentPriceFeed.close();
+            currentPriceFeed = null;
             eventLogger.market(
-                    "MARKET_WS_DISPOSED",
+                    "MARKET_PRICE_FEED_RELEASED",
                     botId(),
                     trackedMarketState.currentMarket().orElse(null),
-                    "subscription disposed",
+                    "bot released shared market price feed",
                     Map.of(),
                     false
             );
         }
-        webSocketSubscription = null;
     }
 
-    private void keepCurrentWebSocketForResolution(String marketId) {
-        if (webSocketSubscription == null || webSocketSubscription.isDisposed()) {
-            webSocketSubscription = null;
-            return;
-        }
-        resolutionOnlySubscriptions.put(marketId, webSocketSubscription);
-        webSocketSubscription = null;
-        log.info("{}Keeping expired bot market WebSocket alive for resolution only: botId={} marketId={}{}",
-                LogColors.MARKET, botId(), marketId, LogColors.RESET);
-        eventLogger.market(
-                "MARKET_WS_RESOLUTION_ONLY",
-                botId(),
-                null,
-                "keeping expired market websocket for resolution",
-                TelemetryData.data("marketId", marketId),
-                true
-        );
-    }
-
-    private void disposeResolutionOnlySubscription(String marketId) {
-        Disposable subscription = resolutionOnlySubscriptions.remove(marketId);
-        if (subscription != null && !subscription.isDisposed()) {
-            subscription.dispose();
+    private void detachCurrentPriceFeedForResolution() {
+        if (currentPriceFeed != null) {
+            log.info("{}Keeping expired shared market price feed for resolution only: botId={} marketId={}{}",
+                    LogColors.MARKET, botId(), currentPriceFeed.marketId(), LogColors.RESET);
             eventLogger.market(
-                    "MARKET_RESOLUTION_WS_DISPOSED",
+                    "MARKET_PRICE_FEED_RESOLUTION_ONLY",
                     botId(),
-                    null,
-                    "resolution-only websocket disposed",
-                    TelemetryData.data("marketId", marketId),
-                    false
+                    trackedMarketState.currentMarket().orElse(null),
+                    "keeping expired shared market price feed for resolution",
+                    TelemetryData.data("marketId", currentPriceFeed.marketId()),
+                    true
             );
+            currentPriceFeed = null;
         }
     }
 }

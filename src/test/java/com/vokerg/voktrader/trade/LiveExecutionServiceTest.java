@@ -5,7 +5,7 @@ import com.vokerg.voktrader.executor.ExecutorOrderResponse;
 import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.executor.PythonExecutorClient;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
-import com.vokerg.voktrader.pricing.OutcomePrice;
+import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +18,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 class LiveExecutionServiceTest {
@@ -172,6 +173,53 @@ class LiveExecutionServiceTest {
         ArgumentCaptor<TradeEntity> tradeCaptor = ArgumentCaptor.forClass(TradeEntity.class);
         org.mockito.Mockito.verify(tradeRepository, org.mockito.Mockito.atLeastOnce()).save(tradeCaptor.capture());
         assertThat(tradeCaptor.getAllValues().getLast().getEntryFeeUsd()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void makerBuyIsRejectedBeforeExecutorWhenImmediateFillRequired() {
+        TradeExecutionResult result = service.execute(TradeIntent.buyMaker(
+                market(),
+                price("down", "Down", "0.59", "0.60"),
+                new BigDecimal("1.00"),
+                "maker-resolution-carry",
+                "maker-resolution-carry",
+                "entry"
+        ), ExecutionMode.LIVE_TINY);
+
+        assertThat(result.accepted()).isFalse();
+        assertThat(result.message()).contains("require-immediate-fill=true");
+        org.mockito.Mockito.verify(pythonExecutorClient, never()).submit(any(ExecutorOrderCommand.class));
+    }
+
+    @Test
+    void makerBuyCanReachExecutorWhenImmediateFillIsDisabled() {
+        executorProperties.setRequireImmediateFill(false);
+        when(pythonExecutorClient.submit(any(ExecutorOrderCommand.class))).thenReturn(new ExecutorOrderResponse(
+                true,
+                false,
+                "SUBMITTED",
+                "exchange-order",
+                new BigDecimal("0.59"),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                "submitted",
+                "{}",
+                Instant.now()
+        ));
+
+        TradeExecutionResult result = service.execute(TradeIntent.buyMaker(
+                market(),
+                price("down", "Down", "0.59", "0.60"),
+                new BigDecimal("1.00"),
+                "maker-resolution-carry",
+                "maker-resolution-carry",
+                "entry"
+        ), ExecutionMode.LIVE_TINY);
+
+        assertThat(result.accepted()).isTrue();
+        assertThat(result.tradeStatus()).isEqualTo(TradeStatus.ENTRY_PENDING);
+        org.mockito.Mockito.verify(pythonExecutorClient).submit(any(ExecutorOrderCommand.class));
     }
 
     private ExecutorOrderResponse response(BigDecimal avgPrice, BigDecimal shares, BigDecimal amountUsd, BigDecimal feeUsd) {

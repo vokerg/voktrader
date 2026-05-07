@@ -13,6 +13,7 @@ import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import com.vokerg.voktrader.time.TimeMachine;
 
 @Entity
 @Table(
@@ -65,7 +66,7 @@ public class TradeFillEntity {
         entity.feeUsd = BigDecimal.ZERO;
         entity.liquidityRole = "SIMULATED";
         entity.rawFill = "{\"synthetic\":true}";
-        entity.filledAt = Instant.now();
+        entity.filledAt = TimeMachine.now();
         entity.occurredAt = entity.filledAt;
         entity.receivedAt = entity.filledAt;
         return entity;
@@ -95,7 +96,37 @@ public class TradeFillEntity {
         entity.feeUsd = feeUsd != null ? feeUsd : BigDecimal.ZERO;
         entity.liquidityRole = "TAKER";
         entity.rawFill = rawFill;
-        entity.filledAt = Instant.now();
+        entity.filledAt = TimeMachine.now();
+        entity.occurredAt = entity.filledAt;
+        entity.receivedAt = entity.filledAt;
+        return entity;
+    }
+
+    public static TradeFillEntity backtest(
+            Long tradeId,
+            Long orderId,
+            TradeSide side,
+            BigDecimal price,
+            BigDecimal shares,
+            BigDecimal amountUsd,
+            BigDecimal feeUsd,
+            String liquidityRole,
+            String rawFill
+    ) {
+        TradeFillEntity entity = new TradeFillEntity();
+        entity.tradeId = tradeId;
+        entity.orderId = orderId;
+        entity.tradeOrderId = orderId;
+        entity.exchangeOrderId = "backtest-" + orderId;
+        entity.venue = TradeVenue.BACKTEST_SIM;
+        entity.side = side;
+        entity.price = price;
+        entity.shares = shares;
+        entity.amountUsd = amountUsd;
+        entity.feeUsd = feeUsd != null ? feeUsd : BigDecimal.ZERO;
+        entity.liquidityRole = liquidityRole == null ? "TAKER" : liquidityRole;
+        entity.rawFill = rawFill;
+        entity.filledAt = TimeMachine.now();
         entity.occurredAt = entity.filledAt;
         entity.receivedAt = entity.filledAt;
         return entity;
@@ -107,7 +138,7 @@ public class TradeFillEntity {
             this.tradeOrderId = this.orderId;
         }
         if (this.filledAt == null) {
-            this.filledAt = Instant.now();
+            this.filledAt = TimeMachine.now();
         }
         if (this.occurredAt == null) {
             this.occurredAt = this.filledAt;
@@ -115,7 +146,7 @@ public class TradeFillEntity {
         if (this.receivedAt == null) {
             this.receivedAt = this.filledAt;
         }
-        this.createdAt = Instant.now();
+        this.createdAt = TimeMachine.now();
     }
 
     public Long getId() {

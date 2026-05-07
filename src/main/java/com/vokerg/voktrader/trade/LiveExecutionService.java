@@ -40,6 +40,14 @@ public class LiveExecutionService {
     }
 
     private TradeExecutionResult executeBuy(TradeIntent intent, ExecutionMode mode) {
+        if (intent.orderType().canRestOnBook() && executorProperties.isRequireImmediateFill()) {
+            String message = "LIVE maker entry rejected before executor call: "
+                    + "orderType=" + intent.orderType()
+                    + " can rest on the book while voktrader.executor.require-immediate-fill=true";
+            emitRejected(intent, mode, null, null, message, TelemetryData.data("orderType", intent.orderType()));
+            return TradeExecutionResult.rejected(mode, null, null, null, null, message);
+        }
+
         String idempotencyKey = idempotencyKey(intent, mode);
         RiskAssessment risk = riskCheckService.assess(intent, mode, null, null, idempotencyKey);
         riskCheckRepository.saveAll(risk.checks());
@@ -105,7 +113,7 @@ public class LiveExecutionService {
         BigDecimal fillPrice = firstNonNull(response.averagePrice(), intent.expectedPrice());
         BigDecimal fillShares = firstNonNull(response.filledShares(), intent.shares());
         BigDecimal fillAmountUsd = firstNonNull(response.filledAmountUsd(), intent.amountUsd());
-        BigDecimal feeUsd = resolveFeeUsd(response, fillShares, fillPrice);
+        BigDecimal feeUsd = resolveFeeUsd(intent, response, fillShares, fillPrice);
 
         TradeFillEntity fill = tradeFillRepository.save(TradeFillEntity.polymarket(
                 trade.getId(),
@@ -150,6 +158,13 @@ public class LiveExecutionService {
                     TelemetryData.data("shares", intent.shares()));
             return TradeExecutionResult.rejected(mode, null, null, null, null,
                     "LIVE exit rejected before executor call: sell intent has no positive shares");
+        }
+        if (intent.orderType().canRestOnBook() && executorProperties.isRequireImmediateFill()) {
+            String message = "LIVE maker exit rejected before executor call: "
+                    + "orderType=" + intent.orderType()
+                    + " can rest on the book while voktrader.executor.require-immediate-fill=true";
+            emitRejected(intent, mode, null, null, message, TelemetryData.data("orderType", intent.orderType()));
+            return TradeExecutionResult.rejected(mode, null, null, null, null, message);
         }
 
         TradeEntity trade = findLatestTokenTrade(intent, TradeStatus.OPEN).orElse(null);
@@ -208,7 +223,7 @@ public class LiveExecutionService {
         BigDecimal fillPrice = firstNonNull(response.averagePrice(), intent.expectedPrice());
         BigDecimal fillShares = firstNonNull(response.filledShares(), firstNonNull(intent.shares(), trade.getEntryFilledShares()));
         BigDecimal fillAmountUsd = firstNonNull(response.filledAmountUsd(), fillPrice.multiply(fillShares));
-        BigDecimal feeUsd = resolveFeeUsd(response, fillShares, fillPrice);
+        BigDecimal feeUsd = resolveFeeUsd(intent, response, fillShares, fillPrice);
 
         TradeFillEntity fill = tradeFillRepository.save(TradeFillEntity.polymarket(
                 trade.getId(),
@@ -319,20 +334,24 @@ public class LiveExecutionService {
         return botId == null ? "default" : botId.toString();
     }
 
-    private BigDecimal resolveFeeUsd(ExecutorOrderResponse response, BigDecimal shares, BigDecimal price) {
+    private BigDecimal resolveFeeUsd(TradeIntent intent, ExecutorOrderResponse response, BigDecimal shares, BigDecimal price) {
         if (response.feeUsd() != null) {
             return response.feeUsd();
         }
         if (!tradingProperties.isEstimateLiveFeesWhenMissing()) {
             return BigDecimal.ZERO;
         }
-        BigDecimal feeUsd = feeCalculator.estimateTakerFeeUsd(shares, price, tradingProperties.getTakerFeeRate());
+        BigDecimal feeRate = intent.expectedLiquidityRole() == com.vokerg.voktrader.economy.LiquidityRole.MAKER
+                ? tradingProperties.getMakerFeeRate()
+                : tradingProperties.getTakerFeeRate();
+        BigDecimal feeUsd = feeCalculator.estimateFeeUsd(shares, price, feeRate);
         log.info(
-                "LIVE fee missing from executor; estimated taker fee feeUsd={} shares={} price={} feeRate={}",
+                "LIVE fee missing from executor; estimated {} fee feeUsd={} shares={} price={} feeRate={}",
+                intent.expectedLiquidityRole(),
                 feeUsd,
                 shares,
                 price,
-                tradingProperties.getTakerFeeRate()
+                feeRate
         );
         eventLogger.execution(
                 "LIVE_FEE_ESTIMATED",
