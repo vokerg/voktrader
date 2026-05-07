@@ -1,0 +1,171 @@
+# Copy sections from this file into application.yml or an imported profile-specific YAML.
+# Spring Boot's canonical prefix is strategy-v2; environment variables can still use STRATEGY_V2_*.
+strategy-v2:
+  schema-version: "2.0"
+
+  engine:
+    enabled: false
+    active-strategy-ids: []
+    tick-ms: 1000
+    decision-mode: "single_market_single_position"
+    decimal-scale: 8
+    require-complete-up-down-price: true
+    require-mid-sum-sane: true
+    min-mid-sum: "0.97"
+    max-mid-sum: "1.03"
+    default-profile: "conservative_paper"
+    safety:
+      kill-switch-respected: true
+      live-requires-explicit-allowlist: true
+      block-live-maker-without-reconciliation: true
+      block-unknown-order-type: true
+      block-missing-fee-model: true
+      block-missing-book-for-book-rules: true
+
+  defaults:
+    conservative_paper:
+      data:
+        max-price-age-ms: 1500
+        max-book-age-ms: 1500
+        warmup-seconds: 30
+        min-samples-per-window: 3
+      sizing:
+        paper-size-usd: "1.00"
+        live-size-usd: "5.00"
+        max-order-usd: "5.00"
+        min-order-usd: "1.00"
+        price-tick: "0.01"
+        round-shares-scale: 4
+      fees:
+        maker-fee-rate: "0.00"
+        taker-fee-rate: "0.072"
+        estimate-live-fees-when-missing: true
+      execution:
+        default-entry-order-type: "FOK"
+        default-exit-order-type: "FOK"
+        default-entry-liquidity-role: "taker"
+        post-only: false
+        allow-partial-fill: false
+      simulation:
+        fill-model: "taker_instant"
+        fee-model: "configured"
+
+  strategies:
+    - strategy-id: "cfg_simple_down_cheap_v2"
+      enabled: true
+      profile: "conservative_paper"
+      hypothesis: "Buy cheap Down only when spread is tight enough."
+      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
+      candidate-selection:
+        type: "fixed_outcome"
+        outcome: "Down"
+        candidates: ["Up", "Down"]
+      entry:
+        enabled: true
+        rule-id: "entry_simple_down_cheap"
+        when:
+          all:
+            - feature: "candidate.ask"
+              op: "<="
+              value: "0.25"
+            - feature: "candidate.spread"
+              op: "<="
+              value: "0.03"
+        action:
+          side: "BUY"
+          liquidity-role: "taker"
+          order-type: "FOK"
+          post-only: false
+          price:
+            source: "best_ask"
+            max-price: "0.25"
+            tick-size: "0.01"
+            rounding: "ceil_to_tick"
+          size:
+            type: "fixed_usd"
+            paper-usd: "1.00"
+            live-usd: "5.00"
+            max-usd: "5.00"
+          reason-template: "strategy-v2 simple down cheap candidate={{candidate.outcome}} ask={{candidate.ask}} spread={{candidate.spread}}"
+      exit:
+        enabled: true
+        rules:
+          - name: "take_profit"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            when:
+              all:
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: ">="
+                  value: "0.06"
+          - name: "stop_loss"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            when:
+              all:
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: "<="
+                  value: "-0.12"
+
+    - strategy-id: "cfg_maker_probe_v2"
+      enabled: false
+      profile: "conservative_paper"
+      hypothesis: "Posting at best bid may capture spread without taker fee when momentum and near-bid depth support the candidate."
+      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
+      candidate-selection:
+        type: "score"
+        candidates: ["Up", "Down"]
+        score:
+          Up:
+            expression: "up.mid_move_5s + up.depth_imbalance_0_03 - up.spread"
+          Down:
+            expression: "down.mid_move_5s + down.depth_imbalance_0_03 - down.spread"
+        choose: "highest_score"
+        min-score: "0.015"
+      entry:
+        rule-id: "entry_maker_probe"
+        when:
+          all:
+            - feature: "candidate.price_age_ms"
+              op: "<="
+              value: 1500
+            - feature: "candidate.book_age_ms"
+              op: "<="
+              value: 1500
+            - feature: "candidate.spread"
+              op: "<="
+              value: "0.03"
+            - feature: "candidate.bid"
+              op: ">="
+              value: "0.45"
+            - feature: "candidate.bid"
+              op: "<="
+              value: "0.58"
+            - feature: "candidate.mid_move_5s"
+              op: ">="
+              value: "0.010"
+            - feature: "candidate.bid_depth_within_0_03"
+              op: ">="
+              value: "2.0"
+        action:
+          side: "BUY"
+          liquidity-role: "maker"
+          order-type: "GTD"
+          post-only: true
+          price:
+            source: "best_bid"
+            offset-ticks: 0
+            do-not-cross-spread: true
+            max-price: "0.58"
+          size:
+            type: "fixed_usd"
+            paper-usd: "1.00"
+            live-usd: "5.00"
+            max-usd: "5.00"
+          maker-lifecycle:
+            cancel-after-seconds: 8
+            replace-if-best-bid-moves-ticks: 1
+            max-reposts: 1
+            require-reconciliation: true
+      simulation:
+        fill-model: "maker_queue_pessimistic"
