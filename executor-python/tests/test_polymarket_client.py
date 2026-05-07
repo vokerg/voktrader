@@ -119,6 +119,45 @@ def test_zero_share_sell_is_rejected_before_exchange_call():
         raise AssertionError("Expected zero-share sell to be rejected")
 
 
+def test_all_supported_time_in_force_values_are_accepted():
+    for time_in_force in ("FOK", "FAK", "GTC", "GTD"):
+        command = OrderCommand(
+            idempotencyKey=f"test-{time_in_force}",
+            strategyId="strategy",
+            marketId="2127144",
+            tokenId="token",
+            side="BUY",
+            amountUsd=Decimal("1.00"),
+            limitPrice=Decimal("0.60"),
+            timeInForce=time_in_force.lower(),
+            dryRun=True,
+        )
+
+        assert command.timeInForce == time_in_force
+
+
+def test_post_only_is_rejected_for_immediate_fill_orders():
+    command = OrderCommand(
+        idempotencyKey="test",
+        strategyId="strategy",
+        marketId="2127144",
+        tokenId="token",
+        side="BUY",
+        amountUsd=Decimal("1.00"),
+        limitPrice=Decimal("0.60"),
+        timeInForce="FAK",
+        postOnly=True,
+        dryRun=True,
+    )
+
+    try:
+        PolymarketExecutor(Settings())._validate_guardrails(command)
+    except ValueError as exc:
+        assert str(exc) == "postOnly is only supported for GTC/GTD limit orders"
+    else:
+        raise AssertionError("Expected FAK post-only to be rejected")
+
+
 def test_dry_run_response_keeps_explicit_zero_fee():
     command = OrderCommand(
         idempotencyKey="test",

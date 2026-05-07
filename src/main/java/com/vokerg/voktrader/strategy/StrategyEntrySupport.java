@@ -229,6 +229,7 @@ public class StrategyEntrySupport {
                 signal.candidate(),
                 signal.paperSizeUsd(),
                 signal.orderType(),
+                signal.postOnly(),
                 signal.limitPrice() == null ? signal.candidate().ask() : signal.limitPrice(),
                 strategyId,
                 ruleId,
@@ -295,15 +296,20 @@ public class StrategyEntrySupport {
             OutcomePrice candidate,
             BigDecimal paperSizeUsd,
             TradeOrderType orderType,
+            boolean postOnly,
             BigDecimal limitPrice,
             String reason
     ) {
         public EntrySignal(OutcomePrice candidate, BigDecimal paperSizeUsd, String reason) {
-            this(candidate, paperSizeUsd, TradeOrderType.FOK, candidate == null ? null : candidate.ask(), reason);
+            this(candidate, paperSizeUsd, TradeOrderType.FOK, false, candidate == null ? null : candidate.ask(), reason);
+        }
+
+        public EntrySignal(OutcomePrice candidate, BigDecimal paperSizeUsd, TradeOrderType orderType, BigDecimal limitPrice, String reason) {
+            this(candidate, paperSizeUsd, orderType, orderType.prefersMaker(), limitPrice, reason);
         }
 
         public static EntrySignal makerBuy(OutcomePrice candidate, BigDecimal paperSizeUsd, String reason) {
-            return new EntrySignal(candidate, paperSizeUsd, TradeOrderType.GTC, candidate == null ? null : candidate.bid(), reason);
+            return new EntrySignal(candidate, paperSizeUsd, TradeOrderType.GTC, true, candidate == null ? null : candidate.bid(), reason);
         }
     }
 

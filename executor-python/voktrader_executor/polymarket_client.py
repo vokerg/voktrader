@@ -32,6 +32,8 @@ class PolymarketExecutor:
             )
         if self.settings.require_fok and command.timeInForce.upper() != "FOK":
             raise ValueError("Only FOK orders are allowed while REQUIRE_FOK=true")
+        if command.postOnly and command.timeInForce.upper() in {"FOK", "FAK"}:
+            raise ValueError("postOnly is only supported for GTC/GTD limit orders")
         if command.limitPrice <= 0 or command.limitPrice >= 1:
             raise ValueError("limitPrice must be between 0 and 1")
         if command.side == TradeSide.BUY and (command.amountUsd is None or command.amountUsd <= 0):

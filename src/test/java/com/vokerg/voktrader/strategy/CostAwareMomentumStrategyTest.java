@@ -513,6 +513,7 @@ class CostAwareMomentumStrategyTest {
                 new BigDecimal("1.00"),
                 null,
                 com.vokerg.voktrader.trade.TradeOrderType.FOK,
+                false,
                 new BigDecimal(entryPrice),
                 new BigDecimal(entryPrice).subtract(new BigDecimal("0.01")),
                 new BigDecimal(entryPrice),

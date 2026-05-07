@@ -1,6 +1,7 @@
 package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
+import com.vokerg.voktrader.economy.LiquidityRole;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.time.TimeMachine;
@@ -24,6 +25,7 @@ public record TradeIntent(
         BigDecimal amountUsd,
         BigDecimal shares,
         TradeOrderType orderType,
+        boolean postOnly,
         BigDecimal limitPrice,
         BigDecimal observedBid,
         BigDecimal observedAsk,
@@ -53,6 +55,13 @@ public record TradeIntent(
         return side == TradeSide.BUY ? observedAsk : observedBid;
     }
 
+    public LiquidityRole expectedLiquidityRole() {
+        if (postOnly) {
+            return LiquidityRole.MAKER;
+        }
+        return orderType.expectsImmediateFill() ? LiquidityRole.TAKER : LiquidityRole.MAKER;
+    }
+
     public static TradeIntent buy(GammaMarketDto market, OutcomePrice price, BigDecimal amountUsd, String strategyId, String ruleId, String reason) {
         return buy(BotRuntimeContextHolder.currentBotId().orElse(null), market, price, amountUsd, strategyId, ruleId, reason);
     }
@@ -66,7 +75,7 @@ public record TradeIntent(
     }
 
     public static TradeIntent buyMaker(Long botId, GammaMarketDto market, OutcomePrice price, BigDecimal amountUsd, String strategyId, String ruleId, String reason) {
-        return buy(botId, market, price, amountUsd, TradeOrderType.GTC, price.bid(), strategyId, ruleId, reason);
+        return buy(botId, market, price, amountUsd, TradeOrderType.GTC, true, price.bid(), strategyId, ruleId, reason);
     }
 
     public static TradeIntent buy(
@@ -75,6 +84,21 @@ public record TradeIntent(
             OutcomePrice price,
             BigDecimal amountUsd,
             TradeOrderType orderType,
+            BigDecimal limitPrice,
+            String strategyId,
+            String ruleId,
+            String reason
+    ) {
+        return buy(botId, market, price, amountUsd, orderType, orderType.prefersMaker(), limitPrice, strategyId, ruleId, reason);
+    }
+
+    public static TradeIntent buy(
+            Long botId,
+            GammaMarketDto market,
+            OutcomePrice price,
+            BigDecimal amountUsd,
+            TradeOrderType orderType,
+            boolean postOnly,
             BigDecimal limitPrice,
             String strategyId,
             String ruleId,
@@ -99,6 +123,7 @@ public record TradeIntent(
                 amountUsd,
                 null,
                 orderType,
+                postOnly,
                 limitPrice,
                 price.bid(),
                 price.ask(),
@@ -126,7 +151,7 @@ public record TradeIntent(
     }
 
     public static TradeIntent sellMaker(Long botId, GammaMarketDto market, OutcomePrice price, BigDecimal shares, String strategyId, String ruleId, String reason) {
-        return sell(botId, market, price, shares, TradeOrderType.GTC, price.ask(), strategyId, ruleId, reason);
+        return sell(botId, market, price, shares, TradeOrderType.GTC, true, price.ask(), strategyId, ruleId, reason);
     }
 
     public static TradeIntent sell(
@@ -135,6 +160,21 @@ public record TradeIntent(
             OutcomePrice price,
             BigDecimal shares,
             TradeOrderType orderType,
+            BigDecimal limitPrice,
+            String strategyId,
+            String ruleId,
+            String reason
+    ) {
+        return sell(botId, market, price, shares, orderType, orderType.prefersMaker(), limitPrice, strategyId, ruleId, reason);
+    }
+
+    public static TradeIntent sell(
+            Long botId,
+            GammaMarketDto market,
+            OutcomePrice price,
+            BigDecimal shares,
+            TradeOrderType orderType,
+            boolean postOnly,
             BigDecimal limitPrice,
             String strategyId,
             String ruleId,
@@ -160,6 +200,7 @@ public record TradeIntent(
                 amountUsd,
                 shares,
                 orderType,
+                postOnly,
                 limitPrice,
                 price.bid(),
                 price.ask(),

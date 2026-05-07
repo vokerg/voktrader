@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from decimal import Decimal
 
 import uvicorn
 from fastapi import Depends, FastAPI, Header, HTTPException, status
@@ -11,13 +12,26 @@ from pydantic import ValidationError
 
 from .config import Settings
 from .idempotency import IdempotencyStore
-from .models import OrderCommand, OrderResponse
+from .models import ExecutorCapabilities, OrderCommand, OrderResponse, OrderVariation
 from .polymarket_client import PolymarketExecutor
 
 logger = logging.getLogger("uvicorn.error")
 logger.setLevel(logging.INFO)
 settings = Settings()
-app = FastAPI(title="voktrader executor", version="0.3.0")
+app = FastAPI(
+    title="voktrader executor",
+    version="0.3.0",
+    description=(
+        "Polymarket CLOB V2 executor sidecar for voktrader. The JVM strategy/risk engine sends order "
+        "commands here over HTTP; this sidecar validates guardrails, handles idempotency, and either dry-runs "
+        "or submits through the Polymarket SDK. Supported order variations are exposed at /v1/capabilities."
+    ),
+    openapi_tags=[
+        {"name": "health", "description": "Unauthenticated process health and basic runtime state."},
+        {"name": "capabilities", "description": "Authenticated executor capability and guardrail metadata."},
+        {"name": "orders", "description": "Authenticated order submission endpoint used by the JVM app."},
+    ],
+)
 idempotency_store = IdempotencyStore()
 executor = PolymarketExecutor(settings)
 
@@ -39,7 +53,12 @@ async def require_auth(authorization: str | None = Header(default=None)) -> None
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid bearer token")
 
 
-@app.get("/health")
+@app.get(
+    "/health",
+    tags=["health"],
+    summary="Health check",
+    description="Returns basic sidecar health and dry-run state. This endpoint does not require authorization.",
+)
 def health() -> dict[str, object]:
     return {
         "ok": True,
@@ -48,7 +67,49 @@ def health() -> dict[str, object]:
     }
 
 
-@app.post("/v1/orders", response_model=OrderResponse)
+@app.get(
+    "/v1/capabilities",
+    response_model=ExecutorCapabilities,
+    tags=["capabilities"],
+    summary="Describe supported order variations",
+    description=(
+        "Returns supported timeInForce/postOnly combinations and current sidecar guardrails. "
+        "Use this to see that FOK/FAK are immediate-fill market-order styles, while GTC/GTD are limit-order "
+        "styles that may rest on the book. Requires Authorization: Bearer <EXECUTOR_API_TOKEN>."
+    ),
+)
+def capabilities(_: None = Depends(require_auth)) -> ExecutorCapabilities:
+    return ExecutorCapabilities(
+        supportedVariations=(
+            OrderVariation(timeInForce="FOK", postOnly=False, route="market", immediateFillExpected=True, canRestOnBook=False),
+            OrderVariation(timeInForce="FAK", postOnly=False, route="market", immediateFillExpected=True, canRestOnBook=False),
+            OrderVariation(timeInForce="GTC", postOnly=False, route="limit", immediateFillExpected=False, canRestOnBook=True),
+            OrderVariation(timeInForce="GTC", postOnly=True, route="limit", immediateFillExpected=False, canRestOnBook=True),
+            OrderVariation(timeInForce="GTD", postOnly=False, route="limit", immediateFillExpected=False, canRestOnBook=True),
+            OrderVariation(timeInForce="GTD", postOnly=True, route="limit", immediateFillExpected=False, canRestOnBook=True),
+        ),
+        unsupportedVariations=(
+            OrderVariation(timeInForce="FOK", postOnly=True, route="market", immediateFillExpected=True, canRestOnBook=False),
+            OrderVariation(timeInForce="FAK", postOnly=True, route="market", immediateFillExpected=True, canRestOnBook=False),
+        ),
+        dryRun=settings.executor_dry_run,
+        requireFok=settings.require_fok,
+        maxOrderAmountUsd=Decimal(str(settings.max_order_amount_usd)),
+    )
+
+
+@app.post(
+    "/v1/orders",
+    response_model=OrderResponse,
+    tags=["orders"],
+    summary="Submit an order command",
+    description=(
+        "Submits a JVM-generated order command. Valid combinations are FOK/FAK with postOnly=false, "
+        "and GTC/GTD with either postOnly=false or postOnly=true. BUY requires amountUsd. SELL requires shares. "
+        "When command.dryRun or EXECUTOR_DRY_RUN is true, no exchange call is made. Requires Authorization: "
+        "Bearer <EXECUTOR_API_TOKEN>."
+    ),
+)
 def create_order(command: OrderCommand, _: None = Depends(require_auth)) -> OrderResponse:
     effective_dry_run = command.dryRun or settings.executor_dry_run
     logger.info(

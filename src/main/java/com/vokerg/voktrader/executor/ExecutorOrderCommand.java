@@ -41,7 +41,7 @@ public record ExecutorOrderCommand(
                 intent.shares(),
                 intent.expectedPrice(),
                 intent.orderType().name(),
-                intent.orderType().prefersMaker(),
+                intent.postOnly(),
                 dryRun,
                 intent.decisionAt()
         );

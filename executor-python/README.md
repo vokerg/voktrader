@@ -46,6 +46,52 @@ curl -sS \
   http://127.0.0.1:8099/v1/orders
 ```
 
+## API docs
+
+When the sidecar is running, FastAPI serves interactive docs and the raw OpenAPI schema:
+
+- Swagger UI: http://127.0.0.1:8099/docs
+- ReDoc: http://127.0.0.1:8099/redoc
+- OpenAPI JSON: http://127.0.0.1:8099/openapi.json
+
+Authenticated endpoints require the shared executor token:
+
+```text
+Authorization: Bearer <EXECUTOR_API_TOKEN>
+```
+
+With the default local config, that is:
+
+```text
+Authorization: Bearer change-me
+```
+
+The capability endpoint shows the supported `timeInForce` and `postOnly` combinations:
+
+```bash
+curl -sS \
+  -H 'Authorization: Bearer change-me' \
+  http://127.0.0.1:8099/v1/capabilities
+```
+
+Supported order variations:
+
+| timeInForce | postOnly | Route | Behavior |
+| --- | --- | --- | --- |
+| FOK | false | market | Immediate-fill style; rejected/cancelled if the full order cannot fill. |
+| FAK | false | market | Immediate-fill style; partial fill may be accepted and the rest cancelled when supported by the exchange SDK. |
+| GTC | false | limit | Limit order that may rest on the book. |
+| GTC | true | limit | Post-only limit order that may rest on the book. |
+| GTD | false | limit | Limit order that may rest on the book until its exchange-defined expiry behavior. |
+| GTD | true | limit | Post-only limit order that may rest on the book until its exchange-defined expiry behavior. |
+
+Unsupported combinations:
+
+| timeInForce | postOnly | Reason |
+| --- | --- | --- |
+| FOK | true | `postOnly` only applies to GTC/GTD limit orders. |
+| FAK | true | `postOnly` only applies to GTC/GTD limit orders. |
+
 ## Enabling real exchange calls
 
 Only after dry-run testing:

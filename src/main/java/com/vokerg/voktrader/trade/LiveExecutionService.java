@@ -341,13 +341,13 @@ public class LiveExecutionService {
         if (!tradingProperties.isEstimateLiveFeesWhenMissing()) {
             return BigDecimal.ZERO;
         }
-        BigDecimal feeRate = intent.orderType().expectedLiquidityRole() == com.vokerg.voktrader.economy.LiquidityRole.MAKER
+        BigDecimal feeRate = intent.expectedLiquidityRole() == com.vokerg.voktrader.economy.LiquidityRole.MAKER
                 ? tradingProperties.getMakerFeeRate()
                 : tradingProperties.getTakerFeeRate();
         BigDecimal feeUsd = feeCalculator.estimateFeeUsd(shares, price, feeRate);
         log.info(
                 "LIVE fee missing from executor; estimated {} fee feeUsd={} shares={} price={} feeRate={}",
-                intent.orderType().expectedLiquidityRole(),
+                intent.expectedLiquidityRole(),
                 feeUsd,
                 shares,
                 price,
