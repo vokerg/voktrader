@@ -5,7 +5,7 @@ strategy-v2:
 
   engine:
     enabled: false
-    active-strategy-ids: []
+    active-strategy-ids: ["cfg_simple_down_cheap_v2"]
     tick-ms: 1000
     decision-mode: "single_market_single_position"
     decimal-scale: 8
@@ -169,3 +169,369 @@ strategy-v2:
             require-reconciliation: true
       simulation:
         fill-model: "maker_queue_pessimistic"
+
+    - strategy-id: "cfg_lower_ask_tight_spread_v2"
+      enabled: false
+      profile: "conservative_paper"
+      hypothesis: "Buy whichever side is cheapest when both the book and price feed are fresh and the spread is tight."
+      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
+      candidate-selection:
+        type: "lower_ask"
+        candidates: ["Up", "Down"]
+      entry:
+        rule-id: "entry_lower_ask_tight_spread"
+        when:
+          all:
+            - feature: "market.accepting_orders"
+              op: "=="
+              value: true
+            - feature: "candidate.price_age_ms"
+              op: "<="
+              value: 1500
+            - feature: "candidate.book_age_ms"
+              op: "<="
+              value: 1500
+            - feature: "candidate.ask"
+              op: "<="
+              value: "0.34"
+            - feature: "candidate.spread"
+              op: "<="
+              value: "0.025"
+            - feature: "candidate.taker_buy.fillable"
+              op: "=="
+              value: true
+            - feature: "candidate.taker_buy.slippage"
+              op: "<="
+              value: "0.005"
+        action:
+          side: "BUY"
+          liquidity-role: "taker"
+          order-type: "FOK"
+          post-only: false
+          price:
+            source: "best_ask"
+            max-price: "0.34"
+            tick-size: "0.01"
+            rounding: "ceil_to_tick"
+          size:
+            type: "fixed_usd"
+            paper-usd: "1.00"
+            live-usd: "5.00"
+            max-usd: "5.00"
+          reason-template: "strategy-v2 lower ask candidate={{candidate.outcome}} ask={{candidate.ask}} spread={{candidate.spread}}"
+      exit:
+        enabled: true
+        rules:
+          - name: "quick_take_profit"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            when:
+              all:
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: ">="
+                  value: "0.05"
+          - name: "tight_stop"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            when:
+              all:
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: "<="
+                  value: "-0.08"
+      simulation:
+        fill-model: "taker_book_walk"
+
+    - strategy-id: "cfg_momentum_taker_v2"
+      enabled: false
+      profile: "conservative_paper"
+      hypothesis: "Follow the side with stronger short-term mid movement when liquidity is present and volatility is controlled."
+      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
+      candidate-selection:
+        type: "stronger_momentum"
+        feature: "mid_move_5s"
+        candidates: ["Up", "Down"]
+      entry:
+        rule-id: "entry_momentum_taker"
+        when:
+          all:
+            - feature: "candidate.mid_move_5s"
+              op: ">="
+              value: "0.012"
+            - feature: "candidate.spread"
+              op: "<="
+              value: "0.03"
+            - feature: "candidate.volatility_10s"
+              op: "<="
+              value: "0.06"
+            - feature: "candidate.ask_depth_within_0_03"
+              op: ">="
+              value: "2.0"
+            - feature: "opposite.mid_move_5s"
+              op: "<="
+              value: "0.004"
+            - feature: "candidate.ask"
+              op: "<="
+              value: "0.62"
+        action:
+          side: "BUY"
+          liquidity-role: "taker"
+          order-type: "FOK"
+          post-only: false
+          price:
+            source: "best_ask"
+            max-price: "0.62"
+            tick-size: "0.01"
+            rounding: "ceil_to_tick"
+          size:
+            type: "fixed_usd"
+            paper-usd: "1.00"
+            live-usd: "5.00"
+            max-usd: "5.00"
+          reason-template: "strategy-v2 momentum candidate={{candidate.outcome}} move5={{candidate.mid_move_5s}} ask={{candidate.ask}}"
+      exit:
+        enabled: true
+        rules:
+          - name: "momentum_take_profit"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            when:
+              all:
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: ">="
+                  value: "0.08"
+          - name: "momentum_failed"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            when:
+              all:
+                - feature: "trade.hold_seconds"
+                  op: ">="
+                  value: 60
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: "<="
+                  value: "0.00"
+      simulation:
+        fill-model: "taker_instant"
+
+    - strategy-id: "cfg_depth_imbalance_score_v2"
+      enabled: false
+      profile: "conservative_paper"
+      hypothesis: "Score both outcomes using momentum, near-book imbalance, microprice edge, and spread cost."
+      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
+      candidate-selection:
+        type: "score"
+        candidates: ["Up", "Down"]
+        score:
+          Up:
+            expression: "(up.mid_move_5s * 2) + up.depth_imbalance_0_03 + up.mid_edge - up.spread"
+          Down:
+            expression: "(down.mid_move_5s * 2) + down.depth_imbalance_0_03 + down.mid_edge - down.spread"
+        choose: "highest_score"
+        min-score: "0.025"
+      entry:
+        rule-id: "entry_depth_imbalance_score"
+        when:
+          all:
+            - feature: "candidate.spread"
+              op: "<="
+              value: "0.035"
+            - feature: "candidate.depth_imbalance_0_03"
+              op: ">="
+              value: "0.10"
+            - feature: "candidate.microprice_edge"
+              op: ">="
+              value: "0.002"
+            - feature: "candidate.bid_depth_within_0_03"
+              op: ">="
+              value: "2.5"
+            - feature: "candidate.ask"
+              op: "between"
+              values: ["0.35", "0.65"]
+        action:
+          side: "BUY"
+          liquidity-role: "taker"
+          order-type: "FOK"
+          post-only: false
+          price:
+            source: "best_ask"
+            max-price: "0.65"
+            tick-size: "0.01"
+            rounding: "ceil_to_tick"
+          size:
+            type: "fixed_usd"
+            paper-usd: "1.00"
+            live-usd: "5.00"
+            max-usd: "5.00"
+          reason-template: "strategy-v2 depth score candidate={{candidate.outcome}} imbalance={{candidate.depth_imbalance_0_03}} edge={{candidate.microprice_edge}}"
+      exit:
+        enabled: true
+        rules:
+          - name: "depth_score_take_profit"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            when:
+              all:
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: ">="
+                  value: "0.07"
+          - name: "depth_score_stop"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            when:
+              all:
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: "<="
+                  value: "-0.10"
+      simulation:
+        fill-model: "taker_book_walk"
+
+    - strategy-id: "cfg_late_window_pressure_v2"
+      enabled: false
+      profile: "conservative_paper"
+      hypothesis: "Late in a short market, follow the more expensive side only if the book is fresh and price pressure confirms it."
+      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
+      candidate-selection:
+        type: "higher_mid"
+        candidates: ["Up", "Down"]
+      entry:
+        rule-id: "entry_late_window_pressure"
+        when:
+          all:
+            - feature: "market.seconds_to_expiry"
+              op: "between"
+              values: [45, 240]
+            - feature: "candidate.mid"
+              op: ">="
+              value: "0.58"
+            - feature: "candidate.ask"
+              op: "<="
+              value: "0.70"
+            - feature: "candidate.spread"
+              op: "<="
+              value: "0.025"
+            - feature: "candidate.mid_move_10s"
+              op: ">="
+              value: "0.015"
+            - feature: "candidate.volatility_30s"
+              op: "<="
+              value: "0.08"
+            - feature: "candidate.taker_buy.fillable"
+              op: "=="
+              value: true
+        action:
+          side: "BUY"
+          liquidity-role: "taker"
+          order-type: "FOK"
+          post-only: false
+          price:
+            source: "best_ask"
+            max-price: "0.70"
+            tick-size: "0.01"
+            rounding: "ceil_to_tick"
+          size:
+            type: "fixed_usd"
+            paper-usd: "1.00"
+            live-usd: "5.00"
+            max-usd: "5.00"
+          reason-template: "strategy-v2 late pressure candidate={{candidate.outcome}} seconds={{market.seconds_to_expiry}} mid={{candidate.mid}}"
+      exit:
+        enabled: true
+        rules:
+          - name: "late_take_profit"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            when:
+              all:
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: ">="
+                  value: "0.06"
+          - name: "late_time_stop"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            when:
+              all:
+                - feature: "trade.hold_seconds"
+                  op: ">="
+                  value: 90
+      simulation:
+        fill-model: "taker_instant"
+
+    - strategy-id: "cfg_post_bid_fade_v2"
+      enabled: false
+      profile: "conservative_paper"
+      hypothesis: "Post a small maker bid below a stable mid when spreads are wide enough to pay for waiting."
+      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
+      candidate-selection:
+        type: "score"
+        candidates: ["Up", "Down"]
+        score:
+          Up:
+            expression: "up.spread + up.bid_depth_within_0_03 - up.ask_depth_within_0_03"
+          Down:
+            expression: "down.spread + down.bid_depth_within_0_03 - down.ask_depth_within_0_03"
+        choose: "highest_score"
+        min-score: "0.05"
+      entry:
+        rule-id: "entry_post_bid_fade"
+        when:
+          all:
+            - feature: "candidate.spread"
+              op: ">="
+              value: "0.04"
+            - feature: "candidate.spread"
+              op: "<="
+              value: "0.08"
+            - feature: "candidate.volatility_10s"
+              op: "<="
+              value: "0.025"
+            - feature: "candidate.bid"
+              op: "between"
+              values: ["0.38", "0.62"]
+            - feature: "candidate.bid_depth_within_0_03"
+              op: ">="
+              value: "1.5"
+        action:
+          side: "BUY"
+          liquidity-role: "maker"
+          order-type: "GTD"
+          post-only: true
+          price:
+            source: "best_bid"
+            offset-ticks: 0
+            tick-size: "0.01"
+            rounding: "floor_to_tick"
+            min-price: "0.01"
+            max-price: "0.62"
+            do-not-cross-spread: true
+          size:
+            type: "fixed_usd"
+            paper-usd: "1.00"
+            live-usd: "5.00"
+            max-usd: "5.00"
+          maker-lifecycle:
+            cancel-after-seconds: 6
+            replace-if-best-bid-moves-ticks: 1
+            max-reposts: 1
+            require-reconciliation: true
+          reason-template: "strategy-v2 post bid fade candidate={{candidate.outcome}} bid={{candidate.bid}} spread={{candidate.spread}}"
+      exit:
+        enabled: true
+        rules:
+          - name: "maker_take_profit"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            when:
+              all:
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: ">="
+                  value: "0.05"
+          - name: "maker_adverse_move"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            when:
+              all:
+                - feature: "trade.max_adverse_excursion_usd"
+                  op: "<="
+                  value: "-0.08"
+      simulation:
+        fill-model: "maker_queue_simple"

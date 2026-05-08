@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/bots")
@@ -16,8 +17,19 @@ public class BotController {
     private final BotRuntimeManager runtimeManager;
 
     @GetMapping
-    public List<BotConfigView> list() {
-        return configService.list().stream().map(BotConfigView::from).toList();
+    public List<BotConfigView> list(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) String marketFamily,
+            @RequestParam(required = false) String asset,
+            @RequestParam(required = false) String interval,
+            @RequestParam(required = false) String strategyId
+    ) {
+        BotStatus parsedStatus = parseStatus(status);
+        MarketFamily family = marketFamily == null && asset == null && interval == null
+                ? null
+                : MarketFamily.fromNameOrCodes(marketFamily, asset, interval);
+        return configService.list(parsedStatus, enabled, family, strategyId).stream().map(BotConfigView::from).toList();
     }
 
     @PostMapping
@@ -64,5 +76,12 @@ public class BotController {
                 .findFirst()
                 .map(BotConfigView::from)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown bot id: " + id));
+    }
+
+    private BotStatus parseStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        return BotStatus.valueOf(status.trim().toUpperCase(Locale.ROOT).replace('-', '_'));
     }
 }
