@@ -96,6 +96,9 @@ public class StrategyV2Properties {
         private Exit exit = new Exit();
         private Simulation simulation = new Simulation();
         private Diagnostics diagnostics = new Diagnostics();
+        private EntryOrderManagement entryOrderManagement = new EntryOrderManagement();
+        private PartialFillManagement partialFillManagement = new PartialFillManagement();
+        private ExitOrderManagement exitOrderManagement = new ExitOrderManagement();
         private Map<String, Object> marketFilter = new LinkedHashMap<>();
         private Map<String, Object> dataRequirements = new LinkedHashMap<>();
         private Map<String, Object> features = new LinkedHashMap<>();
@@ -127,6 +130,12 @@ public class StrategyV2Properties {
         public void setSimulation(Simulation simulation) { this.simulation = simulation == null ? new Simulation() : simulation; }
         public Diagnostics getDiagnostics() { return diagnostics; }
         public void setDiagnostics(Diagnostics diagnostics) { this.diagnostics = diagnostics == null ? new Diagnostics() : diagnostics; }
+        public EntryOrderManagement getEntryOrderManagement() { return entryOrderManagement; }
+        public void setEntryOrderManagement(EntryOrderManagement entryOrderManagement) { this.entryOrderManagement = entryOrderManagement == null ? new EntryOrderManagement() : entryOrderManagement; }
+        public PartialFillManagement getPartialFillManagement() { return partialFillManagement; }
+        public void setPartialFillManagement(PartialFillManagement partialFillManagement) { this.partialFillManagement = partialFillManagement == null ? new PartialFillManagement() : partialFillManagement; }
+        public ExitOrderManagement getExitOrderManagement() { return exitOrderManagement; }
+        public void setExitOrderManagement(ExitOrderManagement exitOrderManagement) { this.exitOrderManagement = exitOrderManagement == null ? new ExitOrderManagement() : exitOrderManagement; }
         public Map<String, Object> getMarketFilter() { return marketFilter; }
         public void setMarketFilter(Map<String, Object> marketFilter) { this.marketFilter = marketFilter == null ? new LinkedHashMap<>() : marketFilter; }
         public Map<String, Object> getDataRequirements() { return dataRequirements; }
@@ -479,6 +488,45 @@ public class StrategyV2Properties {
         public void setTaker(Map<String, Object> taker) { this.taker = taker == null ? new LinkedHashMap<>() : taker; }
         public Map<String, Object> getMaker() { return maker; }
         public void setMaker(Map<String, Object> maker) { this.maker = maker == null ? new LinkedHashMap<>() : maker; }
+    }
+
+    public static class EntryOrderManagement {
+        private int maxPendingSeconds = 8;
+        private boolean cancelIfSignalInvalid = true;
+        private boolean cancelIfBookStale = true;
+        private boolean cancelIfPriceMovesAway = true;
+        private boolean allowReprice = false;
+        public int getMaxPendingSeconds() { return maxPendingSeconds; }
+        public void setMaxPendingSeconds(int maxPendingSeconds) { this.maxPendingSeconds = maxPendingSeconds; }
+        public boolean isCancelIfSignalInvalid() { return cancelIfSignalInvalid; }
+        public void setCancelIfSignalInvalid(boolean cancelIfSignalInvalid) { this.cancelIfSignalInvalid = cancelIfSignalInvalid; }
+        public boolean isCancelIfBookStale() { return cancelIfBookStale; }
+        public void setCancelIfBookStale(boolean cancelIfBookStale) { this.cancelIfBookStale = cancelIfBookStale; }
+        public boolean isCancelIfPriceMovesAway() { return cancelIfPriceMovesAway; }
+        public void setCancelIfPriceMovesAway(boolean cancelIfPriceMovesAway) { this.cancelIfPriceMovesAway = cancelIfPriceMovesAway; }
+        public boolean isAllowReprice() { return allowReprice; }
+        public void setAllowReprice(boolean allowReprice) { this.allowReprice = allowReprice; }
+    }
+
+    public static class PartialFillManagement {
+        private int cancelRemainingOnPartialAfterSeconds = 5;
+        private boolean allowExitPartialPosition = true;
+        public int getCancelRemainingOnPartialAfterSeconds() { return cancelRemainingOnPartialAfterSeconds; }
+        public void setCancelRemainingOnPartialAfterSeconds(int cancelRemainingOnPartialAfterSeconds) { this.cancelRemainingOnPartialAfterSeconds = cancelRemainingOnPartialAfterSeconds; }
+        public boolean isAllowExitPartialPosition() { return allowExitPartialPosition; }
+        public void setAllowExitPartialPosition(boolean allowExitPartialPosition) { this.allowExitPartialPosition = allowExitPartialPosition; }
+    }
+
+    public static class ExitOrderManagement {
+        private int maxPendingSeconds = 5;
+        private boolean retryOnReject = false;
+        private int maxRetries = 0;
+        public int getMaxPendingSeconds() { return maxPendingSeconds; }
+        public void setMaxPendingSeconds(int maxPendingSeconds) { this.maxPendingSeconds = maxPendingSeconds; }
+        public boolean isRetryOnReject() { return retryOnReject; }
+        public void setRetryOnReject(boolean retryOnReject) { this.retryOnReject = retryOnReject; }
+        public int getMaxRetries() { return maxRetries; }
+        public void setMaxRetries(int maxRetries) { this.maxRetries = maxRetries; }
     }
 
     public static class Diagnostics {

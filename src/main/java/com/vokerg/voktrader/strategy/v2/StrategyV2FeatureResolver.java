@@ -7,6 +7,8 @@ import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.strategy.StrategyMarketView;
 import com.vokerg.voktrader.strategy.StrategyOutcomeView;
 import com.vokerg.voktrader.time.TimeMachine;
+import com.vokerg.voktrader.trade.OrderRuntimeState;
+import com.vokerg.voktrader.trade.StrategyRuntimeState;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -25,13 +27,23 @@ import java.util.concurrent.ConcurrentHashMap;
 public class StrategyV2FeatureResolver {
     private static final int SCALE = 8;
     private static final BigDecimal TWO = new BigDecimal("2");
+    private static final BigDecimal UNKNOWN_FEE_FALLBACK_RATE = new BigDecimal("0.072");
     private final Map<String, ArrayDeque<Sample>> samplesByToken = new ConcurrentHashMap<>();
 
     public List<StrategyV2FeatureContext> contexts(GammaMarketDto market, StrategyMarketView marketView, BigDecimal orderUsd) {
+        return contexts(market, marketView, orderUsd, null);
+    }
+
+    public List<StrategyV2FeatureContext> contexts(
+            GammaMarketDto market,
+            StrategyMarketView marketView,
+            BigDecimal orderUsd,
+            StrategyRuntimeState runtimeState
+    ) {
         Instant now = TimeMachine.now();
         marketView.outcomes().forEach(view -> record(view, now));
         return marketView.outcomes().stream()
-                .map(candidate -> context(market, marketView, candidate, opposite(marketView, candidate), now, orderUsd))
+                .map(candidate -> context(market, marketView, candidate, opposite(marketView, candidate), now, orderUsd, runtimeState))
                 .toList();
     }
 
@@ -52,7 +64,8 @@ public class StrategyV2FeatureResolver {
             StrategyOutcomeView candidate,
             StrategyOutcomeView opposite,
             Instant now,
-            BigDecimal orderUsd
+            BigDecimal orderUsd,
+            StrategyRuntimeState runtimeState
     ) {
         Map<String, Object> features = new HashMap<>();
         putMarket(features, market, marketView, now);
@@ -60,7 +73,86 @@ public class StrategyV2FeatureResolver {
         putOutcome(features, "opposite", opposite, candidate, orderUsd);
         putAlias(features, "up", marketView.outcome("Up").orElse(null), marketView.outcome("Down").orElse(null));
         putAlias(features, "down", marketView.outcome("Down").orElse(null), marketView.outcome("Up").orElse(null));
-        return new StrategyV2FeatureContext(market, marketView, candidate, opposite, now, features);
+        putRuntimeState(features, runtimeState, marketView, now);
+        return new StrategyV2FeatureContext(market, marketView, candidate, opposite, now, features, runtimeState);
+    }
+
+    private void putRuntimeState(
+            Map<String, Object> features,
+            StrategyRuntimeState state,
+            StrategyMarketView marketView,
+            Instant now
+    ) {
+        if (state == null) {
+            features.put("position.status", "NEW");
+            features.put("position.has_position", false);
+            features.put("position.fee_known", false);
+            return;
+        }
+        features.put("position.status", state.currentTradeStatus() == null ? null : state.currentTradeStatus().name());
+        features.put("position.has_position", state.hasPosition());
+        features.put("position.filled_shares", state.filledShares());
+        features.put("position.remaining_shares", state.remainingShares());
+        features.put("position.avg_entry_price", state.avgEntryPrice());
+        features.put("position.realized_fee_usd", state.realizedFeeUsd());
+        features.put("position.fee_known", state.feeKnown());
+        BigDecimal markPrice = markPrice(state, marketView);
+        BigDecimal fallbackFee = estimatedUnknownFee(state);
+        BigDecimal feeForPnl = state.feeKnown()
+                ? nullToZero(state.realizedFeeUsd())
+                : fallbackFee;
+        BigDecimal pnl = unrealizedPnl(state, markPrice, feeForPnl);
+        features.put("position.unrealized_pnl_usd", pnl);
+        features.put("position.unrealized_pnl_pct", unrealizedPnlPct(state, pnl));
+        features.put("position.entry_age_seconds", state.activeEntryOrder() == null ? null : state.activeEntryOrder().ageSeconds(now));
+        features.put("position.exit_age_seconds", state.activeExitOrder() == null ? null : state.activeExitOrder().ageSeconds(now));
+        putOrder(features, "entry_order", state.activeEntryOrder(), now);
+        putOrder(features, "exit_order", state.activeExitOrder(), now);
+    }
+
+    private void putOrder(Map<String, Object> features, String prefix, OrderRuntimeState order, Instant now) {
+        features.put(prefix + ".status", order == null || order.status() == null ? null : order.status().name());
+        features.put(prefix + ".age_seconds", order == null ? null : order.ageSeconds(now));
+        features.put(prefix + ".requested_price", order == null ? null : order.requestedPrice());
+        features.put(prefix + ".filled_shares", order == null ? null : order.filledShares());
+        features.put(prefix + ".remaining_shares", order == null ? null : order.remainingShares());
+        features.put(prefix + ".last_rejection_reason", order == null ? null : order.lastFailureReason());
+    }
+
+    private BigDecimal markPrice(StrategyRuntimeState state, StrategyMarketView marketView) {
+        if (state.tokenId() == null || marketView == null) {
+            return null;
+        }
+        return marketView.token(state.tokenId())
+                .map(view -> bid(view) == null ? view.mid() : bid(view))
+                .orElse(null);
+    }
+
+    private BigDecimal unrealizedPnl(StrategyRuntimeState state, BigDecimal markPrice, BigDecimal feeUsd) {
+        if (state.filledShares() == null || state.avgEntryPrice() == null || markPrice == null) {
+            return null;
+        }
+        BigDecimal entryCost = state.avgEntryPrice().multiply(state.filledShares());
+        BigDecimal markValue = markPrice.multiply(state.filledShares());
+        return markValue.subtract(entryCost).subtract(nullToZero(feeUsd));
+    }
+
+    private BigDecimal unrealizedPnlPct(StrategyRuntimeState state, BigDecimal pnl) {
+        if (pnl == null || state.filledShares() == null || state.avgEntryPrice() == null) {
+            return null;
+        }
+        BigDecimal entryCost = state.avgEntryPrice().multiply(state.filledShares());
+        if (entryCost.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        return pnl.divide(entryCost, SCALE, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal estimatedUnknownFee(StrategyRuntimeState state) {
+        if (state.filledShares() == null || state.avgEntryPrice() == null) {
+            return BigDecimal.ZERO;
+        }
+        return state.filledShares().multiply(state.avgEntryPrice()).multiply(UNKNOWN_FEE_FALLBACK_RATE);
     }
 
     private void putMarket(Map<String, Object> features, GammaMarketDto market, StrategyMarketView marketView, Instant now) {
