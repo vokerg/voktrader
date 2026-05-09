@@ -125,6 +125,9 @@ public class StrategyMarketDataProvider {
 
         @Override
         public BigDecimal mid() {
+            if (price.bid() == null || price.ask() == null) {
+                return null;
+            }
             return price.bid().add(price.ask()).divide(TWO, SCALE, RoundingMode.HALF_UP);
         }
 
