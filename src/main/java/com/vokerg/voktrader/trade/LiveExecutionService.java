@@ -3,6 +3,10 @@ package com.vokerg.voktrader.trade;
 import com.vokerg.voktrader.executor.ExecutorOrderCommand;
 import com.vokerg.voktrader.executor.ExecutorOrderResponse;
 import com.vokerg.voktrader.executor.ExecutorProperties;
+import com.vokerg.voktrader.executor.ExecutorCancelOrderResponse;
+import com.vokerg.voktrader.executor.ExecutorFillsResponse;
+import com.vokerg.voktrader.executor.ExecutorOpenOrdersResponse;
+import com.vokerg.voktrader.executor.ExecutorOrderStatusResponse;
 import com.vokerg.voktrader.executor.PythonExecutorClient;
 import com.vokerg.voktrader.telemetry.TelemetryData;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
@@ -37,6 +41,22 @@ public class LiveExecutionService {
             return executeSell(intent, mode);
         }
         return executeBuy(intent, mode);
+    }
+
+    public ExecutorCancelOrderResponse cancelRemoteOrder(String remoteOrderId) {
+        return pythonExecutorClient.cancelOrder(remoteOrderId);
+    }
+
+    public ExecutorOrderStatusResponse fetchRemoteOrderStatus(String remoteOrderId) {
+        return pythonExecutorClient.getOrderStatus(remoteOrderId);
+    }
+
+    public ExecutorOpenOrdersResponse fetchOpenRemoteOrders(String marketId, String tokenId) {
+        return pythonExecutorClient.listOpenOrders(marketId, tokenId);
+    }
+
+    public ExecutorFillsResponse fetchRemoteFills(String remoteOrderId, String marketId, String tokenId, Instant since) {
+        return pythonExecutorClient.listFills(remoteOrderId, marketId, tokenId, since);
     }
 
     private TradeExecutionResult executeBuy(TradeIntent intent, ExecutionMode mode) {

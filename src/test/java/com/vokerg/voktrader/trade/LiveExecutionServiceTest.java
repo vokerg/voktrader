@@ -3,6 +3,10 @@ package com.vokerg.voktrader.trade;
 import com.vokerg.voktrader.executor.ExecutorOrderCommand;
 import com.vokerg.voktrader.executor.ExecutorOrderResponse;
 import com.vokerg.voktrader.executor.ExecutorProperties;
+import com.vokerg.voktrader.executor.ExecutorCancelOrderResponse;
+import com.vokerg.voktrader.executor.ExecutorFillsResponse;
+import com.vokerg.voktrader.executor.ExecutorOpenOrdersResponse;
+import com.vokerg.voktrader.executor.ExecutorOrderStatusResponse;
 import com.vokerg.voktrader.executor.PythonExecutorClient;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
@@ -19,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class LiveExecutionServiceTest {
@@ -220,6 +225,30 @@ class LiveExecutionServiceTest {
         assertThat(result.accepted()).isTrue();
         assertThat(result.tradeStatus()).isEqualTo(TradeStatus.ENTRY_PENDING);
         org.mockito.Mockito.verify(pythonExecutorClient).submit(any(ExecutorOrderCommand.class));
+    }
+
+    @Test
+    void remoteOrderManagementMethodsPassThroughToExecutorClient() {
+        ExecutorCancelOrderResponse cancel = new ExecutorCancelOrderResponse(true, "remote-1", "CANCELLED", "{}", null);
+        ExecutorOrderStatusResponse status = ExecutorOrderStatusResponse.failure("remote-1", "UNKNOWN_RESPONSE", "not found");
+        ExecutorOpenOrdersResponse openOrders = new ExecutorOpenOrdersResponse(true, java.util.List.of(), "{}", null);
+        ExecutorFillsResponse fills = new ExecutorFillsResponse(true, java.util.List.of(), "{}", null);
+        Instant since = Instant.parse("2026-05-09T12:00:00Z");
+
+        when(pythonExecutorClient.cancelOrder("remote-1")).thenReturn(cancel);
+        when(pythonExecutorClient.getOrderStatus("remote-1")).thenReturn(status);
+        when(pythonExecutorClient.listOpenOrders("market-id", "token-id")).thenReturn(openOrders);
+        when(pythonExecutorClient.listFills("remote-1", "market-id", "token-id", since)).thenReturn(fills);
+
+        assertThat(service.cancelRemoteOrder("remote-1")).isSameAs(cancel);
+        assertThat(service.fetchRemoteOrderStatus("remote-1")).isSameAs(status);
+        assertThat(service.fetchOpenRemoteOrders("market-id", "token-id")).isSameAs(openOrders);
+        assertThat(service.fetchRemoteFills("remote-1", "market-id", "token-id", since)).isSameAs(fills);
+
+        verify(pythonExecutorClient).cancelOrder("remote-1");
+        verify(pythonExecutorClient).getOrderStatus("remote-1");
+        verify(pythonExecutorClient).listOpenOrders("market-id", "token-id");
+        verify(pythonExecutorClient).listFills("remote-1", "market-id", "token-id", since);
     }
 
     private ExecutorOrderResponse response(BigDecimal avgPrice, BigDecimal shares, BigDecimal amountUsd, BigDecimal feeUsd) {
