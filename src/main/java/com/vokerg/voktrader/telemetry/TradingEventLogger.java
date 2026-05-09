@@ -4,6 +4,7 @@ import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.backtest.BacktestDiagnosticsContext;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
+import com.vokerg.voktrader.time.TimeMachine;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -106,7 +107,7 @@ public class TradingEventLogger {
             boolean important
     ) {
         TradingEvent event = new TradingEvent(
-                clock.instant(),
+                TimeMachine.now(clock),
                 type,
                 phase,
                 strategyId,
@@ -162,7 +163,7 @@ public class TradingEventLogger {
             boolean important
     ) {
         TradingEvent event = new TradingEvent(
-                clock.instant(),
+                TimeMachine.now(clock),
                 type,
                 phase,
                 strategyId,

@@ -74,7 +74,7 @@ public class StrategyV2DiagnosticsRecorder {
                         "exitOrderState", state == null || state.activeExitOrder() == null || state.activeExitOrder().status() == null ? null : state.activeExitOrder().status().name(),
                         "decisionBranch", branch
                 ),
-                true
+                false
         );
     }
 }
