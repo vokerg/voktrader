@@ -10,5 +10,11 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Lo
 
     Optional<TradeOrderEntity> findByClientOrderId(String clientOrderId);
 
+    Optional<TradeOrderEntity> findByRemoteOrderId(String remoteOrderId);
+
+    Optional<TradeOrderEntity> findByLocalOrderId(String localOrderId);
+
     List<TradeOrderEntity> findByTradeId(Long tradeId);
+
+    List<TradeOrderEntity> findByStatusIn(List<TradeOrderStatus> statuses);
 }

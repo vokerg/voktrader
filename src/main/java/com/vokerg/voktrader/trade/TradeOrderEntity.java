@@ -73,6 +73,7 @@ public class TradeOrderEntity {
     private BigDecimal remainingShares;
     private BigDecimal avgFillPrice;
     private BigDecimal realizedFeeUsd;
+    private Boolean feeKnown;
 
     @Enumerated(EnumType.STRING)
     private LiquidityRole fillRole;
@@ -177,6 +178,48 @@ public class TradeOrderEntity {
         touch();
     }
 
+    public void markResting(String rawResponse) {
+        this.status = TradeOrderStatus.RESTING;
+        this.rawResponse = rawResponse;
+        touch();
+    }
+
+    public void markCancelRequested(String reason) {
+        this.status = TradeOrderStatus.CANCEL_REQUESTED;
+        this.cancelReason = reason;
+        touch();
+    }
+
+    public void markCancelled(String reason, String rawResponse) {
+        this.status = TradeOrderStatus.CANCELLED;
+        this.cancelReason = reason;
+        this.rawResponse = rawResponse;
+        this.completedAt = TimeMachine.now();
+        touch();
+    }
+
+    public void markExpired(String rawResponse) {
+        this.status = TradeOrderStatus.EXPIRED;
+        this.rawResponse = rawResponse;
+        this.completedAt = TimeMachine.now();
+        touch();
+    }
+
+    public void markRejected(String reason, String rawResponse) {
+        this.status = TradeOrderStatus.REJECTED;
+        this.rejectReason = reason;
+        this.rejectionReason = reason;
+        this.rawResponse = rawResponse;
+        this.completedAt = TimeMachine.now();
+        touch();
+    }
+
+    public void markUnknown(String rawResponse) {
+        this.status = TradeOrderStatus.UNKNOWN;
+        this.rawResponse = rawResponse;
+        touch();
+    }
+
     public void attachExecutorResponse(String exchangeOrderId, String rawResponse) {
         if (exchangeOrderId != null && !exchangeOrderId.isBlank()) {
             this.exchangeOrderId = exchangeOrderId;
@@ -215,9 +258,43 @@ public class TradeOrderEntity {
         touch();
     }
 
+    public void applyFillState(
+            TradeOrderStatus status,
+            BigDecimal avgPrice,
+            BigDecimal filledShares,
+            BigDecimal filledAmountUsd,
+            BigDecimal remainingShares,
+            BigDecimal feeUsd,
+            boolean feeKnown,
+            LiquidityRole fillRole,
+            String rawResponse
+    ) {
+        this.status = status;
+        this.filledPrice = avgPrice;
+        this.avgFillPrice = avgPrice;
+        this.filledShares = filledShares;
+        this.filledAmountUsd = filledAmountUsd;
+        this.remainingShares = remainingShares;
+        this.realizedFeeUsd = feeUsd;
+        this.feeKnown = feeKnown;
+        this.fillRole = fillRole;
+        if (rawResponse != null) {
+            this.rawResponse = rawResponse;
+        }
+        if (status.isTerminal()) {
+            this.completedAt = TimeMachine.now();
+        }
+        touch();
+    }
+
     public void markFailed(String errorMessage, String rawResponse) {
         this.rawResponse = rawResponse;
         markFailed(errorMessage);
+    }
+
+    public void markReconciled() {
+        this.lastReconciledAt = TimeMachine.now();
+        touch();
     }
 
     private void touch() {
@@ -384,6 +461,10 @@ public class TradeOrderEntity {
 
     public LiquidityRole getFillRole() {
         return fillRole;
+    }
+
+    public Boolean getFeeKnown() {
+        return feeKnown;
     }
 
     public String getRejectReason() {

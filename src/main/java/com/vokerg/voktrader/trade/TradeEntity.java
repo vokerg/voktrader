@@ -203,6 +203,17 @@ public class TradeEntity {
         touch();
     }
 
+    public void markPartiallyOpen(BigDecimal avgPrice, BigDecimal filledShares, BigDecimal filledUsd, BigDecimal feeUsd, Instant completedAt) {
+        this.status = TradeStatus.PARTIALLY_OPEN;
+        this.entryAvgPrice = avgPrice;
+        this.entryFilledShares = filledShares;
+        this.entryFilledUsd = filledUsd;
+        this.entryFeeUsd = feeUsd;
+        this.totalFeeUsd = feeUsd;
+        this.entryCompletedAt = completedAt == null ? Instant.now() : completedAt;
+        touch();
+    }
+
     public void markOpen(BigDecimal avgPrice, BigDecimal filledShares, BigDecimal filledUsd, BigDecimal feeUsd, Instant completedAt) {
         this.status = TradeStatus.OPEN;
         this.entryAvgPrice = avgPrice;
@@ -229,6 +240,29 @@ public class TradeEntity {
         BigDecimal exitValue = filledUsd == null ? BigDecimal.ZERO : filledUsd;
         this.realizedPnlUsd = exitValue.subtract(entryCost).subtract(totalFees);
         this.finalPnlUsd = this.realizedPnlUsd;
+        touch();
+    }
+
+    public void markExitPending() {
+        this.status = TradeStatus.EXIT_PENDING;
+        touch();
+    }
+
+    public void markPartiallyClosed(BigDecimal avgPrice, BigDecimal filledShares, BigDecimal filledUsd, BigDecimal feeUsd, Instant completedAt) {
+        this.status = TradeStatus.PARTIALLY_CLOSED;
+        this.exitAvgPrice = avgPrice;
+        this.exitFilledShares = filledShares;
+        this.exitFilledUsd = filledUsd;
+        this.exitFeeUsd = feeUsd;
+        this.exitCompletedAt = completedAt == null ? Instant.now() : completedAt;
+        BigDecimal entryFee = entryFeeUsd == null ? BigDecimal.ZERO : entryFeeUsd;
+        BigDecimal exitFee = feeUsd == null ? BigDecimal.ZERO : feeUsd;
+        this.totalFeeUsd = entryFee.add(exitFee);
+        touch();
+    }
+
+    public void markCancelled() {
+        this.status = TradeStatus.CANCELLED;
         touch();
     }
 
