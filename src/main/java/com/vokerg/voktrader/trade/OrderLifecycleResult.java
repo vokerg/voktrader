@@ -8,7 +8,8 @@ public record OrderLifecycleResult(
         String remoteOrderId,
         TradeStatus tradeStatus,
         TradeOrderStatus orderStatus,
-        String message
+        String message,
+        String error
 ) {
     public static OrderLifecycleResult of(TradeEntity trade, TradeOrderEntity order, boolean success, String message) {
         return new OrderLifecycleResult(
@@ -19,7 +20,8 @@ public record OrderLifecycleResult(
                 order == null ? null : order.getRemoteOrderId(),
                 trade == null ? null : trade.getStatus(),
                 order == null ? null : order.getStatus(),
-                message
+                message,
+                success ? null : message
         );
     }
 }

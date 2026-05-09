@@ -4,6 +4,7 @@ import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.ExecutionRouter;
+import com.vokerg.voktrader.trade.OrderManager;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradeOrderType;
@@ -16,10 +17,18 @@ import java.math.RoundingMode;
 @Component
 public class StrategyV2OrderActionBuilder {
     private static final int SCALE = 8;
+    private final StrategyV2ExecutionProperties executionProperties;
     private final ExecutionRouter executionRouter;
+    private final OrderManager orderManager;
 
-    public StrategyV2OrderActionBuilder(ExecutionRouter executionRouter) {
+    public StrategyV2OrderActionBuilder(
+            StrategyV2ExecutionProperties executionProperties,
+            ExecutionRouter executionRouter,
+            OrderManager orderManager
+    ) {
+        this.executionProperties = executionProperties;
         this.executionRouter = executionRouter;
+        this.orderManager = orderManager;
     }
 
     public TradeExecutionResult routeEntry(
@@ -45,7 +54,7 @@ public class StrategyV2OrderActionBuilder {
                 context.candidate().spread(),
                 context.now()
         );
-        return executionRouter.route(TradeIntent.buy(
+        TradeIntent intent = TradeIntent.buy(
                 BotRuntimeContextHolder.currentBotId().orElse(null),
                 context.market(),
                 outcomePrice,
@@ -56,7 +65,11 @@ public class StrategyV2OrderActionBuilder {
                 strategy.getStrategyId(),
                 strategy.getEntry().getRuleId(),
                 reason(strategy, context)
-        ));
+        );
+        if (executionProperties.isUseOrderLayer()) {
+            return TradeExecutionResult.fromOrderLifecycle(mode, orderManager.submitOrder(intent, mode));
+        }
+        return executionRouter.route(intent);
     }
 
     private BigDecimal amountUsd(StrategyV2Properties.Action action) {

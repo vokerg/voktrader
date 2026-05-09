@@ -40,7 +40,10 @@ public class StrategyV2DiagnosticsRecorder {
                         "accepted", result.accepted(),
                         "mode", result.mode(),
                         "tradeId", result.tradeId(),
-                        "orderId", result.orderId()
+                        "orderId", result.orderId(),
+                        "localOrderId", result.localOrderId(),
+                        "remoteOrderId", result.remoteOrderId(),
+                        "error", result.error()
                 )
         );
     }

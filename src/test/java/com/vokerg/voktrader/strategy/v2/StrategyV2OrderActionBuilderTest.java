@@ -1,0 +1,179 @@
+package com.vokerg.voktrader.strategy.v2;
+
+import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
+import com.vokerg.voktrader.strategy.StrategyOutcomeView;
+import com.vokerg.voktrader.trade.ExecutionMode;
+import com.vokerg.voktrader.trade.ExecutionRouter;
+import com.vokerg.voktrader.trade.OrderLifecycleResult;
+import com.vokerg.voktrader.trade.OrderManager;
+import com.vokerg.voktrader.trade.TradeExecutionResult;
+import com.vokerg.voktrader.trade.TradeIntent;
+import com.vokerg.voktrader.trade.TradeOrderStatus;
+import com.vokerg.voktrader.trade.TradeOrderType;
+import com.vokerg.voktrader.trade.TradeStatus;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class StrategyV2OrderActionBuilderTest {
+    private final StrategyV2ExecutionProperties executionProperties = new StrategyV2ExecutionProperties();
+    private final ExecutionRouter executionRouter = mock(ExecutionRouter.class);
+    private final OrderManager orderManager = mock(OrderManager.class);
+    private final StrategyV2OrderActionBuilder builder = new StrategyV2OrderActionBuilder(
+            executionProperties,
+            executionRouter,
+            orderManager
+    );
+
+    @Test
+    void flagDisabledRoutesThroughExistingExecutionRouter() {
+        when(executionRouter.route(any(TradeIntent.class))).thenReturn(TradeExecutionResult.accepted(
+                ExecutionMode.LIVE_TINY,
+                1L,
+                2L,
+                TradeStatus.OPEN,
+                TradeOrderStatus.FILLED,
+                "accepted"
+        ));
+
+        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context(), ExecutionMode.LIVE_TINY);
+
+        assertThat(result.accepted()).isTrue();
+        verify(executionRouter).route(any(TradeIntent.class));
+        verify(orderManager, never()).submitOrder(any(), any());
+    }
+
+    @Test
+    void flagEnabledRoutesThroughOrderManager() {
+        executionProperties.setUseOrderLayer(true);
+        when(orderManager.submitOrder(any(TradeIntent.class), any())).thenReturn(new OrderLifecycleResult(
+                true,
+                1L,
+                2L,
+                "local-1",
+                "remote-1",
+                TradeStatus.OPEN,
+                TradeOrderStatus.FILLED,
+                "filled",
+                null
+        ));
+
+        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context(), ExecutionMode.LIVE_TINY);
+
+        assertThat(result.accepted()).isTrue();
+        assertThat(result.localOrderId()).isEqualTo("local-1");
+        assertThat(result.remoteOrderId()).isEqualTo("remote-1");
+        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.FILLED);
+        verify(orderManager).submitOrder(any(TradeIntent.class), any());
+        verify(executionRouter, never()).route(any());
+    }
+
+    @Test
+    void flagEnabledPreservesNonImmediateSubmittedResult() {
+        executionProperties.setUseOrderLayer(true);
+        when(orderManager.submitOrder(any(TradeIntent.class), any())).thenReturn(new OrderLifecycleResult(
+                true,
+                1L,
+                2L,
+                "local-1",
+                "remote-1",
+                TradeStatus.ENTRY_PENDING,
+                TradeOrderStatus.SUBMITTED,
+                "submitted",
+                null
+        ));
+
+        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.GTC), context(), ExecutionMode.LIVE_TINY);
+
+        assertThat(result.accepted()).isTrue();
+        assertThat(result.tradeStatus()).isEqualTo(TradeStatus.ENTRY_PENDING);
+        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.SUBMITTED);
+
+        ArgumentCaptor<TradeIntent> intent = ArgumentCaptor.forClass(TradeIntent.class);
+        verify(orderManager).submitOrder(intent.capture(), any());
+        assertThat(intent.getValue().orderType()).isEqualTo(TradeOrderType.GTC);
+    }
+
+    @Test
+    void flagEnabledSurfacesRejectedOrderManagerResult() {
+        executionProperties.setUseOrderLayer(true);
+        when(orderManager.submitOrder(any(TradeIntent.class), any())).thenReturn(new OrderLifecycleResult(
+                false,
+                1L,
+                2L,
+                "local-1",
+                null,
+                TradeStatus.FAILED,
+                TradeOrderStatus.REJECTED,
+                "rejected",
+                "rejected"
+        ));
+
+        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context(), ExecutionMode.LIVE_TINY);
+
+        assertThat(result.accepted()).isFalse();
+        assertThat(result.error()).isEqualTo("rejected");
+        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.REJECTED);
+    }
+
+    @Test
+    void defaultConfigKeepsOrderLayerDisabled() {
+        assertThat(new StrategyV2ExecutionProperties().isUseOrderLayer()).isFalse();
+    }
+
+    private StrategyV2Properties.Strategy strategy(TradeOrderType orderType) {
+        StrategyV2Properties.Strategy strategy = new StrategyV2Properties.Strategy();
+        strategy.setStrategyId("strategy-v2-test");
+        StrategyV2Properties.Entry entry = new StrategyV2Properties.Entry();
+        entry.setRuleId("entry");
+        StrategyV2Properties.Action action = new StrategyV2Properties.Action();
+        action.setOrderType(orderType.name());
+        action.setPostOnly(orderType.canRestOnBook());
+        StrategyV2Properties.Size size = new StrategyV2Properties.Size();
+        size.setPaperUsd(new BigDecimal("1.00"));
+        action.setSize(size);
+        entry.setAction(action);
+        strategy.setEntry(entry);
+        return strategy;
+    }
+
+    private StrategyV2FeatureContext context() {
+        StrategyOutcomeView candidate = mock(StrategyOutcomeView.class);
+        when(candidate.tokenId()).thenReturn("token-id");
+        when(candidate.outcome()).thenReturn("Up");
+        when(candidate.spread()).thenReturn(new BigDecimal("0.02"));
+        Map<String, Object> features = new HashMap<>();
+        features.put("candidate.bid", new BigDecimal("0.49"));
+        features.put("candidate.ask", new BigDecimal("0.51"));
+        return new StrategyV2FeatureContext(market(), null, candidate, null, Instant.parse("2026-05-09T12:00:00Z"), features);
+    }
+
+    private GammaMarketDto market() {
+        return new GammaMarketDto(
+                "market-id",
+                "Question",
+                "condition-id",
+                "slug",
+                Instant.parse("2026-05-09T12:05:00Z"),
+                true,
+                false,
+                true,
+                false,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+}
