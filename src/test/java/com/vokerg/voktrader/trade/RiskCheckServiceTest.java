@@ -1,5 +1,10 @@
 package com.vokerg.voktrader.trade;
 
+import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
+import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
+import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
+import com.vokerg.voktrader.trade.persistence.TradeRepository;
+import com.vokerg.voktrader.trade.persistence.TradeRiskCheckRepository;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import org.junit.jupiter.api.Test;

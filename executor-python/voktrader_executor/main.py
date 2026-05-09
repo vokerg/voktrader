@@ -5,15 +5,25 @@ import logging
 from decimal import Decimal
 
 import uvicorn
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from py_clob_client_v2.exceptions import PolyApiException
 from pydantic import ValidationError
 
 from .config import Settings
 from .idempotency import IdempotencyStore
-from .models import ExecutorCapabilities, OrderCommand, OrderResponse, OrderVariation
-from .polymarket_client import PolymarketExecutor
+from .models import (
+    CancelOrderResponse,
+    ExecutorCapabilities,
+    ExecutorError,
+    FillsResponse,
+    OpenOrdersResponse,
+    OrderCommand,
+    OrderResponse,
+    OrderStatusResponse,
+    OrderVariation,
+)
+from .polymarket_client import PolymarketExecutor, UnsupportedOperationError
 
 logger = logging.getLogger("uvicorn.error")
 logger.setLevel(logging.INFO)
@@ -157,6 +167,139 @@ def create_order(command: OrderCommand, _: None = Depends(require_auth)) -> Orde
     idempotency_store.put(command.idempotencyKey, response)
     log_response(command, response, cached=False, dry_run=effective_dry_run)
     return response
+
+
+@app.post(
+    "/v1/orders/{order_id}/cancel",
+    response_model=CancelOrderResponse,
+    tags=["orders"],
+    summary="Cancel an order by exchange order id",
+)
+def cancel_order(order_id: str, _: None = Depends(require_auth)) -> CancelOrderResponse:
+    try:
+        response = executor.cancel_order(order_id)
+        if not response.success:
+            logger.warning("EXECUTOR CANCEL FAILED: orderId=%s status=%s error=%s", order_id, response.status, response.error)
+        return response
+    except UnsupportedOperationError as exc:
+        logger.warning("EXECUTOR CANCEL UNSUPPORTED: orderId=%s error=%s", order_id, exc)
+        return CancelOrderResponse(
+            success=False,
+            remoteOrderId=order_id,
+            status="UNKNOWN",
+            error=ExecutorError(type="UNSUPPORTED_OPERATION", message=str(exc)),
+        )
+    except PolyApiException as exc:
+        logger.warning("EXECUTOR CANCEL EXCHANGE ERROR: orderId=%s status=%s error=%s", order_id, exc.status_code, exc.error_msg)
+        return CancelOrderResponse(
+            success=False,
+            remoteOrderId=order_id,
+            status="REJECTED" if exc.status_code is not None and 400 <= exc.status_code < 500 else "FAILED",
+            rawResponse=json.dumps({"statusCode": exc.status_code, "error": exc.error_msg}, default=str, sort_keys=True),
+            error=ExecutorError(type="EXCHANGE_REJECTION", message=str(exc.error_msg)),
+        )
+    except Exception as exc:  # noqa: BLE001 - keep exchange/client failures structured.
+        logger.warning("EXECUTOR CANCEL FAILED: orderId=%s", order_id, exc_info=exc)
+        return CancelOrderResponse(
+            success=False,
+            remoteOrderId=order_id,
+            status="FAILED",
+            error=ExecutorError(type="NETWORK_FAILURE", message=str(exc)),
+        )
+
+
+@app.get(
+    "/v1/orders/open",
+    response_model=OpenOrdersResponse,
+    tags=["orders"],
+    summary="List open exchange orders",
+)
+def list_open_orders(
+        market_id: str | None = Query(default=None),
+        token_id: str | None = Query(default=None),
+        _: None = Depends(require_auth),
+) -> OpenOrdersResponse:
+    try:
+        return executor.list_open_orders(market_id=market_id, token_id=token_id)
+    except UnsupportedOperationError as exc:
+        logger.warning("EXECUTOR OPEN ORDERS UNSUPPORTED: error=%s", exc)
+        return OpenOrdersResponse(success=False, error=ExecutorError(type="UNSUPPORTED_OPERATION", message=str(exc)))
+    except PolyApiException as exc:
+        logger.warning("EXECUTOR OPEN ORDERS EXCHANGE ERROR: status=%s error=%s", exc.status_code, exc.error_msg)
+        return OpenOrdersResponse(
+            success=False,
+            rawResponse=json.dumps({"statusCode": exc.status_code, "error": exc.error_msg}, default=str, sort_keys=True),
+            error=ExecutorError(type="EXCHANGE_REJECTION", message=str(exc.error_msg)),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("EXECUTOR OPEN ORDERS FAILED", exc_info=exc)
+        return OpenOrdersResponse(success=False, error=ExecutorError(type="NETWORK_FAILURE", message=str(exc)))
+
+
+@app.get(
+    "/v1/orders/{order_id}",
+    response_model=OrderStatusResponse,
+    tags=["orders"],
+    summary="Fetch exchange order status",
+)
+def get_order(order_id: str, _: None = Depends(require_auth)) -> OrderStatusResponse:
+    try:
+        return executor.get_order_status(order_id)
+    except UnsupportedOperationError as exc:
+        logger.warning("EXECUTOR ORDER STATUS UNSUPPORTED: orderId=%s error=%s", order_id, exc)
+        return OrderStatusResponse(
+            success=False,
+            remoteOrderId=order_id,
+            status="UNKNOWN",
+            error=ExecutorError(type="UNSUPPORTED_OPERATION", message=str(exc)),
+        )
+    except PolyApiException as exc:
+        logger.warning("EXECUTOR ORDER STATUS EXCHANGE ERROR: orderId=%s status=%s error=%s", order_id, exc.status_code, exc.error_msg)
+        return OrderStatusResponse(
+            success=False,
+            remoteOrderId=order_id,
+            status="UNKNOWN",
+            rawResponse=json.dumps({"statusCode": exc.status_code, "error": exc.error_msg}, default=str, sort_keys=True),
+            error=ExecutorError(type="EXCHANGE_REJECTION", message=str(exc.error_msg)),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("EXECUTOR ORDER STATUS FAILED: orderId=%s", order_id, exc_info=exc)
+        return OrderStatusResponse(
+            success=False,
+            remoteOrderId=order_id,
+            status="UNKNOWN",
+            error=ExecutorError(type="NETWORK_FAILURE", message=str(exc)),
+        )
+
+
+@app.get(
+    "/v1/fills",
+    response_model=FillsResponse,
+    tags=["orders"],
+    summary="List recent fills/trades",
+)
+def list_fills(
+        order_id: str | None = Query(default=None),
+        market_id: str | None = Query(default=None),
+        token_id: str | None = Query(default=None),
+        since: str | None = Query(default=None),
+        _: None = Depends(require_auth),
+) -> FillsResponse:
+    try:
+        return executor.list_fills(order_id=order_id, market_id=market_id, token_id=token_id, since=since)
+    except UnsupportedOperationError as exc:
+        logger.warning("EXECUTOR FILLS UNSUPPORTED: error=%s", exc)
+        return FillsResponse(success=False, error=ExecutorError(type="UNSUPPORTED_OPERATION", message=str(exc)))
+    except PolyApiException as exc:
+        logger.warning("EXECUTOR FILLS EXCHANGE ERROR: status=%s error=%s", exc.status_code, exc.error_msg)
+        return FillsResponse(
+            success=False,
+            rawResponse=json.dumps({"statusCode": exc.status_code, "error": exc.error_msg}, default=str, sort_keys=True),
+            error=ExecutorError(type="EXCHANGE_REJECTION", message=str(exc.error_msg)),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("EXECUTOR FILLS FAILED", exc_info=exc)
+        return FillsResponse(success=False, error=ExecutorError(type="NETWORK_FAILURE", message=str(exc)))
 
 
 def poly_api_error_response(exc: PolyApiException) -> OrderResponse:

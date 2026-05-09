@@ -133,6 +133,70 @@ class OrderResponse(BaseModel):
     )
 
 
+class ExecutorError(BaseModel):
+    type: str = Field(
+        description="Normalized error class.",
+        examples=["EXCHANGE_REJECTION", "NETWORK_FAILURE", "UNKNOWN_RESPONSE", "UNSUPPORTED_OPERATION"],
+    )
+    message: str = Field(description="Human-readable error message.")
+
+
+class OrderStatusResponse(BaseModel):
+    success: bool = Field(description="True when the sidecar received a usable exchange response.")
+    remoteOrderId: str | None = Field(default=None, description="Exchange order id.")
+    status: str = Field(default="UNKNOWN", description="Raw or normalized exchange order status.")
+    marketId: str | None = None
+    tokenId: str | None = None
+    side: str | None = None
+    price: Decimal | None = None
+    originalSize: Decimal | None = None
+    filledSize: Decimal | None = None
+    remainingSize: Decimal | None = None
+    avgFillPrice: Decimal | None = None
+    createdAt: datetime | None = None
+    updatedAt: datetime | None = None
+    expiresAt: datetime | None = None
+    rawResponse: str | None = None
+    error: ExecutorError | None = None
+
+
+class CancelOrderResponse(BaseModel):
+    success: bool = Field(description="True when the exchange accepted the cancel request.")
+    remoteOrderId: str | None = Field(default=None, description="Exchange order id.")
+    status: str = Field(default="UNKNOWN", description="Cancel/order status when available.")
+    rawResponse: str | None = None
+    error: ExecutorError | None = None
+
+
+class OpenOrdersResponse(BaseModel):
+    success: bool = Field(description="True when open orders were listed successfully.")
+    orders: list[OrderStatusResponse] = Field(default_factory=list)
+    rawResponse: str | None = None
+    error: ExecutorError | None = None
+
+
+class FillResponse(BaseModel):
+    remoteOrderId: str | None = None
+    tradeId: str | None = None
+    fillId: str | None = None
+    tokenId: str | None = None
+    marketId: str | None = None
+    side: str | None = None
+    price: Decimal | None = None
+    shares: Decimal | None = None
+    fee: Decimal | None = None
+    role: str = Field(default="UNKNOWN", description="MAKER, TAKER, or UNKNOWN.")
+    timestamp: datetime | None = None
+    rawResponse: str | None = None
+
+
+class FillsResponse(BaseModel):
+    success: bool = Field(description="True when fills/trades were listed successfully.")
+    fills: list[FillResponse] = Field(default_factory=list)
+    rawResponse: str | None = None
+    error: ExecutorError | None = None
+
+
 class OrderVariation(BaseModel):
     timeInForce: str = Field(description="One of FOK, FAK, GTC, GTD.", json_schema_extra={"enum": list(SUPPORTED_TIME_IN_FORCE)})
     postOnly: bool = Field(description="Whether the variation requests post-only behavior.")

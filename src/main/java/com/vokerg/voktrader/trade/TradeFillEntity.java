@@ -32,6 +32,9 @@ public class TradeFillEntity {
     private Long orderId;
     private Long tradeOrderId;
     private String exchangeOrderId;
+    private String remoteFillId;
+    private String marketId;
+    private String tokenId;
 
     @Enumerated(EnumType.STRING)
     private TradeVenue venue;
@@ -43,6 +46,7 @@ public class TradeFillEntity {
     private BigDecimal shares;
     private BigDecimal amountUsd;
     private BigDecimal feeUsd;
+    private Boolean feeKnown;
     private String liquidityRole;
 
     @Column(columnDefinition = "TEXT")
@@ -64,6 +68,7 @@ public class TradeFillEntity {
         entity.shares = shares;
         entity.amountUsd = amountUsd;
         entity.feeUsd = BigDecimal.ZERO;
+        entity.feeKnown = true;
         entity.liquidityRole = "SIMULATED";
         entity.rawFill = "{\"synthetic\":true}";
         entity.filledAt = TimeMachine.now();
@@ -94,6 +99,7 @@ public class TradeFillEntity {
         entity.shares = shares;
         entity.amountUsd = amountUsd;
         entity.feeUsd = feeUsd != null ? feeUsd : BigDecimal.ZERO;
+        entity.feeKnown = feeUsd != null;
         entity.liquidityRole = "TAKER";
         entity.rawFill = rawFill;
         entity.filledAt = TimeMachine.now();
@@ -124,11 +130,50 @@ public class TradeFillEntity {
         entity.shares = shares;
         entity.amountUsd = amountUsd;
         entity.feeUsd = feeUsd != null ? feeUsd : BigDecimal.ZERO;
+        entity.feeKnown = feeUsd != null;
         entity.liquidityRole = liquidityRole == null ? "TAKER" : liquidityRole;
         entity.rawFill = rawFill;
         entity.filledAt = TimeMachine.now();
         entity.occurredAt = entity.filledAt;
         entity.receivedAt = entity.filledAt;
+        return entity;
+    }
+
+    public static TradeFillEntity remote(
+            Long tradeId,
+            Long orderId,
+            String exchangeOrderId,
+            String remoteFillId,
+            String marketId,
+            String tokenId,
+            TradeSide side,
+            BigDecimal price,
+            BigDecimal shares,
+            BigDecimal feeUsd,
+            String liquidityRole,
+            Instant filledAt,
+            String rawFill
+    ) {
+        TradeFillEntity entity = new TradeFillEntity();
+        entity.tradeId = tradeId;
+        entity.orderId = orderId;
+        entity.tradeOrderId = orderId;
+        entity.exchangeOrderId = exchangeOrderId;
+        entity.remoteFillId = remoteFillId;
+        entity.marketId = marketId;
+        entity.tokenId = tokenId;
+        entity.venue = TradeVenue.POLYMARKET;
+        entity.side = side;
+        entity.price = price;
+        entity.shares = shares;
+        entity.amountUsd = price == null || shares == null ? null : price.multiply(shares);
+        entity.feeUsd = feeUsd;
+        entity.feeKnown = feeUsd != null;
+        entity.liquidityRole = liquidityRole == null ? "UNKNOWN" : liquidityRole;
+        entity.rawFill = rawFill;
+        entity.filledAt = filledAt == null ? TimeMachine.now() : filledAt;
+        entity.occurredAt = entity.filledAt;
+        entity.receivedAt = TimeMachine.now();
         return entity;
     }
 
@@ -169,6 +214,18 @@ public class TradeFillEntity {
         return exchangeOrderId;
     }
 
+    public String getRemoteFillId() {
+        return remoteFillId;
+    }
+
+    public String getMarketId() {
+        return marketId;
+    }
+
+    public String getTokenId() {
+        return tokenId;
+    }
+
     public TradeVenue getVenue() {
         return venue;
     }
@@ -191,6 +248,10 @@ public class TradeFillEntity {
 
     public BigDecimal getFeeUsd() {
         return feeUsd;
+    }
+
+    public Boolean getFeeKnown() {
+        return feeKnown;
     }
 
     public String getLiquidityRole() {

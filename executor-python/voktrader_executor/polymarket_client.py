@@ -6,7 +6,17 @@ from typing import Any
 from uuid import uuid4
 
 from .config import Settings
-from .models import OrderCommand, OrderResponse, TradeSide
+from .models import (
+    CancelOrderResponse,
+    ExecutorError,
+    FillResponse,
+    FillsResponse,
+    OpenOrdersResponse,
+    OrderCommand,
+    OrderResponse,
+    OrderStatusResponse,
+    TradeSide,
+)
 
 
 class PolymarketExecutor:
@@ -24,6 +34,111 @@ class PolymarketExecutor:
         client = self._get_client()
         raw_response = self._submit_order(client, command)
         return self._normalize_response(command, raw_response)
+
+    def cancel_order(self, order_id: str) -> CancelOrderResponse:
+        if self.settings.executor_dry_run:
+            return CancelOrderResponse(
+                success=True,
+                remoteOrderId=order_id,
+                status="DRY_RUN_CANCELLED",
+                rawResponse=json.dumps({"dry_run": True, "order_id": order_id, "cancelled": True}, sort_keys=True),
+            )
+
+        client = self._get_client()
+        raw_response = _call_client_method(
+            client,
+            ("cancel_order", "cancel", "delete_order"),
+            order_id=order_id,
+            id=order_id,
+        )
+        return _normalize_cancel_response(order_id, raw_response)
+
+    def get_order_status(self, order_id: str) -> OrderStatusResponse:
+        if self.settings.executor_dry_run:
+            return OrderStatusResponse(
+                success=True,
+                remoteOrderId=order_id,
+                status="DRY_RUN_UNKNOWN",
+                rawResponse=json.dumps({"dry_run": True, "order_id": order_id}, sort_keys=True),
+            )
+
+        client = self._get_client()
+        raw_response = _call_client_method(
+            client,
+            ("get_order", "get_order_status"),
+            order_id=order_id,
+            id=order_id,
+        )
+        return _normalize_order_status(raw_response, fallback_order_id=order_id)
+
+    def list_open_orders(self, market_id: str | None = None, token_id: str | None = None) -> OpenOrdersResponse:
+        if self.settings.executor_dry_run:
+            return OpenOrdersResponse(
+                success=True,
+                orders=[],
+                rawResponse=json.dumps(
+                    {"dry_run": True, "market_id": market_id, "token_id": token_id, "orders": []},
+                    sort_keys=True,
+                ),
+            )
+
+        client = self._get_client()
+        raw_response = _call_client_method(
+            client,
+            ("get_orders", "get_open_orders", "list_open_orders"),
+            market=market_id,
+            market_id=market_id,
+            token_id=token_id,
+            asset_id=token_id,
+        )
+        items = _extract_list(raw_response, "orders", "data", "results")
+        return OpenOrdersResponse(
+            success=True,
+            orders=[_normalize_order_status(item) for item in items],
+            rawResponse=json.dumps(raw_response, default=str, sort_keys=True),
+        )
+
+    def list_fills(
+            self,
+            order_id: str | None = None,
+            market_id: str | None = None,
+            token_id: str | None = None,
+            since: str | None = None,
+    ) -> FillsResponse:
+        if self.settings.executor_dry_run:
+            return FillsResponse(
+                success=True,
+                fills=[],
+                rawResponse=json.dumps(
+                    {
+                        "dry_run": True,
+                        "order_id": order_id,
+                        "market_id": market_id,
+                        "token_id": token_id,
+                        "since": since,
+                        "fills": [],
+                    },
+                    sort_keys=True,
+                ),
+            )
+
+        client = self._get_client()
+        raw_response = _call_client_method(
+            client,
+            ("get_trades", "get_fills", "get_trade_history"),
+            order_id=order_id,
+            market=market_id,
+            market_id=market_id,
+            token_id=token_id,
+            asset_id=token_id,
+            since=since,
+        )
+        items = _extract_list(raw_response, "fills", "trades", "data", "results")
+        return FillsResponse(
+            success=True,
+            fills=[_normalize_fill(item) for item in items],
+            rawResponse=json.dumps(raw_response, default=str, sort_keys=True),
+        )
 
     def _validate_guardrails(self, command: OrderCommand) -> None:
         if command.amountUsd is not None and command.amountUsd > Decimal(str(self.settings.max_order_amount_usd)):
@@ -229,6 +344,107 @@ def _first_present(data: dict[str, Any], *keys: str) -> Any:
         if key in data and data[key] is not None:
             return data[key]
     return None
+
+
+def _call_client_method(client: Any, method_names: tuple[str, ...], **kwargs: Any) -> Any:
+    filtered_kwargs = {key: value for key, value in kwargs.items() if value is not None}
+    for method_name in method_names:
+        method = getattr(client, method_name, None)
+        if method is None:
+            continue
+        try:
+            return method(**filtered_kwargs)
+        except TypeError:
+            positional = filtered_kwargs.get("order_id") or filtered_kwargs.get("id")
+            if positional is not None:
+                try:
+                    return method(positional)
+                except TypeError:
+                    pass
+            return method()
+    raise UnsupportedOperationError(f"Polymarket SDK client has none of: {', '.join(method_names)}")
+
+
+class UnsupportedOperationError(RuntimeError):
+    pass
+
+
+def _normalize_cancel_response(order_id: str, raw_response: Any) -> CancelOrderResponse:
+    data = raw_response if isinstance(raw_response, dict) else {}
+    success = bool(_first_present(data, "success", "cancelled", "canceled") if data else True)
+    status = str(_first_present(data, "status", "state") or ("CANCELLED" if success else "FAILED")).upper()
+    return CancelOrderResponse(
+        success=success,
+        remoteOrderId=str(_first_present(data, "orderID", "orderId", "id", "order_id") or order_id),
+        status=status,
+        rawResponse=json.dumps(raw_response, default=str, sort_keys=True),
+        error=None if success else ExecutorError(type="EXCHANGE_REJECTION", message=str(_first_present(data, "error", "message") or status)),
+    )
+
+
+def _normalize_order_status(raw_response: Any, fallback_order_id: str | None = None) -> OrderStatusResponse:
+    data = raw_response if isinstance(raw_response, dict) else {}
+    success = bool(data) or raw_response is not None
+    return OrderStatusResponse(
+        success=success,
+        remoteOrderId=_string_or_none(_first_present(data, "orderID", "orderId", "id", "order_id") or fallback_order_id),
+        status=str(_first_present(data, "status", "state") or "UNKNOWN").upper(),
+        marketId=_string_or_none(_first_present(data, "market", "marketId", "market_id")),
+        tokenId=_string_or_none(_first_present(data, "tokenId", "token_id", "asset_id")),
+        side=_string_or_none(_first_present(data, "side")),
+        price=_decimal_or_none(_first_present(data, "price", "limitPrice", "limit_price")),
+        originalSize=_decimal_or_none(_first_present(data, "originalSize", "original_size", "size", "amount")),
+        filledSize=_decimal_or_none(_first_present(data, "filledSize", "filled_size", "size_matched", "matchedSize")),
+        remainingSize=_decimal_or_none(_first_present(data, "remainingSize", "remaining_size", "remaining")),
+        avgFillPrice=_decimal_or_none(_first_present(data, "avgFillPrice", "averagePrice", "avg_price", "matchedPrice")),
+        createdAt=_datetime_or_none(_first_present(data, "createdAt", "created_at")),
+        updatedAt=_datetime_or_none(_first_present(data, "updatedAt", "updated_at")),
+        expiresAt=_datetime_or_none(_first_present(data, "expiresAt", "expires_at", "expiration")),
+        rawResponse=json.dumps(raw_response, default=str, sort_keys=True),
+    )
+
+
+def _normalize_fill(raw_response: Any) -> FillResponse:
+    data = raw_response if isinstance(raw_response, dict) else {}
+    role = str(_first_present(data, "role", "liquidityRole", "liquidity_role") or "UNKNOWN").upper()
+    if role not in {"MAKER", "TAKER"}:
+        role = "UNKNOWN"
+    return FillResponse(
+        remoteOrderId=_string_or_none(_first_present(data, "orderID", "orderId", "order_id")),
+        tradeId=_string_or_none(_first_present(data, "tradeID", "tradeId", "trade_id", "transactionHash")),
+        fillId=_string_or_none(_first_present(data, "fillID", "fillId", "fill_id", "id")),
+        tokenId=_string_or_none(_first_present(data, "tokenId", "token_id", "asset_id")),
+        marketId=_string_or_none(_first_present(data, "market", "marketId", "market_id")),
+        side=_string_or_none(_first_present(data, "side")),
+        price=_decimal_or_none(_first_present(data, "price", "matchedPrice")),
+        shares=_decimal_or_none(_first_present(data, "size", "shares", "amount", "matchedSize")),
+        fee=_decimal_or_none(_first_present(data, "fee", "feeUsd", "fee_usd")),
+        role=role,
+        timestamp=_datetime_or_none(_first_present(data, "timestamp", "createdAt", "created_at", "filledAt", "filled_at")),
+        rawResponse=json.dumps(raw_response, default=str, sort_keys=True),
+    )
+
+
+def _extract_list(raw_response: Any, *keys: str) -> list[Any]:
+    if isinstance(raw_response, list):
+        return raw_response
+    if isinstance(raw_response, dict):
+        for key in keys:
+            value = raw_response.get(key)
+            if isinstance(value, list):
+                return value
+        return [raw_response] if raw_response else []
+    return []
+
+
+def _string_or_none(value: Any) -> str | None:
+    return str(value) if value is not None else None
+
+
+def _datetime_or_none(value: Any) -> Any:
+    if value is None or value == "":
+        return None
+    return value
 
 
 def _decimal_or_zero(value: Any) -> Decimal:

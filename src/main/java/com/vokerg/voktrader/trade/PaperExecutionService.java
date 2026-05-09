@@ -1,5 +1,10 @@
 package com.vokerg.voktrader.trade;
 
+import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
+import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
+import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
+import com.vokerg.voktrader.trade.persistence.TradeRepository;
+import com.vokerg.voktrader.trade.persistence.TradeRiskCheckRepository;
 import com.vokerg.voktrader.telemetry.TelemetryData;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import lombok.RequiredArgsConstructor;

@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 
 @Slf4j
 @Service
@@ -34,6 +35,24 @@ public class BotConfigService {
     @Transactional(readOnly = true)
     public List<BotConfigEntity> list() {
         return repository.findAllByOrderByIdAsc();
+    }
+
+    @Transactional(readOnly = true)
+    public List<BotConfigEntity> list(BotStatus status, Boolean enabled, MarketFamily marketFamily, String strategyId) {
+        String normalizedStrategyId = strategyId == null ? null : strategyId.trim().toLowerCase(Locale.ROOT);
+        return repository.findAllByOrderByIdAsc().stream()
+                .filter(bot -> status == null || bot.getStatus() == status)
+                .filter(bot -> enabled == null || bot.isEnabled() == enabled)
+                .filter(bot -> marketFamily == null || bot.getMarketFamily() == marketFamily)
+                .filter(bot -> normalizedStrategyId == null
+                        || normalizedStrategyId.isBlank()
+                        || strategyIdMatches(bot, normalizedStrategyId))
+                .toList();
+    }
+
+    private boolean strategyIdMatches(BotConfigEntity bot, String normalizedStrategyId) {
+        return bot.getStrategyId() != null
+                && bot.getStrategyId().toLowerCase(Locale.ROOT).equals(normalizedStrategyId);
     }
 
     @Transactional

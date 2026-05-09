@@ -218,3 +218,88 @@ def test_limit_order_rejects_when_size_cannot_be_derived():
         assert str(exc) == "Limit orders require positive shares or amountUsd convertible to shares"
     else:
         raise AssertionError("Expected missing size to be rejected")
+
+
+class FakeOrderManagementClient:
+    def cancel_order(self, order_id):
+        return {"success": True, "orderID": order_id, "status": "CANCELLED"}
+
+    def get_order(self, order_id):
+        return {
+            "orderID": order_id,
+            "status": "OPEN",
+            "market": "market-id",
+            "asset_id": "token-id",
+            "side": "BUY",
+            "price": "0.51",
+            "size": "10",
+            "filled_size": "2",
+            "remaining_size": "8",
+        }
+
+    def get_open_orders(self, **_):
+        return {"orders": [{"orderID": "order-1", "status": "LIVE", "asset_id": "token-id"}]}
+
+    def get_trades(self, **_):
+        return {
+            "trades": [
+                {
+                    "id": "fill-1",
+                    "orderID": "order-1",
+                    "asset_id": "token-id",
+                    "side": "BUY",
+                    "price": "0.51",
+                    "size": "2",
+                    "fee": "0.01",
+                    "role": "MAKER",
+                    "created_at": "2026-05-09T12:00:00Z",
+                }
+            ]
+        }
+
+
+def live_executor_with_fake_client():
+    executor = PolymarketExecutor(Settings(EXECUTOR_DRY_RUN=False))
+    executor._client = FakeOrderManagementClient()
+    return executor
+
+
+def test_cancel_order_success_mapping():
+    response = live_executor_with_fake_client().cancel_order("order-1")
+
+    assert response.success is True
+    assert response.remoteOrderId == "order-1"
+    assert response.status == "CANCELLED"
+    assert response.error is None
+
+
+def test_get_order_status_mapping():
+    response = live_executor_with_fake_client().get_order_status("order-1")
+
+    assert response.success is True
+    assert response.remoteOrderId == "order-1"
+    assert response.status == "OPEN"
+    assert response.marketId == "market-id"
+    assert response.tokenId == "token-id"
+    assert response.filledSize == Decimal("2")
+    assert response.remainingSize == Decimal("8")
+
+
+def test_list_open_orders_mapping():
+    response = live_executor_with_fake_client().list_open_orders(token_id="token-id")
+
+    assert response.success is True
+    assert len(response.orders) == 1
+    assert response.orders[0].remoteOrderId == "order-1"
+    assert response.orders[0].status == "LIVE"
+
+
+def test_list_fills_mapping():
+    response = live_executor_with_fake_client().list_fills(order_id="order-1")
+
+    assert response.success is True
+    assert len(response.fills) == 1
+    assert response.fills[0].fillId == "fill-1"
+    assert response.fills[0].remoteOrderId == "order-1"
+    assert response.fills[0].role == "MAKER"
+    assert response.fills[0].fee == Decimal("0.01")
