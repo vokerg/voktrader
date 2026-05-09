@@ -4,8 +4,8 @@ strategy-v2:
   schema-version: "2.0"
 
   engine:
-    enabled: false
-    active-strategy-ids: ["cfg_simple_down_cheap_v2"]
+    enabled: true
+    active-strategy-ids: ["cfg_post_bid_fade_v2"]
     tick-ms: 1000
     decision-mode: "single_market_single_position"
     decimal-scale: 8
@@ -457,7 +457,7 @@ strategy-v2:
         fill-model: "taker_instant"
 
     - strategy-id: "cfg_post_bid_fade_v2"
-      enabled: false
+      enabled: true
       profile: "conservative_paper"
       hypothesis: "Post a small maker bid below a stable mid when spreads are wide enough to pay for waiting."
       allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
@@ -534,4 +534,4 @@ strategy-v2:
                   op: "<="
                   value: "-0.08"
       simulation:
-        fill-model: "maker_queue_simple"
+        fill-model: "maker_touch"
