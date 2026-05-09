@@ -16,7 +16,7 @@ import com.vokerg.voktrader.trade.ExecutionRouter;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradeOrderStatus;
-import com.vokerg.voktrader.trade.TradeRepository;
+import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import com.vokerg.voktrader.trade.TradeStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

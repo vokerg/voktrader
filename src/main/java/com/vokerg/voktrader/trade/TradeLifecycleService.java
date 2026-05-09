@@ -1,5 +1,10 @@
 package com.vokerg.voktrader.trade;
 
+import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
+import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
+import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
+import com.vokerg.voktrader.trade.persistence.TradeRepository;
+import com.vokerg.voktrader.trade.persistence.TradeRiskCheckRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

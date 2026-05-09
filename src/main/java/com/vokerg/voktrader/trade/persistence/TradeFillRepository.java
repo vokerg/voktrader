@@ -1,4 +1,6 @@
-package com.vokerg.voktrader.trade;
+package com.vokerg.voktrader.trade.persistence;
+
+import com.vokerg.voktrader.trade.TradeFillEntity;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
