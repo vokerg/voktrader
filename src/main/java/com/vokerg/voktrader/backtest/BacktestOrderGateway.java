@@ -43,6 +43,13 @@ import java.util.Set;
 
 public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
     private static final int SCALE = 8;
+    private static final List<TradeStatus> ACTIVE_BACKTEST_STATUSES = List.of(
+            TradeStatus.ENTRY_PENDING,
+            TradeStatus.PARTIALLY_OPEN,
+            TradeStatus.OPEN,
+            TradeStatus.EXIT_PENDING,
+            TradeStatus.PARTIALLY_CLOSED
+    );
 
     private final String runId;
     private final TradeRepository tradeRepository;
@@ -158,12 +165,15 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
 
     @Override
     public StrategyRuntimeState getState(StrategyInstanceKey owner, String marketId) {
-        Optional<TradeEntity> trade = tradeRepository.findByBacktestRunId(runId).stream()
-                .filter(candidate -> marketId.equals(candidate.getMarketId()))
-                .filter(candidate -> owner == null || owner.strategyId().equals(candidate.getStrategyId()))
-                .filter(candidate -> owner == null || owner.botId() == null || owner.botId().equals(candidate.getBotId()))
-                .filter(candidate -> candidate.getStatus() != null && candidate.getStatus().isActive())
-                .max(Comparator.comparing(TradeEntity::getUpdatedAt, Comparator.nullsFirst(Comparator.naturalOrder())));
+        if (owner == null) {
+            return StrategyRuntimeState.empty(null, marketId);
+        }
+        Optional<TradeEntity> trade = tradeRepository.findFirstByBacktestRunIdAndStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(
+                runId,
+                owner.strategyId(),
+                marketId,
+                ACTIVE_BACKTEST_STATUSES
+        );
         return trade.map(entity -> stateFromTrade(owner, entity))
                 .orElseGet(() -> StrategyRuntimeState.empty(owner, marketId));
     }
@@ -407,13 +417,13 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
     }
 
     private Optional<TradeEntity> findExitTrade(TradeIntent intent) {
-        return tradeRepository.findByBacktestRunId(runId).stream()
-                .filter(trade -> intent.marketId().equals(trade.getMarketId()))
-                .filter(trade -> intent.tokenId().equals(trade.getTokenId()))
-                .filter(trade -> intent.strategyId().equals(trade.getStrategyId()))
-                .filter(trade -> intent.botId() == null || intent.botId().equals(trade.getBotId()))
-                .filter(trade -> trade.getStatus() == TradeStatus.OPEN || trade.getStatus() == TradeStatus.PARTIALLY_OPEN)
-                .max(Comparator.comparing(TradeEntity::getUpdatedAt, Comparator.nullsFirst(Comparator.naturalOrder())));
+        return tradeRepository.findFirstByBacktestRunIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(
+                runId,
+                intent.strategyId(),
+                intent.marketId(),
+                intent.tokenId(),
+                List.of(TradeStatus.OPEN, TradeStatus.PARTIALLY_OPEN)
+        );
     }
 
     private Optional<TradeOrderEntity> findOrder(String localOrRemoteOrderId) {
