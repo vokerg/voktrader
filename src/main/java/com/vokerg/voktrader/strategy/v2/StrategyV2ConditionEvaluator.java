@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 @Component
@@ -26,6 +27,43 @@ public class StrategyV2ConditionEvaluator {
         Object actual = resolver.resolve(context, condition.getFeature());
         String op = condition.getOp() == null ? "exists" : condition.getOp();
         return compare(actual, op, condition.getValue(), condition.getValues());
+    }
+
+    public Optional<ConditionFailure> firstFailure(
+            StrategyV2FeatureContext context,
+            StrategyV2Properties.Condition condition,
+            StrategyV2FeatureResolver resolver
+    ) {
+        if (condition == null || matches(context, condition, resolver)) {
+            return Optional.empty();
+        }
+        if (condition.getAll() != null) {
+            return condition.getAll().stream()
+                    .map(child -> firstFailure(context, child, resolver))
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
+                    .findFirst();
+        }
+        if (condition.getAny() != null) {
+            return Optional.of(new ConditionFailure(
+                    "any",
+                    "any",
+                    null,
+                    condition.getAny().stream().map(this::describe).toList()
+            ));
+        }
+        if (condition.getNot() != null) {
+            return Optional.of(new ConditionFailure(
+                    describe(condition),
+                    "not",
+                    null,
+                    describe(condition.getNot())
+            ));
+        }
+        Object actual = resolver.resolve(context, condition.getFeature());
+        String op = condition.getOp() == null ? "exists" : condition.getOp();
+        Object expected = condition.getValues() == null ? condition.getValue() : condition.getValues();
+        return Optional.of(new ConditionFailure(condition.getFeature(), op, actual, expected));
     }
 
     private boolean compare(Object actual, String op, Object expected, List<Object> values) {
@@ -91,5 +129,36 @@ public class StrategyV2ConditionEvaluator {
             return new BigDecimal(number.toString());
         }
         return new BigDecimal(value.toString());
+    }
+
+    private String describe(StrategyV2Properties.Condition condition) {
+        if (condition == null) {
+            return "(missing)";
+        }
+        if (condition.getAll() != null) {
+            return "all";
+        }
+        if (condition.getAny() != null) {
+            return "any";
+        }
+        if (condition.getNot() != null) {
+            return "not " + describe(condition.getNot());
+        }
+        String op = condition.getOp() == null ? "exists" : condition.getOp();
+        Object expected = condition.getValues() == null ? condition.getValue() : condition.getValues();
+        return expected == null
+                ? condition.getFeature() + " " + op
+                : condition.getFeature() + " " + op + " " + expected;
+    }
+
+    public record ConditionFailure(String feature, String op, Object actual, Object expected) {
+        public String reason() {
+            if ("any".equals(feature) || "not".equals(op)) {
+                return "entry condition failed: " + feature;
+            }
+            return expected == null
+                    ? "entry condition failed: " + feature + " " + op
+                    : "entry condition failed: " + feature + " " + op + " " + expected;
+        }
     }
 }

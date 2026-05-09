@@ -6,6 +6,9 @@ import com.vokerg.voktrader.trade.StrategyRuntimeState;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 @Component
 public class StrategyV2DiagnosticsRecorder {
     private final TradingEventLogger eventLogger;
@@ -15,8 +18,22 @@ public class StrategyV2DiagnosticsRecorder {
     }
 
     public void rejected(StrategyV2Properties.Strategy strategy, StrategyV2FeatureContext context, String reason) {
+        rejected(strategy, context, reason, Map.of());
+    }
+
+    public void rejected(
+            StrategyV2Properties.Strategy strategy,
+            StrategyV2FeatureContext context,
+            String reason,
+            Map<String, Object> details
+    ) {
         if (strategy.getDiagnostics() != null && !strategy.getDiagnostics().isRecordRejections()) {
             return;
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("candidate", context == null || context.candidate() == null ? null : context.candidate().outcome());
+        if (details != null) {
+            data.putAll(details);
         }
         eventLogger.entryRejected(
                 strategy.getStrategyId(),
@@ -24,7 +41,7 @@ public class StrategyV2DiagnosticsRecorder {
                 context == null ? null : context.market(),
                 null,
                 reason,
-                TelemetryData.data("candidate", context == null ? null : context.candidate().outcome())
+                data
         );
     }
 
@@ -45,7 +62,8 @@ public class StrategyV2DiagnosticsRecorder {
                         "localOrderId", result.localOrderId(),
                         "remoteOrderId", result.remoteOrderId(),
                         "error", result.error()
-                )
+                ),
+                false
         );
     }
 

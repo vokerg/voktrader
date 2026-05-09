@@ -5,7 +5,7 @@ strategy-v2:
 
   engine:
     enabled: true
-    active-strategy-ids: ["cfg_post_bid_fade_v2"]
+    active-strategy-ids: ["cfg_shower_trades_v2"]
     tick-ms: 1000
     decision-mode: "single_market_single_position"
     decimal-scale: 8
@@ -51,6 +51,57 @@ strategy-v2:
         fee-model: "configured"
 
   strategies:
+    - strategy-id: "cfg_shower_trades_v2"
+      enabled: true
+      profile: "conservative_paper"
+      hypothesis: "Intentionally broad maker smoke-test strategy: post a tiny GTD bid almost any time a sane quote exists."
+      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
+      candidate-selection:
+        type: "lower_ask"
+        candidates: ["Up", "Down"]
+      entry:
+        enabled: true
+        rule-id: "entry_shower_trades"
+        when:
+          all:
+            - feature: "market.accepting_orders"
+              op: "=="
+              value: true
+            - feature: "candidate.bid"
+              op: ">="
+              value: "0.01"
+            - feature: "candidate.bid"
+              op: "<="
+              value: "0.99"
+            - feature: "candidate.ask"
+              op: "<="
+              value: "0.99"
+        action:
+          side: "BUY"
+          liquidity-role: "maker"
+          order-type: "GTD"
+          post-only: true
+          price:
+            source: "best_bid"
+            tick-size: "0.01"
+            rounding: "floor_to_tick"
+            min-price: "0.01"
+            max-price: "0.99"
+          size:
+            type: "fixed_shares"
+            shares: "5.00"
+            max-usd: "5.00"
+          maker-lifecycle:
+            cancel-after-seconds: 8
+            replace-if-best-bid-moves-ticks: 1
+            max-reposts: 999
+            require-reconciliation: true
+          reason-template: "strategy-v2 maker shower candidate={{candidate.outcome}} bid={{candidate.bid}} ask={{candidate.ask}} spread={{candidate.spread}}"
+      exit:
+        enabled: false
+      simulation:
+        fill-model: "maker_touch"
+
     - strategy-id: "cfg_simple_down_cheap_v2"
       enabled: true
       profile: "conservative_paper"

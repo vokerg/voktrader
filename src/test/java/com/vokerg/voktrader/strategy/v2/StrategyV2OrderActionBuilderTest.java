@@ -106,6 +106,30 @@ class StrategyV2OrderActionBuilderTest {
     }
 
     @Test
+    void fixedSharesSizeSetsRequestedSharesAndNotionalFromLimitPrice() {
+        executionProperties.setUseOrderLayer(true);
+        when(orderGateway.submitOrder(any(TradeIntent.class), any(), any())).thenReturn(new OrderLifecycleResult(
+                true,
+                1L,
+                2L,
+                "local-1",
+                "remote-1",
+                TradeStatus.ENTRY_PENDING,
+                TradeOrderStatus.RESTING,
+                "resting",
+                null
+        ));
+
+        builder.routeEntry(fixedSharesStrategy(), context(), ExecutionMode.TESTING);
+
+        ArgumentCaptor<TradeIntent> intent = ArgumentCaptor.forClass(TradeIntent.class);
+        verify(orderGateway).submitOrder(intent.capture(), any(), any());
+        assertThat(intent.getValue().shares()).isEqualByComparingTo("5.00");
+        assertThat(intent.getValue().amountUsd()).isEqualByComparingTo("2.55");
+    }
+
+
+    @Test
     void flagEnabledSurfacesRejectedOrderManagerResult() {
         executionProperties.setUseOrderLayer(true);
         when(orderGateway.submitOrder(any(TradeIntent.class), any(), any())).thenReturn(new OrderLifecycleResult(
@@ -145,6 +169,16 @@ class StrategyV2OrderActionBuilderTest {
         action.setSize(size);
         entry.setAction(action);
         strategy.setEntry(entry);
+        return strategy;
+    }
+
+    private StrategyV2Properties.Strategy fixedSharesStrategy() {
+        StrategyV2Properties.Strategy strategy = strategy(TradeOrderType.GTD);
+        StrategyV2Properties.Action action = strategy.getEntry().getAction();
+        StrategyV2Properties.Size size = new StrategyV2Properties.Size();
+        size.setType("fixed_shares");
+        size.setShares(new BigDecimal("5.00"));
+        action.setSize(size);
         return strategy;
     }
 

@@ -12,6 +12,8 @@ public record BacktestResponse(
         long tradeCount,
         long closedTradeCount,
         long openTradeCount,
+        long resolvedWinningTradeCount,
+        long resolvedLosingTradeCount,
         BigDecimal totalFeeUsd,
         BigDecimal finalPnlUsd,
         BacktestOrderMetrics orderMetrics,

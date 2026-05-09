@@ -47,7 +47,8 @@ public class StrategyV2OrderActionBuilder {
                 ? action.getPostOnly()
                 : "maker".equalsIgnoreCase(action.getLiquidityRole());
         BigDecimal price = price(action, context);
-        BigDecimal amountUsd = amountUsd(action);
+        BigDecimal shares = shares(action);
+        BigDecimal amountUsd = amountUsd(action, price, shares);
         OutcomePrice outcomePrice = new OutcomePrice(
                 context.candidate().tokenId(),
                 context.candidate().outcome(),
@@ -61,6 +62,7 @@ public class StrategyV2OrderActionBuilder {
                 context.market(),
                 outcomePrice,
                 amountUsd,
+                shares,
                 orderType,
                 postOnly,
                 price,
@@ -78,8 +80,14 @@ public class StrategyV2OrderActionBuilder {
         return executionRouter.route(intent);
     }
 
-    private BigDecimal amountUsd(StrategyV2Properties.Action action) {
+    private BigDecimal amountUsd(StrategyV2Properties.Action action, BigDecimal price, BigDecimal shares) {
         StrategyV2Properties.Size size = action.getSize();
+        if ("fixed_shares".equalsIgnoreCase(size.getType())) {
+            if (shares == null || price == null) {
+                return null;
+            }
+            return shares.multiply(price).setScale(SCALE, RoundingMode.HALF_UP);
+        }
         BigDecimal value = size.getPaperUsd() == null ? new BigDecimal("1.00") : size.getPaperUsd();
         if (size.getMaxUsd() != null && value.compareTo(size.getMaxUsd()) > 0) {
             value = size.getMaxUsd();
@@ -88,6 +96,14 @@ public class StrategyV2OrderActionBuilder {
             value = size.getMinUsd();
         }
         return value;
+    }
+
+    private BigDecimal shares(StrategyV2Properties.Action action) {
+        StrategyV2Properties.Size size = action.getSize();
+        if (!"fixed_shares".equalsIgnoreCase(size.getType())) {
+            return null;
+        }
+        return size.getShares() == null ? new BigDecimal("5.00") : size.getShares();
     }
 
     private BigDecimal price(StrategyV2Properties.Action action, StrategyV2FeatureContext context) {

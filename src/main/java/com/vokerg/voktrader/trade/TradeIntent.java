@@ -104,11 +104,30 @@ public record TradeIntent(
             String ruleId,
             String reason
     ) {
+        return buy(botId, market, price, amountUsd, null, orderType, postOnly, limitPrice, strategyId, ruleId, reason);
+    }
+
+    public static TradeIntent buy(
+            Long botId,
+            GammaMarketDto market,
+            OutcomePrice price,
+            BigDecimal amountUsd,
+            BigDecimal shares,
+            TradeOrderType orderType,
+            boolean postOnly,
+            BigDecimal limitPrice,
+            String strategyId,
+            String ruleId,
+            String reason
+    ) {
         Instant now = TimeMachine.now();
         Instant updatedAt = price.updatedAt();
         Long ageMs = updatedAt == null ? null : Duration.between(updatedAt, now).toMillis();
         Long secondsToExpiry = market.endDate() == null ? null : Duration.between(now, market.endDate()).toSeconds();
         BigDecimal midpoint = midpoint(price.bid(), price.ask());
+        BigDecimal resolvedAmountUsd = amountUsd == null && shares != null && limitPrice != null
+                ? shares.multiply(limitPrice)
+                : amountUsd;
         return new TradeIntent(
                 botId,
                 strategyId,
@@ -120,8 +139,8 @@ public record TradeIntent(
                 price.tokenId(),
                 price.outcome(),
                 TradeSide.BUY,
-                amountUsd,
-                null,
+                resolvedAmountUsd,
+                shares,
                 orderType,
                 postOnly,
                 limitPrice,

@@ -32,6 +32,28 @@ class StrategyV2ConditionEvaluatorTest {
         assertThat(evaluator.matches(context, root, resolver)).isTrue();
     }
 
+    @Test
+    void explainsFirstFailedLeafCondition() {
+        HashMap<String, Object> features = new HashMap<>();
+        features.put("candidate.spread", new BigDecimal("0.09"));
+        features.put("candidate.bid", new BigDecimal("0.50"));
+        StrategyV2FeatureContext context = new StrategyV2FeatureContext(null, null, null, null, Instant.now(), features);
+
+        StrategyV2Properties.Condition root = new StrategyV2Properties.Condition();
+        root.setAll(List.of(
+                leaf("candidate.spread", "<=", "0.08"),
+                leaf("candidate.bid", ">=", "0.38")
+        ));
+
+        StrategyV2ConditionEvaluator.ConditionFailure failure = evaluator.firstFailure(context, root, resolver).orElseThrow();
+
+        assertThat(failure.feature()).isEqualTo("candidate.spread");
+        assertThat(failure.op()).isEqualTo("<=");
+        assertThat(failure.actual()).isEqualTo(new BigDecimal("0.09"));
+        assertThat(failure.expected()).isEqualTo("0.08");
+        assertThat(failure.reason()).isEqualTo("entry condition failed: candidate.spread <= 0.08");
+    }
+
     private StrategyV2Properties.Condition leaf(String feature, String op, Object value) {
         StrategyV2Properties.Condition condition = new StrategyV2Properties.Condition();
         condition.setFeature(feature);

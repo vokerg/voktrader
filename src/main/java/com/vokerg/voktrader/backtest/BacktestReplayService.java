@@ -149,6 +149,8 @@ public class BacktestReplayService {
                 summary.tradeCount(),
                 summary.closedTradeCount(),
                 summary.openTradeCount(),
+                summary.resolvedWinningTradeCount(),
+                summary.resolvedLosingTradeCount(),
                 summary.totalFeeUsd(),
                 summary.finalPnlUsd(),
                 summary.orderMetrics(),
@@ -288,7 +290,21 @@ public class BacktestReplayService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         long closed = trades.stream().filter(trade -> trade.getStatus() == TradeStatus.CLOSED || trade.getStatus() == TradeStatus.RESOLVED).count();
         long open = trades.stream().filter(trade -> trade.getStatus() == TradeStatus.OPEN).count();
-        return new BacktestSummary(trades.size(), closed, open, fees, pnl, orderMetrics);
+        long resolvedWins = trades.stream()
+                .filter(trade -> trade.getStatus() == TradeStatus.RESOLVED)
+                .filter(this::resolvedWinner)
+                .count();
+        long resolvedLosses = trades.stream()
+                .filter(trade -> trade.getStatus() == TradeStatus.RESOLVED)
+                .filter(trade -> !resolvedWinner(trade))
+                .count();
+        return new BacktestSummary(trades.size(), closed, open, resolvedWins, resolvedLosses, fees, pnl, orderMetrics);
+    }
+
+    private boolean resolvedWinner(TradeEntity trade) {
+        return trade.getOutcome() != null
+                && trade.getWinningOutcome() != null
+                && trade.getOutcome().equalsIgnoreCase(trade.getWinningOutcome());
     }
 
     private MarketTradeCounts countMarketTrades(String runId, Long marketId) {

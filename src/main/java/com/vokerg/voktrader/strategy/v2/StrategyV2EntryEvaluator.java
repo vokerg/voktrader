@@ -4,6 +4,8 @@ import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Optional;
 
@@ -42,11 +44,32 @@ public class StrategyV2EntryEvaluator {
         }
         StrategyV2FeatureContext context = selected.get();
         if (!conditionEvaluator.matches(context, strategy.getEntry().getWhen(), featureResolver)) {
-            diagnosticsRecorder.rejected(strategy, context, "entry conditions not met");
+            StrategyV2ConditionEvaluator.ConditionFailure failure = conditionEvaluator
+                    .firstFailure(context, strategy.getEntry().getWhen(), featureResolver)
+                    .orElse(null);
+            if (failure == null) {
+                diagnosticsRecorder.rejected(strategy, context, "entry conditions not met");
+            } else {
+                diagnosticsRecorder.rejected(
+                        strategy,
+                        context,
+                        failure.reason(),
+                        failureDetails(failure)
+                );
+            }
             return Optional.empty();
         }
         TradeExecutionResult result = orderActionBuilder.routeEntry(strategy, context, mode);
         diagnosticsRecorder.routed(strategy, context, result);
         return Optional.of(result);
+    }
+
+    private Map<String, Object> failureDetails(StrategyV2ConditionEvaluator.ConditionFailure failure) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("failedFeature", failure.feature());
+        details.put("failedOperator", failure.op());
+        details.put("actual", failure.actual());
+        details.put("expected", failure.expected());
+        return details;
     }
 }

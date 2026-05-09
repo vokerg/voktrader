@@ -70,6 +70,19 @@ public class TradingEventLogger {
         emit("TRADE_ROUTED", phase, strategyId, ruleId, market, price, reason, data, true);
     }
 
+    public void routed(
+            String phase,
+            String strategyId,
+            String ruleId,
+            GammaMarketDto market,
+            OutcomePrice price,
+            String reason,
+            Map<String, Object> data,
+            boolean important
+    ) {
+        emit("TRADE_ROUTED", phase, strategyId, ruleId, market, price, reason, data, important);
+    }
+
     public void market(
             String type,
             Long botId,
