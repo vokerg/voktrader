@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.trade;
 
+import com.vokerg.voktrader.economy.LiquidityRole;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -30,10 +31,14 @@ public class TradeOrderEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id; private Long botId; private Long tradeId;
+    private String localOrderId;
     private String clientOrderId;
     private String idempotencyKey;
+    private String remoteOrderId;
     private String exchangeOrderId;
     private String strategyId;
+    private String configHash;
+    private String accountId;
     private String ruleId;
     private String marketId;
     private String tokenId;
@@ -54,6 +59,8 @@ public class TradeOrderEntity {
     @Enumerated(EnumType.STRING)
     private TradeOrderType orderType;
 
+    private Boolean postOnly;
+
     @Enumerated(EnumType.STRING)
     private TradeOrderStatus status;
 
@@ -63,12 +70,27 @@ public class TradeOrderEntity {
     private BigDecimal filledPrice;
     private BigDecimal filledShares;
     private BigDecimal filledAmountUsd;
+    private BigDecimal remainingShares;
+    private BigDecimal avgFillPrice;
+    private BigDecimal realizedFeeUsd;
+
+    @Enumerated(EnumType.STRING)
+    private LiquidityRole fillRole;
 
     @Column(columnDefinition = "TEXT")
     private String rejectReason;
 
     @Column(columnDefinition = "TEXT")
+    private String rejectionReason;
+
+    @Column(columnDefinition = "TEXT")
     private String errorMessage;
+
+    @Column(columnDefinition = "TEXT")
+    private String failureReason;
+
+    @Column(columnDefinition = "TEXT")
+    private String cancelReason;
 
     @Column(columnDefinition = "TEXT")
     private String rawRequest;
@@ -79,6 +101,8 @@ public class TradeOrderEntity {
     private Instant submittedAt;
     private Instant acknowledgedAt;
     private Instant completedAt;
+    private Instant lastReconciledAt;
+    private Instant expiresAt;
     private Long latencyMs;
     private Instant createdAt;
     private Instant updatedAt;
@@ -96,6 +120,7 @@ public class TradeOrderEntity {
     ) {
         TradeOrderEntity entity = new TradeOrderEntity();
         entity.botId = intent.botId(); entity.tradeId = tradeId;
+        entity.localOrderId = clientOrderId;
         entity.clientOrderId = clientOrderId;
         entity.idempotencyKey = clientOrderId;
         entity.strategyId = intent.strategyId();
@@ -108,16 +133,19 @@ public class TradeOrderEntity {
         entity.mode = mode;
         entity.venue = venue;
         entity.orderType = intent.orderType();
+        entity.postOnly = intent.postOnly();
         entity.status = TradeOrderStatus.CREATED;
         entity.requestedPrice = intent.expectedPrice();
         entity.requestedShares = intent.shares();
         entity.requestedAmountUsd = intent.amountUsd();
+        entity.remainingShares = intent.shares();
         return entity;
     }
 
     public void markRiskRejected(String reason) {
         this.status = TradeOrderStatus.RISK_REJECTED;
         this.rejectReason = reason;
+        this.rejectionReason = reason;
         this.completedAt = TimeMachine.now();
         touch();
     }
@@ -134,6 +162,7 @@ public class TradeOrderEntity {
     public void markSubmitting(String clientOrderId, String rawRequest) {
         this.status = TradeOrderStatus.SUBMITTING;
         if (clientOrderId != null && !clientOrderId.isBlank()) {
+            this.localOrderId = clientOrderId;
             this.clientOrderId = clientOrderId;
             this.idempotencyKey = clientOrderId;
         }
@@ -151,6 +180,7 @@ public class TradeOrderEntity {
     public void attachExecutorResponse(String exchangeOrderId, String rawResponse) {
         if (exchangeOrderId != null && !exchangeOrderId.isBlank()) {
             this.exchangeOrderId = exchangeOrderId;
+            this.remoteOrderId = exchangeOrderId;
         }
         this.rawResponse = rawResponse;
         this.acknowledgedAt = TimeMachine.now();
@@ -163,9 +193,12 @@ public class TradeOrderEntity {
     public void markFilled(String exchangeOrderId, BigDecimal price, BigDecimal shares, BigDecimal amountUsd) {
         this.status = TradeOrderStatus.FILLED;
         this.exchangeOrderId = exchangeOrderId;
+        this.remoteOrderId = exchangeOrderId;
         this.filledPrice = price;
         this.filledShares = shares;
         this.filledAmountUsd = amountUsd;
+        this.avgFillPrice = price;
+        this.remainingShares = remainingSharesAfterFill(shares);
         this.acknowledgedAt = TimeMachine.now();
         this.completedAt = this.acknowledgedAt;
         if (this.submittedAt != null) {
@@ -177,6 +210,7 @@ public class TradeOrderEntity {
     public void markFailed(String errorMessage) {
         this.status = TradeOrderStatus.FAILED;
         this.errorMessage = errorMessage;
+        this.failureReason = errorMessage;
         this.completedAt = TimeMachine.now();
         touch();
     }
@@ -196,6 +230,12 @@ public class TradeOrderEntity {
         if (this.idempotencyKey == null || this.idempotencyKey.isBlank()) {
             this.idempotencyKey = this.clientOrderId;
         }
+        if (this.localOrderId == null || this.localOrderId.isBlank()) {
+            this.localOrderId = this.clientOrderId;
+        }
+        if (this.remoteOrderId == null || this.remoteOrderId.isBlank()) {
+            this.remoteOrderId = this.exchangeOrderId;
+        }
         if (this.phase == null && this.side != null) {
             this.phase = this.side == TradeSide.BUY ? TradeOrderPhase.ENTRY : TradeOrderPhase.EXIT;
         }
@@ -214,12 +254,24 @@ public class TradeOrderEntity {
         this.updatedAt = TimeMachine.now();
     }
 
+    private BigDecimal remainingSharesAfterFill(BigDecimal shares) {
+        if (requestedShares == null || shares == null) {
+            return null;
+        }
+        BigDecimal remaining = requestedShares.subtract(shares);
+        return remaining.signum() < 0 ? BigDecimal.ZERO : remaining;
+    }
+
     public Long getId() {
         return id;
     }
 
     public Long getBotId() { return botId; } public Long getTradeId() {
         return tradeId;
+    }
+
+    public String getLocalOrderId() {
+        return localOrderId;
     }
 
     public String getClientOrderId() {
@@ -230,12 +282,24 @@ public class TradeOrderEntity {
         return idempotencyKey;
     }
 
+    public String getRemoteOrderId() {
+        return remoteOrderId;
+    }
+
     public String getExchangeOrderId() {
         return exchangeOrderId;
     }
 
     public String getStrategyId() {
         return strategyId;
+    }
+
+    public String getConfigHash() {
+        return configHash;
+    }
+
+    public String getAccountId() {
+        return accountId;
     }
 
     public String getRuleId() {
@@ -274,6 +338,10 @@ public class TradeOrderEntity {
         return orderType;
     }
 
+    public Boolean getPostOnly() {
+        return postOnly;
+    }
+
     public TradeOrderStatus getStatus() {
         return status;
     }
@@ -302,12 +370,40 @@ public class TradeOrderEntity {
         return filledAmountUsd;
     }
 
+    public BigDecimal getRemainingShares() {
+        return remainingShares;
+    }
+
+    public BigDecimal getAvgFillPrice() {
+        return avgFillPrice;
+    }
+
+    public BigDecimal getRealizedFeeUsd() {
+        return realizedFeeUsd;
+    }
+
+    public LiquidityRole getFillRole() {
+        return fillRole;
+    }
+
     public String getRejectReason() {
         return rejectReason;
     }
 
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
     public String getErrorMessage() {
         return errorMessage;
+    }
+
+    public String getFailureReason() {
+        return failureReason;
+    }
+
+    public String getCancelReason() {
+        return cancelReason;
     }
 
     public String getRawRequest() {
@@ -328,6 +424,14 @@ public class TradeOrderEntity {
 
     public Instant getCompletedAt() {
         return completedAt;
+    }
+
+    public Instant getLastReconciledAt() {
+        return lastReconciledAt;
+    }
+
+    public Instant getExpiresAt() {
+        return expiresAt;
     }
 
     public Long getLatencyMs() {
