@@ -144,13 +144,15 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
             if (executionProperties.fillModel() == BacktestFillModel.MAKER_NO_FILL) {
                 continue;
             }
-            OutcomeOrderBook book = orderBookState.byTokenId(order.getTokenId()).orElse(null);
-            if (book == null || !makerShouldFill(order, book)) {
+            MakerFillEstimate estimate = makerFillEstimate(order, orderBookState.byTokenId(order.getTokenId()).orElse(null));
+            if (estimate == null || estimate.shares().compareTo(BigDecimal.ZERO) <= 0) {
                 continue;
             }
             TradeEntity trade = tradeRepository.findById(order.getTradeId()).orElse(null);
-            fillOrder(trade, order, order.getRequestedPrice(), requestedShares(order), LiquidityRole.MAKER, BigDecimal.ZERO, true);
-            openLocalOrderIds.remove(localOrderId);
+            fillOrder(trade, order, estimate.price(), estimate.shares(), LiquidityRole.MAKER, BigDecimal.ZERO, estimate.fullFill());
+            if (estimate.fullFill()) {
+                openLocalOrderIds.remove(localOrderId);
+            }
         }
     }
 
@@ -290,65 +292,96 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
         if (trade == null || price == null || shares == null || shares.compareTo(BigDecimal.ZERO) <= 0) {
             return;
         }
-        BigDecimal amountUsd = price.multiply(shares).setScale(SCALE, RoundingMode.HALF_UP);
+        BigDecimal previousShares = nullToZero(order.getFilledShares());
+        BigDecimal cumulativeShares = previousShares.add(shares);
+        BigDecimal fillAmountUsd = price.multiply(shares).setScale(SCALE, RoundingMode.HALF_UP);
+        BigDecimal cumulativeAmountUsd = price.multiply(cumulativeShares).setScale(SCALE, RoundingMode.HALF_UP);
+        boolean cumulativeFull = full || remaining(order, cumulativeShares).compareTo(BigDecimal.ZERO) <= 0;
         TradeFillEntity fill = tradeFillRepository.save(TradeFillEntity.backtest(
                 trade.getId(),
                 order.getId(),
                 order.getSide(),
                 price,
                 shares,
-                amountUsd,
+                fillAmountUsd,
                 feeUsd,
                 role.name(),
                 "{\"backtest\":true,\"fillModel\":\"" + executionProperties.getFillModel() + "\"}"
         ));
         order.applyFillState(
-                full ? TradeOrderStatus.FILLED : TradeOrderStatus.PARTIALLY_FILLED,
+                cumulativeFull ? TradeOrderStatus.FILLED : TradeOrderStatus.PARTIALLY_FILLED,
                 price,
-                shares,
-                amountUsd,
-                full ? BigDecimal.ZERO : remaining(order, shares),
+                cumulativeShares,
+                cumulativeAmountUsd,
+                cumulativeFull ? BigDecimal.ZERO : remaining(order, cumulativeShares),
                 feeUsd,
                 true,
                 role,
                 fill.getRawFill()
         );
         if (order.getSide() == TradeSide.BUY) {
-            if (full) {
-                trade.markOpen(price, shares, amountUsd, feeUsd, TimeMachine.now());
+            if (cumulativeFull) {
+                trade.markOpen(price, cumulativeShares, cumulativeAmountUsd, feeUsd, TimeMachine.now());
             } else {
-                trade.markPartiallyOpen(price, shares, amountUsd, feeUsd, TimeMachine.now());
+                trade.markPartiallyOpen(price, cumulativeShares, cumulativeAmountUsd, feeUsd, TimeMachine.now());
             }
-        } else if (full) {
-            trade.markClosed(price, shares, amountUsd, feeUsd, TimeMachine.now());
+        } else if (cumulativeFull) {
+            trade.markClosed(price, cumulativeShares, cumulativeAmountUsd, feeUsd, TimeMachine.now());
         } else {
-            trade.markPartiallyClosed(price, shares, amountUsd, feeUsd, TimeMachine.now());
+            trade.markPartiallyClosed(price, cumulativeShares, cumulativeAmountUsd, feeUsd, TimeMachine.now());
         }
         tradeOrderRepository.save(order);
         tradeRepository.save(trade);
     }
 
-    private boolean makerShouldFill(TradeOrderEntity order, OutcomeOrderBook book) {
+    private MakerFillEstimate makerFillEstimate(TradeOrderEntity order, OutcomeOrderBook book) {
+        if (book == null) {
+            return null;
+        }
         BigDecimal limit = order.getRequestedPrice();
         if (limit == null) {
-            return false;
+            return null;
         }
+        BigDecimal remainingShares = remainingShares(order);
+        if (remainingShares.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        BacktestFillModel fillModel = executionProperties.fillModel();
         if (order.getSide() == TradeSide.BUY) {
-            BigDecimal bestAsk = book.bestAsk().map(OrderBookLevel::price).orElse(null);
+            OrderBookLevel bestAsk = book.bestAsk().orElse(null);
             if (bestAsk == null) {
-                return false;
+                return null;
             }
-            return executionProperties.fillModel() == BacktestFillModel.MAKER_TOUCH
-                    ? bestAsk.compareTo(limit) <= 0
-                    : bestAsk.compareTo(limit) < 0;
+            int comparison = bestAsk.price().compareTo(limit);
+            if (comparison < 0) {
+                return new MakerFillEstimate(remainingShares, limit, true, "ask crossed below buy limit");
+            }
+            if (comparison == 0 && fillModel == BacktestFillModel.MAKER_TOUCH) {
+                return touchPartial(remainingShares, bestAsk.size(), limit, "ask touched buy limit");
+            }
+            return null;
         }
-        BigDecimal bestBid = book.bestBid().map(OrderBookLevel::price).orElse(null);
+        OrderBookLevel bestBid = book.bestBid().orElse(null);
         if (bestBid == null) {
-            return false;
+            return null;
         }
-        return executionProperties.fillModel() == BacktestFillModel.MAKER_TOUCH
-                ? bestBid.compareTo(limit) >= 0
-                : bestBid.compareTo(limit) > 0;
+        int comparison = bestBid.price().compareTo(limit);
+        if (comparison > 0) {
+            return new MakerFillEstimate(remainingShares, limit, true, "bid crossed above sell limit");
+        }
+        if (comparison == 0 && fillModel == BacktestFillModel.MAKER_TOUCH) {
+            return touchPartial(remainingShares, bestBid.size(), limit, "bid touched sell limit");
+        }
+        return null;
+    }
+
+    private MakerFillEstimate touchPartial(BigDecimal remainingShares, BigDecimal visibleDepth, BigDecimal price, String reason) {
+        BigDecimal candidate = nullToZero(visibleDepth).multiply(executionProperties.makerTouchFillRatio());
+        BigDecimal shares = candidate.min(remainingShares).setScale(SCALE, RoundingMode.HALF_UP);
+        if (shares.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        return new MakerFillEstimate(shares, price, shares.compareTo(remainingShares) >= 0, reason);
     }
 
     private void expire(TradeOrderEntity order) {
@@ -445,6 +478,17 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
         return remaining.signum() < 0 ? BigDecimal.ZERO : remaining;
     }
 
+    private BigDecimal remainingShares(TradeOrderEntity order) {
+        if (order.getRemainingShares() != null) {
+            return order.getRemainingShares();
+        }
+        return remaining(order, order.getFilledShares());
+    }
+
+    private BigDecimal nullToZero(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
     private boolean zero(BigDecimal value) {
         return value == null || value.compareTo(BigDecimal.ZERO) <= 0;
     }
@@ -478,5 +522,8 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
 
     private String clientOrderId(TradeIntent intent, Long tradeId) {
         return "BACKTEST:" + runId + ":" + tradeId + ":" + intent.side() + ":" + intent.tokenId() + ":" + TimeMachine.now().toEpochMilli();
+    }
+
+    private record MakerFillEstimate(BigDecimal shares, BigDecimal price, boolean fullFill, String reason) {
     }
 }

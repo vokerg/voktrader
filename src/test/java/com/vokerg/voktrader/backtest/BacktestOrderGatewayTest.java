@@ -167,6 +167,36 @@ class BacktestOrderGatewayTest {
     }
 
     @Test
+    void makerTouchBuyPartiallyFillsAtTouchUsingConfiguredRatio() {
+        executionProperties.setFillModel("maker_touch");
+        executionProperties.setMakerTouchFillRatio(new BigDecimal("0.25"));
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook("0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "50.00", null), owner(), ExecutionMode.TESTING)
+        ));
+
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook("0.49", "10", "0.50", "40", () -> {
+            gateway.advanceOpenOrders();
+            return null;
+        }));
+
+        TradeOrderEntity order = orders.values().iterator().next();
+        TradeEntity trade = trades.values().iterator().next();
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
+        assertThat(order.getFilledShares()).isEqualByComparingTo("10.00000000");
+        assertThat(order.getRemainingShares()).isEqualByComparingTo("90.00000000");
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.PARTIALLY_OPEN);
+
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:02Z"), () -> withBook("0.49", "10", "0.49", "40", () -> {
+            gateway.advanceOpenOrders();
+            return null;
+        }));
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.FILLED);
+        assertThat(order.getFilledShares()).isEqualByComparingTo("100.00000000");
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.OPEN);
+    }
+
+    @Test
     void makerCrossPessimisticBuyRequiresFutureAskBelowLimit() {
         executionProperties.setFillModel("maker_cross_pessimistic");
         TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook("0.49", "10", "0.51", "10", () ->
