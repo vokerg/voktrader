@@ -9,7 +9,8 @@ import com.vokerg.voktrader.strategy.TradingStrategy;
 import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.OrderLifecycleResult;
-import com.vokerg.voktrader.trade.OrderManager;
+import com.vokerg.voktrader.trade.OrderGateway;
+import com.vokerg.voktrader.trade.OrderGatewayContext;
 import com.vokerg.voktrader.trade.OrderRuntimeState;
 import com.vokerg.voktrader.trade.StrategyInstanceKey;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
@@ -37,7 +38,7 @@ public class StrategyV2Engine implements TradingStrategy {
     private final StrategyV2DiagnosticsRecorder diagnosticsRecorder;
     private final StrategyV2ExecutionProperties executionProperties;
     private final TradeStateProvider tradeStateProvider;
-    private final OrderManager orderManager;
+    private final OrderGateway orderGateway;
     private final TradingProperties tradingProperties;
 
     public StrategyV2Engine(
@@ -51,7 +52,7 @@ public class StrategyV2Engine implements TradingStrategy {
             StrategyV2DiagnosticsRecorder diagnosticsRecorder,
             StrategyV2ExecutionProperties executionProperties,
             TradeStateProvider tradeStateProvider,
-            OrderManager orderManager,
+            OrderGateway orderGateway,
             TradingProperties tradingProperties
     ) {
         this.properties = properties;
@@ -64,7 +65,7 @@ public class StrategyV2Engine implements TradingStrategy {
         this.diagnosticsRecorder = diagnosticsRecorder;
         this.executionProperties = executionProperties;
         this.tradeStateProvider = tradeStateProvider;
-        this.orderManager = orderManager;
+        this.orderGateway = orderGateway;
         this.tradingProperties = tradingProperties;
     }
 
@@ -199,7 +200,7 @@ public class StrategyV2Engine implements TradingStrategy {
         if (ageSeconds == null || ageSeconds <= maxPendingSeconds || cancelIdentifier == null || cancelIdentifier.isBlank()) {
             return;
         }
-        OrderLifecycleResult result = orderManager.cancelOrder(cancelIdentifier);
+        OrderLifecycleResult result = OrderGatewayContext.current().orElse(orderGateway).cancelOrder(cancelIdentifier, reason);
         if (!result.success()) {
             log.warn("Strategy V2 order-layer cancel request failed for {}: {}", cancelIdentifier, result.message());
         } else {

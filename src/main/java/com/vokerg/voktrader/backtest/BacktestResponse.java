@@ -14,6 +14,7 @@ public record BacktestResponse(
         long openTradeCount,
         BigDecimal totalFeeUsd,
         BigDecimal finalPnlUsd,
+        BacktestOrderMetrics orderMetrics,
         Map<String, Long> eventCounts,
         Map<String, Long> entryRejectReasons,
         Map<String, Long> executionRejectReasons,

@@ -4,8 +4,8 @@ import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.strategy.StrategyOutcomeView;
 import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.ExecutionRouter;
+import com.vokerg.voktrader.trade.OrderGateway;
 import com.vokerg.voktrader.trade.OrderLifecycleResult;
-import com.vokerg.voktrader.trade.OrderManager;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradeOrderStatus;
@@ -29,11 +29,11 @@ import static org.mockito.Mockito.when;
 class StrategyV2OrderActionBuilderTest {
     private final StrategyV2ExecutionProperties executionProperties = new StrategyV2ExecutionProperties();
     private final ExecutionRouter executionRouter = mock(ExecutionRouter.class);
-    private final OrderManager orderManager = mock(OrderManager.class);
+    private final OrderGateway orderGateway = mock(OrderGateway.class);
     private final StrategyV2OrderActionBuilder builder = new StrategyV2OrderActionBuilder(
             executionProperties,
             executionRouter,
-            orderManager
+            orderGateway
     );
 
     @Test
@@ -51,13 +51,13 @@ class StrategyV2OrderActionBuilderTest {
 
         assertThat(result.accepted()).isTrue();
         verify(executionRouter).route(any(TradeIntent.class));
-        verify(orderManager, never()).submitOrder(any(), any());
+        verify(orderGateway, never()).submitOrder(any(), any(), any());
     }
 
     @Test
     void flagEnabledRoutesThroughOrderManager() {
         executionProperties.setUseOrderLayer(true);
-        when(orderManager.submitOrder(any(TradeIntent.class), any())).thenReturn(new OrderLifecycleResult(
+        when(orderGateway.submitOrder(any(TradeIntent.class), any(), any())).thenReturn(new OrderLifecycleResult(
                 true,
                 1L,
                 2L,
@@ -75,14 +75,14 @@ class StrategyV2OrderActionBuilderTest {
         assertThat(result.localOrderId()).isEqualTo("local-1");
         assertThat(result.remoteOrderId()).isEqualTo("remote-1");
         assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.FILLED);
-        verify(orderManager).submitOrder(any(TradeIntent.class), any());
+        verify(orderGateway).submitOrder(any(TradeIntent.class), any(), any());
         verify(executionRouter, never()).route(any());
     }
 
     @Test
     void flagEnabledPreservesNonImmediateSubmittedResult() {
         executionProperties.setUseOrderLayer(true);
-        when(orderManager.submitOrder(any(TradeIntent.class), any())).thenReturn(new OrderLifecycleResult(
+        when(orderGateway.submitOrder(any(TradeIntent.class), any(), any())).thenReturn(new OrderLifecycleResult(
                 true,
                 1L,
                 2L,
@@ -101,14 +101,14 @@ class StrategyV2OrderActionBuilderTest {
         assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.SUBMITTED);
 
         ArgumentCaptor<TradeIntent> intent = ArgumentCaptor.forClass(TradeIntent.class);
-        verify(orderManager).submitOrder(intent.capture(), any());
+        verify(orderGateway).submitOrder(intent.capture(), any(), any());
         assertThat(intent.getValue().orderType()).isEqualTo(TradeOrderType.GTC);
     }
 
     @Test
     void flagEnabledSurfacesRejectedOrderManagerResult() {
         executionProperties.setUseOrderLayer(true);
-        when(orderManager.submitOrder(any(TradeIntent.class), any())).thenReturn(new OrderLifecycleResult(
+        when(orderGateway.submitOrder(any(TradeIntent.class), any(), any())).thenReturn(new OrderLifecycleResult(
                 false,
                 1L,
                 2L,

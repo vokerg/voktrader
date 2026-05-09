@@ -7,9 +7,10 @@ public record BacktestSummary(
         long closedTradeCount,
         long openTradeCount,
         BigDecimal totalFeeUsd,
-        BigDecimal finalPnlUsd
+        BigDecimal finalPnlUsd,
+        BacktestOrderMetrics orderMetrics
 ) {
     public static BacktestSummary empty() {
-        return new BacktestSummary(0, 0, 0, BigDecimal.ZERO, BigDecimal.ZERO);
+        return new BacktestSummary(0, 0, 0, BigDecimal.ZERO, BigDecimal.ZERO, BacktestOrderMetrics.empty());
     }
 }

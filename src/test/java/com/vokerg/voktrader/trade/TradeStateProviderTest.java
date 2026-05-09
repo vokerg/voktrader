@@ -19,7 +19,7 @@ import static org.mockito.Mockito.when;
 class TradeStateProviderTest {
     private final TradeRepository tradeRepository = mock(TradeRepository.class);
     private final TradeOrderRepository tradeOrderRepository = mock(TradeOrderRepository.class);
-    private final TradeStateProvider provider = new TradeStateProvider(tradeRepository, tradeOrderRepository);
+    private final DbTradeStateProvider provider = new DbTradeStateProvider(tradeRepository, tradeOrderRepository);
 
     @Test
     void readsActiveTradeAndOrdersFromLocalPersistenceOnly() {

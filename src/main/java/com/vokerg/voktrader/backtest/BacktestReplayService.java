@@ -17,6 +17,8 @@ import com.vokerg.voktrader.strategy.StrategyRegistry;
 import com.vokerg.voktrader.strategy.TradingStrategy;
 import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.ExecutionOverrideContext;
+import com.vokerg.voktrader.trade.BacktestTradeStateContext;
+import com.vokerg.voktrader.trade.OrderGatewayContext;
 import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
 import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
@@ -53,6 +55,7 @@ public class BacktestReplayService {
     private final TradeFillRepository tradeFillRepository;
     private final PolymarketFeeCalculator feeCalculator;
     private final TradingProperties tradingProperties;
+    private final BacktestExecutionProperties backtestExecutionProperties;
 
     @Transactional
     public BacktestResponse run(BacktestRequest request) {
@@ -73,6 +76,15 @@ public class BacktestReplayService {
                 tradeFillRepository,
                 feeCalculator,
                 tradingProperties
+        );
+        BacktestOrderGateway orderGateway = new BacktestOrderGateway(
+                runId,
+                tradeRepository,
+                tradeOrderRepository,
+                tradeFillRepository,
+                feeCalculator,
+                tradingProperties,
+                backtestExecutionProperties
         );
         BacktestDiagnostics diagnostics = new BacktestDiagnostics();
 
@@ -107,7 +119,7 @@ public class BacktestReplayService {
                 }
                 snapshotsSeen++;
                 marketSnapshotsSeen++;
-                runTick(botId, strategy, executor, diagnostics, tick);
+                runTick(botId, strategy, executor, orderGateway, diagnostics, tick);
             }
             resolveRemainingOpenTrades(runId, marketId);
             MarketTradeCounts tradeCounts = countMarketTrades(runId, marketId);
@@ -125,7 +137,7 @@ public class BacktestReplayService {
             );
         }
 
-        BacktestSummary summary = summarize(runId);
+        BacktestSummary summary = summarize(runId, orderGateway.metrics());
         run.complete(snapshotsSeen, summary);
         backtestRunRepository.save(run);
 
@@ -139,6 +151,7 @@ public class BacktestReplayService {
                 summary.openTradeCount(),
                 summary.totalFeeUsd(),
                 summary.finalPnlUsd(),
+                summary.orderMetrics(),
                 diagnostics.eventCounts(),
                 diagnostics.entryRejectReasons(),
                 diagnostics.executionRejectReasons(),
@@ -146,7 +159,14 @@ public class BacktestReplayService {
         );
     }
 
-    private void runTick(long botId, TradingStrategy strategy, BacktestExecutionService executor, BacktestDiagnostics diagnostics, ReplayTick tick) {
+    private void runTick(
+            long botId,
+            TradingStrategy strategy,
+            BacktestExecutionService executor,
+            BacktestOrderGateway orderGateway,
+            BacktestDiagnostics diagnostics,
+            ReplayTick tick
+    ) {
         TimeMachine.runAt(tick.capturedAt(), () -> {
             TrackedMarketState trackedMarketState = new TrackedMarketState();
             trackedMarketState.startTracking(tick.market());
@@ -178,7 +198,19 @@ public class BacktestReplayService {
                             executor.runId(),
                             () -> BacktestDiagnosticsContext.runWith(
                                     diagnostics,
-                                    () -> ExecutionOverrideContext.runWith(executor::execute, strategy::tick)
+                                    () -> {
+                                        Runnable tickRunnable = () -> ExecutionOverrideContext.runWith(executor::execute, strategy::tick);
+                                        OrderGatewayContext.runWith(
+                                                orderGateway,
+                                                () -> BacktestTradeStateContext.runWith(
+                                                        orderGateway,
+                                                        () -> {
+                                                            orderGateway.advanceOpenOrders();
+                                                            tickRunnable.run();
+                                                        }
+                                                )
+                                        );
+                                    }
                             )
                     )
             );
@@ -244,7 +276,7 @@ public class BacktestReplayService {
                 });
     }
 
-    private BacktestSummary summarize(String runId) {
+    private BacktestSummary summarize(String runId, BacktestOrderMetrics orderMetrics) {
         List<TradeEntity> trades = tradeRepository.findByBacktestRunId(runId);
         BigDecimal fees = trades.stream()
                 .map(TradeEntity::getTotalFeeUsd)
@@ -256,7 +288,7 @@ public class BacktestReplayService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         long closed = trades.stream().filter(trade -> trade.getStatus() == TradeStatus.CLOSED || trade.getStatus() == TradeStatus.RESOLVED).count();
         long open = trades.stream().filter(trade -> trade.getStatus() == TradeStatus.OPEN).count();
-        return new BacktestSummary(trades.size(), closed, open, fees, pnl);
+        return new BacktestSummary(trades.size(), closed, open, fees, pnl, orderMetrics);
     }
 
     private MarketTradeCounts countMarketTrades(String runId, Long marketId) {

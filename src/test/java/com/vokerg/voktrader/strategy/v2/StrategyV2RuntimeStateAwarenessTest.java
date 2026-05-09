@@ -7,8 +7,8 @@ import com.vokerg.voktrader.strategy.StrategyMarketView;
 import com.vokerg.voktrader.strategy.StrategyOutcomeView;
 import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.ExecutionMode;
+import com.vokerg.voktrader.trade.OrderGateway;
 import com.vokerg.voktrader.trade.OrderLifecycleResult;
-import com.vokerg.voktrader.trade.OrderManager;
 import com.vokerg.voktrader.trade.OrderRuntimeState;
 import com.vokerg.voktrader.trade.StrategyInstanceKey;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
@@ -44,7 +44,7 @@ class StrategyV2RuntimeStateAwarenessTest {
     private final StrategyV2ExitEvaluator exitEvaluator = mock(StrategyV2ExitEvaluator.class);
     private final StrategyV2DiagnosticsRecorder diagnosticsRecorder = mock(StrategyV2DiagnosticsRecorder.class);
     private final TradeStateProvider tradeStateProvider = mock(TradeStateProvider.class);
-    private final OrderManager orderManager = mock(OrderManager.class);
+    private final OrderGateway orderGateway = mock(OrderGateway.class);
     private final TradingProperties tradingProperties = new TradingProperties();
 
     @Test
@@ -75,21 +75,21 @@ class StrategyV2RuntimeStateAwarenessTest {
         fixture.engine.tick();
 
         verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
-        verify(orderManager, never()).cancelOrder(any());
+        verify(orderGateway, never()).cancelOrder(any(), any());
     }
 
     @Test
     void entryPendingTooOldRequestsCancel() {
         EngineFixture fixture = fixture(true, state(TradeStatus.ENTRY_PENDING, entryOrder(TradeOrderStatus.RESTING, 30), null));
         fixture.strategy.getEntryOrderManagement().setMaxPendingSeconds(1);
-        when(orderManager.cancelOrder("entry-local")).thenReturn(new OrderLifecycleResult(
+        when(orderGateway.cancelOrder(eq("entry-local"), any())).thenReturn(new OrderLifecycleResult(
                 true, 1L, 2L, "entry-local", "entry-remote", TradeStatus.ENTRY_PENDING, TradeOrderStatus.CANCEL_REQUESTED, "cancel accepted", null
         ));
 
         fixture.engine.tick();
 
         verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
-        verify(orderManager).cancelOrder("entry-local");
+        verify(orderGateway).cancelOrder(eq("entry-local"), any());
     }
 
     @Test
@@ -111,7 +111,7 @@ class StrategyV2RuntimeStateAwarenessTest {
 
         verify(exitEvaluator, never()).evaluate(any(), any(StrategyRuntimeState.class));
         verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
-        verify(orderManager, never()).cancelOrder(any());
+        verify(orderGateway, never()).cancelOrder(any(), any());
     }
 
     @Test
@@ -151,7 +151,7 @@ class StrategyV2RuntimeStateAwarenessTest {
                 diagnosticsRecorder,
                 executionProperties,
                 tradeStateProvider,
-                orderManager,
+                orderGateway,
                 tradingProperties
         );
         return new EngineFixture(engine, strategy);

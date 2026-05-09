@@ -4,7 +4,9 @@ import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.ExecutionRouter;
-import com.vokerg.voktrader.trade.OrderManager;
+import com.vokerg.voktrader.trade.OrderGateway;
+import com.vokerg.voktrader.trade.OrderGatewayContext;
+import com.vokerg.voktrader.trade.StrategyInstanceKey;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradeOrderType;
@@ -19,16 +21,16 @@ public class StrategyV2OrderActionBuilder {
     private static final int SCALE = 8;
     private final StrategyV2ExecutionProperties executionProperties;
     private final ExecutionRouter executionRouter;
-    private final OrderManager orderManager;
+    private final OrderGateway orderGateway;
 
     public StrategyV2OrderActionBuilder(
             StrategyV2ExecutionProperties executionProperties,
             ExecutionRouter executionRouter,
-            OrderManager orderManager
+            OrderGateway orderGateway
     ) {
         this.executionProperties = executionProperties;
         this.executionRouter = executionRouter;
-        this.orderManager = orderManager;
+        this.orderGateway = orderGateway;
     }
 
     public TradeExecutionResult routeEntry(
@@ -67,7 +69,11 @@ public class StrategyV2OrderActionBuilder {
                 reason(strategy, context)
         );
         if (executionProperties.isUseOrderLayer()) {
-            return TradeExecutionResult.fromOrderLifecycle(mode, orderManager.submitOrder(intent, mode));
+            OrderGateway gateway = OrderGatewayContext.current().orElse(orderGateway);
+            return TradeExecutionResult.fromOrderLifecycle(
+                    mode,
+                    gateway.submitOrder(intent, StrategyInstanceKey.of(intent.botId(), strategy.getStrategyId()), mode)
+            );
         }
         return executionRouter.route(intent);
     }
