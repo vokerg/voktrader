@@ -1,4 +1,4 @@
-package com.vokerg.voktrader.bot.dto;
+package com.vokerg.voktrader.api.bot.dto;
 
 import com.vokerg.voktrader.bot.BotConfigEntity;
 import com.vokerg.voktrader.bot.BotStatus;
@@ -6,10 +6,11 @@ import com.vokerg.voktrader.bot.MarketFamily;
 
 import java.time.Instant;
 
-public record BotConfigView(
+public record BotConfigResponse(
         Long id,
         String name,
         boolean enabled,
+        boolean runtimeActive,
         MarketFamily marketFamily,
         String asset,
         String interval,
@@ -19,11 +20,12 @@ public record BotConfigView(
         Instant createdAt,
         Instant updatedAt
 ) {
-    public static BotConfigView from(BotConfigEntity entity) {
-        return new BotConfigView(
+    public static BotConfigResponse from(BotConfigEntity entity, boolean runtimeActive) {
+        return new BotConfigResponse(
                 entity.getId(),
                 entity.getName(),
                 entity.isEnabled(),
+                runtimeActive,
                 entity.getMarketFamily(),
                 entity.getMarketFamily().asset().name(),
                 entity.getMarketFamily().intervalCode(),

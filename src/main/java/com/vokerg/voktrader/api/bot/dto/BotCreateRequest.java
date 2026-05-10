@@ -1,4 +1,4 @@
-package com.vokerg.voktrader.bot.dto;
+package com.vokerg.voktrader.api.bot.dto;
 
 public record BotCreateRequest(
         String name,

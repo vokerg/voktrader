@@ -1,6 +1,6 @@
-package com.vokerg.voktrader.bot.dto;
+package com.vokerg.voktrader.api.bot.dto;
 
-public record BotSwitchRequest(
+public record BotUpdateRequest(
         String marketFamily,
         String asset,
         String interval,

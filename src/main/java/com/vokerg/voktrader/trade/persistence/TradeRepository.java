@@ -4,13 +4,15 @@ import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.trade.TradeStatus;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public interface TradeRepository extends JpaRepository<TradeEntity, Long> {
+public interface TradeRepository extends JpaRepository<TradeEntity, Long>, JpaSpecificationExecutor<TradeEntity> {
     boolean existsByMarketIdAndTokenIdAndStrategyIdAndStatusIn(String marketId, String tokenId, String strategyId, Collection<TradeStatus> statuses);
     long countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(String marketId, String tokenId, String strategyId, Collection<TradeStatus> statuses);
     long countByMarketIdAndStrategyIdAndStatusIn(String marketId, String strategyId, Collection<TradeStatus> statuses);
@@ -39,4 +41,5 @@ public interface TradeRepository extends JpaRepository<TradeEntity, Long> {
     Optional<TradeEntity> findFirstByBacktestRunIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(String backtestRunId, String strategyId, String marketId, String tokenId, TradeStatus status);
     Optional<TradeEntity> findFirstByBacktestRunIdAndStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(String backtestRunId, String strategyId, String marketId, Collection<TradeStatus> statuses);
     Optional<TradeEntity> findFirstByBacktestRunIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(String backtestRunId, String strategyId, String marketId, String tokenId, Collection<TradeStatus> statuses);
+    List<TradeEntity> findAllByOrderByUpdatedAtDesc(Pageable pageable);
 }
