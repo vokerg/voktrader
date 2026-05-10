@@ -33,6 +33,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -59,6 +61,7 @@ public class BacktestReplayService {
 
     @Transactional
     public BacktestResponse run(BacktestRequest request) {
+        Instant wallClockStartedAt = Instant.now();
         String runId = "bt-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         TradingStrategy strategy = strategyRegistry.strategy(request.strategyId());
         List<Long> numericMarketIds = request.marketIds().stream().map(this::parseMarketId).toList();
@@ -90,6 +93,8 @@ public class BacktestReplayService {
 
         long botId = request.botId() == null ? -Math.abs(System.nanoTime()) : request.botId();
         long snapshotsSeen = 0;
+        Instant replayStartedAt = null;
+        Instant replayEndedAt = null;
         Map<Long, List<PriceSnapshotEntity>> snapshotsByMarket = groupByMarket(
                 priceSnapshotRepository.findByMarketIdInOrderByMarketIdAscCapturedAtAsc(numericMarketIds)
         );
@@ -98,7 +103,7 @@ public class BacktestReplayService {
             List<PriceSnapshotEntity> snapshots = snapshotsByMarket.getOrDefault(marketId, List.of());
             MarketEntity marketEntity = marketRepository.findByPolymarketMarketId(marketId.toString()).orElse(null);
             log.info(
-                    "TIME MACHINE market picked up: runId={} strategy={} marketId={} slug={} snapshots={} firstCapturedAt={} lastCapturedAt={} endDate={}",
+                    "TIME MACHINE market picked up: runId={} strategy={} marketId={} slug={} snapshots={} firstCapturedAt={} lastCapturedAt={} replaySpan={} endDate={}",
                     runId,
                     strategy.id(),
                     marketId,
@@ -106,6 +111,7 @@ public class BacktestReplayService {
                     snapshots.size(),
                     snapshots.isEmpty() ? null : snapshots.getFirst().getCapturedAt(),
                     snapshots.isEmpty() ? null : snapshots.getLast().getCapturedAt(),
+                    replaySpan(snapshots),
                     marketEntity == null ? null : marketEntity.getEndDate()
             );
             long marketSnapshotsSeen = 0;
@@ -117,6 +123,8 @@ public class BacktestReplayService {
                     skippedTicks++;
                     continue;
                 }
+                replayStartedAt = earlier(replayStartedAt, tick.capturedAt());
+                replayEndedAt = later(replayEndedAt, tick.capturedAt());
                 snapshotsSeen++;
                 marketSnapshotsSeen++;
                 runTick(botId, strategy, executor, orderGateway, diagnostics, tick);
@@ -137,7 +145,7 @@ public class BacktestReplayService {
             );
         }
 
-        BacktestSummary summary = summarize(runId, orderGateway.metrics());
+        BacktestSummary summary = summarize(runId, orderGateway.metrics(), wallClockStartedAt, replayStartedAt, replayEndedAt);
         run.complete(snapshotsSeen, summary);
         backtestRunRepository.save(run);
 
@@ -151,8 +159,16 @@ public class BacktestReplayService {
                 summary.openTradeCount(),
                 summary.resolvedWinningTradeCount(),
                 summary.resolvedLosingTradeCount(),
+                summary.totalEntryUsd(),
+                summary.totalExitUsd(),
                 summary.totalFeeUsd(),
+                summary.grossPnlUsd(),
                 summary.finalPnlUsd(),
+                summary.netRoiPct(),
+                summary.replayStartedAt(),
+                summary.replayEndedAt(),
+                summary.replayDurationSeconds(),
+                summary.wallClockDurationMs(),
                 summary.orderMetrics(),
                 diagnostics.eventCounts(),
                 diagnostics.entryRejectReasons(),
@@ -278,8 +294,22 @@ public class BacktestReplayService {
                 });
     }
 
-    private BacktestSummary summarize(String runId, BacktestOrderMetrics orderMetrics) {
+    private BacktestSummary summarize(
+            String runId,
+            BacktestOrderMetrics orderMetrics,
+            Instant wallClockStartedAt,
+            Instant replayStartedAt,
+            Instant replayEndedAt
+    ) {
         List<TradeEntity> trades = tradeRepository.findByBacktestRunId(runId);
+        BigDecimal entryUsd = trades.stream()
+                .map(TradeEntity::getEntryFilledUsd)
+                .map(value -> value == null ? BigDecimal.ZERO : value)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal exitUsd = trades.stream()
+                .map(TradeEntity::getExitFilledUsd)
+                .map(value -> value == null ? BigDecimal.ZERO : value)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal fees = trades.stream()
                 .map(TradeEntity::getTotalFeeUsd)
                 .map(value -> value == null ? BigDecimal.ZERO : value)
@@ -288,6 +318,11 @@ public class BacktestReplayService {
                 .map(TradeEntity::getFinalPnlUsd)
                 .map(value -> value == null ? BigDecimal.ZERO : value)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal grossPnl = pnl.add(fees);
+        BigDecimal roi = entryUsd.compareTo(BigDecimal.ZERO) <= 0
+                ? BigDecimal.ZERO
+                : pnl.divide(entryUsd, 8, RoundingMode.HALF_UP);
+        Long wallClockDurationMs = Duration.between(wallClockStartedAt, Instant.now()).toMillis();
         long closed = trades.stream().filter(trade -> trade.getStatus() == TradeStatus.CLOSED || trade.getStatus() == TradeStatus.RESOLVED).count();
         long open = trades.stream().filter(trade -> trade.getStatus() == TradeStatus.OPEN).count();
         long resolvedWins = trades.stream()
@@ -298,7 +333,24 @@ public class BacktestReplayService {
                 .filter(trade -> trade.getStatus() == TradeStatus.RESOLVED)
                 .filter(trade -> !resolvedWinner(trade))
                 .count();
-        return new BacktestSummary(trades.size(), closed, open, resolvedWins, resolvedLosses, fees, pnl, orderMetrics);
+        return new BacktestSummary(
+                trades.size(),
+                closed,
+                open,
+                resolvedWins,
+                resolvedLosses,
+                entryUsd,
+                exitUsd,
+                fees,
+                grossPnl,
+                pnl,
+                roi,
+                replayStartedAt,
+                replayEndedAt,
+                BacktestSummary.durationSeconds(replayStartedAt, replayEndedAt),
+                wallClockDurationMs,
+                orderMetrics
+        );
     }
 
     private boolean resolvedWinner(TradeEntity trade) {
@@ -327,6 +379,27 @@ public class BacktestReplayService {
                 .sorted(Comparator.comparing(PriceSnapshotEntity::getMarketId).thenComparing(PriceSnapshotEntity::getCapturedAt))
                 .forEach(snapshot -> grouped.computeIfAbsent(snapshot.getMarketId(), ignored -> new ArrayList<>()).add(snapshot));
         return grouped;
+    }
+
+    private String replaySpan(List<PriceSnapshotEntity> snapshots) {
+        if (snapshots == null || snapshots.size() < 2) {
+            return "PT0S";
+        }
+        return Duration.between(snapshots.getFirst().getCapturedAt(), snapshots.getLast().getCapturedAt()).toString();
+    }
+
+    private Instant earlier(Instant current, Instant candidate) {
+        if (candidate == null) {
+            return current;
+        }
+        return current == null || candidate.isBefore(current) ? candidate : current;
+    }
+
+    private Instant later(Instant current, Instant candidate) {
+        if (candidate == null) {
+            return current;
+        }
+        return current == null || candidate.isAfter(current) ? candidate : current;
     }
 
     private Long parseMarketId(String marketId) {

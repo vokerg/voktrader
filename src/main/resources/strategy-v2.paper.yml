@@ -58,7 +58,7 @@ strategy-v2:
       candidate-selection:
         type: "score"
         candidates: ["Up", "Down"]
-        min-score: "0.035"
+        min-score: "0.075"
         score:
           Up:
             expression: "up.mid_edge + up.mid_move_5s * 3 + up.depth_imbalance_0_03 * 0.025 + candidate.microprice_edge * 2 - candidate.spread * 2"
@@ -87,19 +87,19 @@ strategy-v2:
               value: "0.025"
             - feature: "candidate.ask"
               op: "<="
-              value: "0.66"
+              value: "0.60"
             - feature: "candidate.bid"
               op: ">="
               value: "0.47"
             - feature: "candidate.mid"
               op: "between"
-              values: ["0.52", "0.68"]
+              values: ["0.55", "0.64"]
             - feature: "candidate.mid_edge"
               op: ">="
-              value: "0.06"
+              value: "0.10"
             - feature: "candidate.mid_move_5s"
               op: ">="
-              value: "0.004"
+              value: "0.012"
             - feature: "candidate.bid_move_3s"
               op: ">="
               value: "-0.004"
@@ -114,13 +114,13 @@ strategy-v2:
               value: true
             - feature: "candidate.taker_buy.worst_price"
               op: "<="
-              value: "0.68"
+              value: "0.62"
             - feature: "candidate.taker_buy.slippage"
               op: "<="
               value: "0.015"
             - feature: "candidate.taker_buy.fee_usd"
               op: "<="
-              value: "0.055"
+              value: "0.050"
         action:
           side: "BUY"
           liquidity-role: "taker"
@@ -142,7 +142,7 @@ strategy-v2:
             min-fill-ratio: "1.0"
             max-slippage: "0.015"
             max-worst-price: "0.68"
-            max-fee-usd: "0.055"
+            max-fee-usd: "0.050"
           reason-template: "strategy-v2 liquidity momentum candidate={{candidate.outcome}} ask={{candidate.ask}} bid={{candidate.bid}} edge={{candidate.mid_edge}} move5={{candidate.mid_move_5s}}"
 
       exit:
@@ -158,7 +158,7 @@ strategy-v2:
               all:
                 - feature: "trade.estimated_net_pnl_usd"
                   op: ">="
-                  value: "0.07"
+                  value: "0.12"
           - name: "momentum_failure_exit"
             action: "SELL_NOW"
             order-type: "FOK"
@@ -173,7 +173,7 @@ strategy-v2:
                   value: "-0.015"
                 - feature: "trade.estimated_net_pnl_usd"
                   op: ">="
-                  value: "-0.03"
+                  value: "0.00"
           - name: "fee_aware_stop_loss"
             action: "SELL_NOW"
             order-type: "FOK"
@@ -185,7 +185,7 @@ strategy-v2:
                   value: "8"
                 - feature: "trade.estimated_net_pnl_usd"
                   op: "<="
-                  value: "-0.08"
+                  value: "-0.10"
           - name: "near_expiry_profitable_exit"
             action: "SELL_NOW"
             order-type: "FOK"
@@ -206,10 +206,10 @@ strategy-v2:
               all:
                 - feature: "trade.hold_seconds"
                   op: ">="
-                  value: "45"
+                  value: "60"
                 - feature: "trade.estimated_net_pnl_usd"
                   op: "<="
-                  value: "0.01"
+                  value: "-0.02"
 
       partial-fill-management:
         cancel-remaining-on-partial-after-seconds: 5
