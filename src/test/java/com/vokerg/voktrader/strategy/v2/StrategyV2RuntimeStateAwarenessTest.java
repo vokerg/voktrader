@@ -48,13 +48,13 @@ class StrategyV2RuntimeStateAwarenessTest {
     private final TradingProperties tradingProperties = new TradingProperties();
 
     @Test
-    void flagDisabledUsesOldEntryFlowWithoutStateLookup() {
+    void flagDisabledStillUsesStateAwarePaperFlow() {
         EngineFixture fixture = fixture(false, StrategyRuntimeState.empty(StrategyInstanceKey.of(null, "strategy-test"), "market-id"));
 
         fixture.engine.tick();
 
-        verify(tradeStateProvider, never()).getState(any(), any());
-        verify(featureResolver).contexts(any(), any(), any());
+        verify(tradeStateProvider).getState(any(), any());
+        verify(featureResolver).contexts(any(), any(), any(), any());
         verify(entryEvaluator).evaluate(eq(fixture.strategy), anyList(), eq(featureResolver), eq(ExecutionMode.PAPER));
     }
 

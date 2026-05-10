@@ -58,7 +58,7 @@ public class DbTradeStateProvider implements TradeStateProvider {
         OrderRuntimeState exitOrder = latestOrder(orders, TradeOrderPhase.EXIT);
         OrderRuntimeState feeSource = exitOrder == null ? entryOrder : exitOrder;
         BigDecimal realizedFee = firstNonNull(trade.getTotalFeeUsd(), trade.getEntryFeeUsd(), feeSource == null ? null : feeSource.realizedFeeUsd());
-        boolean feeKnown = feeSource != null && Boolean.TRUE.equals(feeSource.feeKnown());
+        boolean feeKnown = realizedFee != null || (feeSource != null && Boolean.TRUE.equals(feeSource.feeKnown()));
         LiquidityRole role = feeSource == null ? null : feeSource.fillRole();
         String lastFailure = firstNonBlank(
                 exitOrder == null ? null : exitOrder.lastFailureReason(),

@@ -55,6 +55,7 @@ class StrategyV2RuntimeFeatureResolverTest {
         assertThat(context.features().get("trade.avg_entry_price")).isEqualTo(context.features().get("position.avg_entry_price"));
         assertThat(context.features().get("trade.realized_fee_usd")).isEqualTo(context.features().get("position.realized_fee_usd"));
         assertThat(context.features().get("trade.fee_known")).isEqualTo(context.features().get("position.fee_known"));
+        assertThat((Long) context.features().get("trade.hold_seconds")).isGreaterThanOrEqualTo(0L);
         assertThat(context.features()).doesNotContainKey("trade.max_adverse_excursion_usd");
     }
 

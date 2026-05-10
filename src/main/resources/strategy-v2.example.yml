@@ -581,7 +581,10 @@ strategy-v2:
             order-type: "FOK"
             when:
               all:
-                - feature: "trade.max_adverse_excursion_usd"
+                - feature: "trade.hold_seconds"
+                  op: ">="
+                  value: "8"
+                - feature: "trade.estimated_net_pnl_usd"
                   op: "<="
                   value: "-0.08"
       simulation:

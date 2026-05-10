@@ -1,0 +1,235 @@
+# Production-shaped paper Strategy V2 config. This file is intentionally separate
+# from strategy-v2.example.yml so local paper runs do not inherit sample strategies.
+strategy-v2:
+  schema-version: "2.0"
+  engine:
+    enabled: true
+    active-strategy-ids: ["cfg_v2_liquidity_momentum_paper"]
+    tick-ms: 1000
+    decision-mode: "single_market_single_position"
+    decimal-scale: 8
+    require-complete-up-down-price: true
+    require-mid-sum-sane: true
+    min-mid-sum: "0.98"
+    max-mid-sum: "1.02"
+    default-profile: "paper_data_collection"
+    safety:
+      kill-switch-respected: true
+      live-requires-explicit-allowlist: true
+      block-live-maker-without-reconciliation: true
+      block-unknown-order-type: true
+      block-missing-fee-model: true
+      block-missing-book-for-book-rules: true
+
+  defaults:
+    paper_data_collection:
+      data:
+        max-price-age-ms: 1500
+        max-book-age-ms: 1500
+        warmup-seconds: 20
+        min-samples-per-window: 3
+      sizing:
+        paper-size-usd: "1.00"
+        live-size-usd: "5.00"
+        max-order-usd: "1.00"
+        min-order-usd: "1.00"
+        price-tick: "0.01"
+        round-shares-scale: 4
+      fees:
+        maker-fee-rate: "0"
+        taker-fee-rate: "0.072"
+        estimate-live-fees-when-missing: true
+      execution:
+        default-entry-order-type: "FOK"
+        default-exit-order-type: "FOK"
+        default-entry-liquidity-role: "taker"
+        post-only: false
+        allow-partial-fill: false
+
+  strategies:
+    - strategy-id: "cfg_v2_liquidity_momentum_paper"
+      enabled: true
+      profile: "paper_data_collection"
+      description: "Paper-only Strategy V2 liquidity and momentum confirmation."
+      hypothesis: "Enter when one side has a real edge, fresh book, acceptable taker fill quality, and supportive short-horizon momentum; exit on fee-aware profit, stop loss, momentum failure, or time decay."
+      tags: ["paper", "v2", "liquidity", "momentum", "fee-aware"]
+      allowed-execution-modes: ["PAPER"]
+
+      candidate-selection:
+        type: "score"
+        candidates: ["Up", "Down"]
+        min-score: "0.035"
+        score:
+          Up:
+            expression: "up.mid_edge + up.mid_move_5s * 3 + up.depth_imbalance_0_03 * 0.025 + candidate.microprice_edge * 2 - candidate.spread * 2"
+          Down:
+            expression: "down.mid_edge + down.mid_move_5s * 3 + down.depth_imbalance_0_03 * 0.025 + candidate.microprice_edge * 2 - candidate.spread * 2"
+
+      entry:
+        enabled: true
+        rule-id: "v2_liquidity_momentum_entry"
+        when:
+          all:
+            - feature: "market.accepting_orders"
+              op: "=="
+              value: true
+            - feature: "market.seconds_to_expiry"
+              op: "between"
+              values: ["45", "240"]
+            - feature: "candidate.price_age_ms"
+              op: "<="
+              value: "1500"
+            - feature: "candidate.book_age_ms"
+              op: "<="
+              value: "1500"
+            - feature: "candidate.spread"
+              op: "<="
+              value: "0.025"
+            - feature: "candidate.ask"
+              op: "<="
+              value: "0.66"
+            - feature: "candidate.bid"
+              op: ">="
+              value: "0.47"
+            - feature: "candidate.mid"
+              op: "between"
+              values: ["0.52", "0.68"]
+            - feature: "candidate.mid_edge"
+              op: ">="
+              value: "0.06"
+            - feature: "candidate.mid_move_5s"
+              op: ">="
+              value: "0.004"
+            - feature: "candidate.bid_move_3s"
+              op: ">="
+              value: "-0.004"
+            - feature: "candidate.volatility_10s"
+              op: "<="
+              value: "0.08"
+            - feature: "candidate.depth_imbalance_0_03"
+              op: ">="
+              value: "-0.20"
+            - feature: "candidate.taker_buy.fillable"
+              op: "=="
+              value: true
+            - feature: "candidate.taker_buy.worst_price"
+              op: "<="
+              value: "0.68"
+            - feature: "candidate.taker_buy.slippage"
+              op: "<="
+              value: "0.015"
+            - feature: "candidate.taker_buy.fee_usd"
+              op: "<="
+              value: "0.055"
+        action:
+          side: "BUY"
+          liquidity-role: "taker"
+          order-type: "FOK"
+          post-only: false
+          price:
+            source: "best_ask"
+            tick-size: "0.01"
+            rounding: "none"
+            min-price: "0.01"
+            max-price: "0.99"
+          size:
+            type: "fixed_usd"
+            paper-usd: "1.00"
+            max-usd: "1.00"
+            min-usd: "1.00"
+          fill-constraints:
+            allow-partial-fill: false
+            min-fill-ratio: "1.0"
+            max-slippage: "0.015"
+            max-worst-price: "0.68"
+            max-fee-usd: "0.055"
+          reason-template: "strategy-v2 liquidity momentum candidate={{candidate.outcome}} ask={{candidate.ask}} bid={{candidate.bid}} edge={{candidate.mid_edge}} move5={{candidate.mid_move_5s}}"
+
+      exit:
+        enabled: true
+        rule-id: "v2_liquidity_momentum_exit"
+        default-action: "HOLD"
+        rules:
+          - name: "fee_aware_take_profit"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            liquidity-role: "taker"
+            when:
+              all:
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: ">="
+                  value: "0.07"
+          - name: "momentum_failure_exit"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            liquidity-role: "taker"
+            when:
+              all:
+                - feature: "trade.hold_seconds"
+                  op: ">="
+                  value: "6"
+                - feature: "candidate.bid_move_5s"
+                  op: "<="
+                  value: "-0.015"
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: ">="
+                  value: "-0.03"
+          - name: "fee_aware_stop_loss"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            liquidity-role: "taker"
+            when:
+              all:
+                - feature: "trade.hold_seconds"
+                  op: ">="
+                  value: "8"
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: "<="
+                  value: "-0.08"
+          - name: "near_expiry_profitable_exit"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            liquidity-role: "taker"
+            when:
+              all:
+                - feature: "market.seconds_to_expiry"
+                  op: "<="
+                  value: "35"
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: ">="
+                  value: "0.02"
+          - name: "time_decay_exit"
+            action: "SELL_NOW"
+            order-type: "FOK"
+            liquidity-role: "taker"
+            when:
+              all:
+                - feature: "trade.hold_seconds"
+                  op: ">="
+                  value: "45"
+                - feature: "trade.estimated_net_pnl_usd"
+                  op: "<="
+                  value: "0.01"
+
+      partial-fill-management:
+        cancel-remaining-on-partial-after-seconds: 5
+        allow-exit-partial-position: true
+      entry-order-management:
+        max-pending-seconds: 8
+        cancel-if-signal-invalid: true
+        cancel-if-book-stale: true
+        cancel-if-price-moves-away: true
+        allow-reprice: false
+      exit-order-management:
+        max-pending-seconds: 5
+        retry-on-reject: false
+        max-retries: 0
+      simulation:
+        fill-model: "taker_instant"
+        fee-model: "configured"
+        taker-fee-rate: "0.072"
+        maker-fee-rate: "0"
+      diagnostics:
+        record-rejections: true
+        record-feature-snapshot-on-entry: true
+        record-candidate-scores: true

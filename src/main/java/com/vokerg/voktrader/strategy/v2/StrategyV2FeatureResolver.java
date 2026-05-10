@@ -105,11 +105,21 @@ public class StrategyV2FeatureResolver {
         BigDecimal pnl = unrealizedPnl(state, markPrice, feeForPnl);
         features.put("position.unrealized_pnl_usd", pnl);
         features.put("position.unrealized_pnl_pct", unrealizedPnlPct(state, pnl));
-        features.put("position.entry_age_seconds", state.activeEntryOrder() == null ? null : state.activeEntryOrder().ageSeconds(now));
+        features.put("position.entry_age_seconds", entryAgeSeconds(state, now));
         features.put("position.exit_age_seconds", state.activeExitOrder() == null ? null : state.activeExitOrder().ageSeconds(now));
         putTradeAliases(features);
         putOrder(features, "entry_order", state.activeEntryOrder(), now);
         putOrder(features, "exit_order", state.activeExitOrder(), now);
+    }
+
+    private Long entryAgeSeconds(StrategyRuntimeState state, Instant now) {
+        if (state.activeEntryOrder() != null) {
+            return state.activeEntryOrder().ageSeconds(now);
+        }
+        if (state.lastUpdatedAt() == null || now == null) {
+            return null;
+        }
+        return Duration.between(state.lastUpdatedAt(), now).toSeconds();
     }
 
     private void putTradeAliases(Map<String, Object> features) {

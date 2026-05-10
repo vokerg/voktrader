@@ -82,9 +82,9 @@ public class StrategyV2Engine implements TradingStrategy {
                 "Interprets YAML-backed Strategy V2 configs instead of hardcoded strategy classes.",
                 "Uses StrategyMarketView, full book summaries, rolling price samples, and configured feature namespace.",
                 "Selects a candidate, evaluates a small condition tree, and routes configured BUY entry actions.",
-                "Exit schema is validated; execution remains delegated to existing hardcoded exits until V2 exit execution is enabled.",
+                "Evaluates configured exit rules against runtime position state and routes SELL exits through the configured execution path.",
                 "Good for parameter sweeps and safer config-only experiments.",
-                "Maker/live behavior is deliberately blocked by existing lifecycle guardrails when reconciliation is absent.",
+                "For paper runs it can use DB runtime state while keeping order-layer routing disabled.",
                 "Put configured strategy ids under strategy-v2.engine.active-strategy-ids or leave empty to run all enabled V2 strategies."
         );
     }
@@ -107,12 +107,11 @@ public class StrategyV2Engine implements TradingStrategy {
             if (!modeAllowed(strategy, mode)) {
                 continue;
             }
-            StrategyRuntimeState state = executionProperties.isUseOrderLayer()
-                    ? tradeStateProvider.getState(StrategyInstanceKey.of(BotRuntimeContextHolder.currentBotId().orElse(null), strategy.getStrategyId()), market.id())
-                    : null;
-            boolean accepted = executionProperties.isUseOrderLayer()
-                    ? evaluateStateAware(strategy, market, marketView, mode, state)
-                    : evaluateEntry(strategy, market, marketView, mode, null);
+            StrategyRuntimeState state = tradeStateProvider.getState(
+                    StrategyInstanceKey.of(BotRuntimeContextHolder.currentBotId().orElse(null), strategy.getStrategyId()),
+                    market.id()
+            );
+            boolean accepted = evaluateStateAware(strategy, market, marketView, mode, state);
             if (accepted) {
                 break;
             }
