@@ -70,10 +70,10 @@ public class StrategyV2ConditionEvaluator {
         return switch (op) {
             case "exists" -> actual != null;
             case "missing" -> actual == null;
-            case "<" -> decimal(actual).compareTo(decimal(expected)) < 0;
-            case "<=" -> decimal(actual).compareTo(decimal(expected)) <= 0;
-            case ">" -> decimal(actual).compareTo(decimal(expected)) > 0;
-            case ">=" -> decimal(actual).compareTo(decimal(expected)) >= 0;
+            case "<" -> actual != null && expected != null && decimal(actual).compareTo(decimal(expected)) < 0;
+            case "<=" -> actual != null && expected != null && decimal(actual).compareTo(decimal(expected)) <= 0;
+            case ">" -> actual != null && expected != null && decimal(actual).compareTo(decimal(expected)) > 0;
+            case ">=" -> actual != null && expected != null && decimal(actual).compareTo(decimal(expected)) >= 0;
             case "==" -> equal(actual, expected);
             case "!=" -> !equal(actual, expected);
             case "between" -> between(actual, values);

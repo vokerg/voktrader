@@ -87,6 +87,7 @@ public class StrategyV2FeatureResolver {
             features.put("position.status", "NEW");
             features.put("position.has_position", false);
             features.put("position.fee_known", false);
+            putTradeAliases(features);
             return;
         }
         features.put("position.status", state.currentTradeStatus() == null ? null : state.currentTradeStatus().name());
@@ -106,8 +107,25 @@ public class StrategyV2FeatureResolver {
         features.put("position.unrealized_pnl_pct", unrealizedPnlPct(state, pnl));
         features.put("position.entry_age_seconds", state.activeEntryOrder() == null ? null : state.activeEntryOrder().ageSeconds(now));
         features.put("position.exit_age_seconds", state.activeExitOrder() == null ? null : state.activeExitOrder().ageSeconds(now));
+        putTradeAliases(features);
         putOrder(features, "entry_order", state.activeEntryOrder(), now);
         putOrder(features, "exit_order", state.activeExitOrder(), now);
+    }
+
+    private void putTradeAliases(Map<String, Object> features) {
+        alias(features, "trade.estimated_net_pnl_usd", "position.unrealized_pnl_usd");
+        alias(features, "trade.estimated_net_pnl_pct", "position.unrealized_pnl_pct");
+        alias(features, "trade.hold_seconds", "position.entry_age_seconds");
+        alias(features, "trade.filled_shares", "position.filled_shares");
+        alias(features, "trade.avg_entry_price", "position.avg_entry_price");
+        alias(features, "trade.realized_fee_usd", "position.realized_fee_usd");
+        alias(features, "trade.fee_known", "position.fee_known");
+    }
+
+    private void alias(Map<String, Object> features, String alias, String source) {
+        if (features.containsKey(source)) {
+            features.put(alias, features.get(source));
+        }
     }
 
     private void putOrder(Map<String, Object> features, String prefix, OrderRuntimeState order, Instant now) {

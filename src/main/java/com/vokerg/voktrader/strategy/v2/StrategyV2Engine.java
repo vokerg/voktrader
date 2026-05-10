@@ -129,7 +129,7 @@ public class StrategyV2Engine implements TradingStrategy {
         if (state == null) {
             exitEvaluator.evaluate(strategy);
         } else {
-            exitEvaluator.evaluate(strategy, state);
+            exitEvaluator.evaluate(strategy, market, marketView, state, mode);
         }
         BigDecimal orderUsd = strategy.getEntry().getAction().getSize().getPaperUsd();
         List<StrategyV2FeatureContext> contexts = state == null
@@ -161,13 +161,13 @@ public class StrategyV2Engine implements TradingStrategy {
             diagnosticsRecorder.stateBranch(strategy, state, market.id(), "PARTIAL_POSITION_MANAGEMENT", "partial position active; suppressing duplicate entry");
             maybeCancelPartialRemainder(strategy, state);
             if (strategy.getPartialFillManagement().isAllowExitPartialPosition()) {
-                exitEvaluator.evaluate(strategy, state);
+                exitEvaluator.evaluate(strategy, market, marketView, state, mode);
             }
             return false;
         }
         if (status == TradeStatus.OPEN) {
             diagnosticsRecorder.stateBranch(strategy, state, market.id(), "EXIT", "position open; evaluating exit rules");
-            exitEvaluator.evaluate(strategy, state);
+            exitEvaluator.evaluate(strategy, market, marketView, state, mode);
             return false;
         }
         if (status.isPendingExit()) {

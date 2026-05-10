@@ -99,7 +99,7 @@ class StrategyV2RuntimeStateAwarenessTest {
 
         fixture.engine.tick();
 
-        verify(exitEvaluator).evaluate(fixture.strategy, state);
+        verify(exitEvaluator).evaluate(eq(fixture.strategy), any(), any(), eq(state), eq(ExecutionMode.PAPER));
         verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
     }
 
@@ -109,7 +109,7 @@ class StrategyV2RuntimeStateAwarenessTest {
 
         fixture.engine.tick();
 
-        verify(exitEvaluator, never()).evaluate(any(), any(StrategyRuntimeState.class));
+        verify(exitEvaluator, never()).evaluate(any(), any(), any(), any(StrategyRuntimeState.class), any());
         verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
         verify(orderGateway, never()).cancelOrder(any(), any());
     }
@@ -121,7 +121,7 @@ class StrategyV2RuntimeStateAwarenessTest {
 
         fixture.engine.tick();
 
-        verify(exitEvaluator).evaluate(fixture.strategy, state);
+        verify(exitEvaluator).evaluate(eq(fixture.strategy), any(), any(), eq(state), eq(ExecutionMode.PAPER));
         verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
     }
 

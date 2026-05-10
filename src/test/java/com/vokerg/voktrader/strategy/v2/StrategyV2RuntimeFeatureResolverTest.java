@@ -48,6 +48,14 @@ class StrategyV2RuntimeFeatureResolverTest {
         assertThat(context.features().get("position.fee_known")).isEqualTo(false);
         assertThat(context.features().get("position.realized_fee_usd")).isNull();
         assertThat((BigDecimal) context.features().get("position.unrealized_pnl_usd")).isEqualByComparingTo("0.6400000000");
+        assertThat(context.features().get("trade.estimated_net_pnl_usd")).isEqualTo(context.features().get("position.unrealized_pnl_usd"));
+        assertThat(context.features().get("trade.estimated_net_pnl_pct")).isEqualTo(context.features().get("position.unrealized_pnl_pct"));
+        assertThat(context.features().get("trade.hold_seconds")).isEqualTo(context.features().get("position.entry_age_seconds"));
+        assertThat(context.features().get("trade.filled_shares")).isEqualTo(context.features().get("position.filled_shares"));
+        assertThat(context.features().get("trade.avg_entry_price")).isEqualTo(context.features().get("position.avg_entry_price"));
+        assertThat(context.features().get("trade.realized_fee_usd")).isEqualTo(context.features().get("position.realized_fee_usd"));
+        assertThat(context.features().get("trade.fee_known")).isEqualTo(context.features().get("position.fee_known"));
+        assertThat(context.features()).doesNotContainKey("trade.max_adverse_excursion_usd");
     }
 
     private StrategyMarketView marketView() {

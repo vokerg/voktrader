@@ -80,6 +80,49 @@ public class StrategyV2OrderActionBuilder {
         return executionRouter.route(intent);
     }
 
+    public TradeExecutionResult routeExit(
+            StrategyV2Properties.Strategy strategy,
+            StrategyV2Properties.ExitRule rule,
+            StrategyV2FeatureContext context,
+            ExecutionMode mode
+    ) {
+        TradeOrderType orderType = orderType(rule == null ? null : rule.getOrderType());
+        String liquidityRole = rule == null ? null : rule.getLiquidityRole();
+        boolean postOnly = liquidityRole != null
+                ? "maker".equalsIgnoreCase(liquidityRole)
+                : orderType.prefersMaker();
+        BigDecimal price = exitPrice(context, orderType, postOnly);
+        BigDecimal shares = context.runtimeState() == null ? null : context.runtimeState().filledShares();
+        OutcomePrice outcomePrice = new OutcomePrice(
+                context.candidate().tokenId(),
+                context.candidate().outcome(),
+                context.decimal("candidate.bid"),
+                context.decimal("candidate.ask"),
+                context.candidate().spread(),
+                context.now()
+        );
+        TradeIntent intent = TradeIntent.sell(
+                BotRuntimeContextHolder.currentBotId().orElse(null),
+                context.market(),
+                outcomePrice,
+                shares,
+                orderType,
+                postOnly,
+                price,
+                strategy.getStrategyId(),
+                ruleId(strategy, rule),
+                exitReason(strategy, rule, context)
+        );
+        if (executionProperties.isUseOrderLayer()) {
+            OrderGateway gateway = OrderGatewayContext.current().orElse(orderGateway);
+            return TradeExecutionResult.fromOrderLifecycle(
+                    mode,
+                    gateway.submitOrder(intent, StrategyInstanceKey.of(intent.botId(), strategy.getStrategyId()), mode)
+            );
+        }
+        return executionRouter.route(intent);
+    }
+
     private BigDecimal amountUsd(StrategyV2Properties.Action action, BigDecimal price, BigDecimal shares) {
         StrategyV2Properties.Size size = action.getSize();
         if ("fixed_shares".equalsIgnoreCase(size.getType())) {
@@ -143,6 +186,30 @@ public class StrategyV2OrderActionBuilder {
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException("Unknown Strategy V2 order_type: " + value);
         }
+    }
+
+    private BigDecimal exitPrice(StrategyV2FeatureContext context, TradeOrderType orderType, boolean postOnly) {
+        BigDecimal price = postOnly || orderType.prefersMaker()
+                ? context.decimal("candidate.ask")
+                : context.decimal("candidate.bid");
+        if (price == null) {
+            price = context.decimal("candidate.mid");
+        }
+        return price == null ? null : price.setScale(SCALE, RoundingMode.HALF_UP).stripTrailingZeros();
+    }
+
+    private String ruleId(StrategyV2Properties.Strategy strategy, StrategyV2Properties.ExitRule rule) {
+        if (rule != null && rule.getName() != null && !rule.getName().isBlank()) {
+            return rule.getName();
+        }
+        return strategy.getExit() == null ? "exit" : strategy.getExit().getRuleId();
+    }
+
+    private String exitReason(StrategyV2Properties.Strategy strategy, StrategyV2Properties.ExitRule rule, StrategyV2FeatureContext context) {
+        String name = rule == null || rule.getName() == null ? ruleId(strategy, rule) : rule.getName();
+        return "strategy-v2 exit strategy=" + strategy.getStrategyId()
+                + " rule=" + name
+                + " outcome=" + context.candidate().outcome();
     }
 
     private String reason(StrategyV2Properties.Strategy strategy, StrategyV2FeatureContext context) {
