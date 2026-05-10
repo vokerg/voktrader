@@ -1,0 +1,37 @@
+conditions:
+  source_class: "StrategyV2ConditionEvaluator"
+  logical:
+    all: {description: "All children must pass.", empty_behavior: "Java Stream.allMatch returns true.", arity: "array"}
+    any: {description: "At least one child must pass.", empty_behavior: "Java Stream.anyMatch returns false.", arity: "array"}
+    not: {description: "Negates one child condition.", arity: 1}
+  null_and_missing:
+    numeric_comparison: "false when actual or expected is null"
+    exists: "true when resolved feature/expression is non-null"
+    missing: "true when resolved feature/expression is null"
+    equality: "Boolean values are parsed with Boolean.parseBoolean; numeric values compare BigDecimal; otherwise string equality."
+    score_expression_missing: "zero"
+  operators:
+    "==": {status: implemented, supported_types: [number, boolean, string], null_behavior: "null == null is true for non-boolean/non-numeric path"}
+    "!=": {status: implemented, supported_types: [number, boolean, string], null_behavior: "negates =="}
+    ">": {status: implemented, supported_types: [number], null_behavior: "false"}
+    ">=": {status: implemented, supported_types: [number], null_behavior: "false"}
+    "<": {status: implemented, supported_types: [number], null_behavior: "false"}
+    "<=": {status: implemented, supported_types: [number], null_behavior: "false"}
+    between: {status: implemented, supported_types: [number], values_shape: "[min, max]", inclusive: true, null_behavior: "null actual coerces to zero inside between"}
+    outside: {status: implemented, supported_types: [number], values_shape: "[min, max]", inclusive: false, null_behavior: "negates between"}
+    contains: {status: implemented, supported_types: [string], null_behavior: "false"}
+    matches_regex: {status: implemented, supported_types: [string], null_behavior: "false"}
+    in: {status: implemented, supported_types: [number, boolean, string], values_shape: "array", null_behavior: "false unless value list contains equal null path"}
+    not_in: {status: implemented, supported_types: [number, boolean, string], values_shape: "array", null_behavior: "negates in"}
+    exists: {status: implemented, supported_types: [any], null_behavior: "false"}
+    missing: {status: implemented, supported_types: [any], null_behavior: "true"}
+  nesting:
+    max_depth: "No explicit max in code."
+  valid_examples:
+    - {feature: "candidate.spread", op: "<=", value: "0.03"}
+    - {feature: "market.seconds_to_expiry", op: "between", values: ["60", "900"]}
+    - {all: [{feature: "candidate.ask", op: "<=", value: "0.60"}, {not: {feature: "candidate.spread", op: ">", value: "0.04"}}]}
+  invalid_examples:
+    - {feature: "candidate.spread", op: "approximately", value: "0.03"}
+    - {between_without_two_values: true}
+

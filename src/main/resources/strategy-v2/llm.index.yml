@@ -1,0 +1,29 @@
+manifest_pack:
+  name: strategy-v2
+  version: 1
+  purpose: "LLM-readable contract for generating and tweaking Strategy V2 YAML."
+  load_order:
+    - strategy-v2.schema.json
+    - economics.manifest.yml
+    - features.manifest.yml
+    - selectors.manifest.yml
+    - conditions.manifest.yml
+    - actions.manifest.yml
+    - exits.manifest.yml
+    - backtest.manifest.yml
+    - diagnostics.manifest.yml
+  strategy_authoring_workflow:
+    - "Read economics first to understand viable fee/exit paths."
+    - "Read features to pick signals."
+    - "Read selectors to choose candidate selection."
+    - "Read actions and exits to avoid unsupported order behavior."
+    - "Use diagnostics/backtest reports to mutate thresholds."
+  status_values:
+    implemented: "Implemented and consumed by the engine."
+    config_only: "Defined in config but not consumed by current engine path."
+    legacy_only: "Used only in legacy execution path."
+    experimental: "Implemented but not fully validated."
+    deprecated: "Should not be used for new strategies."
+    unsupported: "Not implemented; do not use in generated strategies."
+    unknown: "Behavior not yet documented."
+

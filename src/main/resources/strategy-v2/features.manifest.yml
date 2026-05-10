@@ -1,0 +1,392 @@
+manifest:
+  name: features
+  version: 1
+  source_class: "com.vokerg.voktrader.strategy.v2.StrategyV2FeatureResolver"
+  null_and_missing_behavior:
+    condition_comparison: "Numeric comparisons with null actual or expected return false. exists/missing check null directly."
+    score_expression: "Missing variables evaluate to zero in ExpressionEvaluator."
+    reason_template: "Only exact placeholders for present feature keys are replaced; missing placeholders remain literal text."
+  namespace_notes:
+    market:
+      description: "Current tracked market and binary Up/Down aggregate."
+    candidate:
+      description: "Outcome currently being scored/evaluated. Richest outcome namespace."
+      richest_namespace: true
+    opposite:
+      description: "The other outcome relative to candidate. Same generated feature surface as candidate."
+    up:
+      description: "Up outcome alias, mostly for candidate scoring."
+      limitations:
+        - "Only mid, spread, mid_edge, mid_move_5s, depth_imbalance_0_03, bid_depth_within_0_03, ask_depth_within_0_03 are emitted."
+    down:
+      description: "Down outcome alias, mostly for candidate scoring."
+      limitations:
+        - "Only mid, spread, mid_edge, mid_move_5s, depth_imbalance_0_03, bid_depth_within_0_03, ask_depth_within_0_03 are emitted."
+    trade:
+      description: "Aliases over position.* runtime state. Only meaningful when a position exists."
+      limitations:
+        - "No max adverse/favorable excursion is tracked."
+        - "estimated_net_pnl_usd uses current best bid when available, otherwise mid, and subtracts known fees or conservative unknown-fee fallback."
+  availability_defaults:
+    candidate_selection_score: true
+    entry_condition: true
+    exit_condition: true
+    reason_template: true
+    diagnostics: true
+  features:
+    market.id: &string_feature
+      status: implemented
+      type: string
+      unit: none
+      range: unknown
+      typical_range: unknown
+      direction: {higher_means: neutral}
+      available_in: {candidate_selection_score: false, entry_condition: true, exit_condition: true, reason_template: true, diagnostics: true}
+      nullable: false
+      null_when: []
+      missing_behavior: {condition_comparison: "false except missing", score_expression: "zero"}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putMarket", formula: "GammaMarketDto.id"}
+      aliases: {equivalent_to: [], differs_from: []}
+      description: "Polymarket market id as text."
+    market.slug:
+      <<: *string_feature
+      nullable: true
+      description: "Market slug."
+    market.question:
+      <<: *string_feature
+      nullable: true
+      description: "Market question."
+    market.end_at:
+      status: implemented
+      type: string
+      unit: none
+      range: unknown
+      typical_range: unknown
+      direction: {higher_means: neutral}
+      available_in: {candidate_selection_score: false, entry_condition: true, exit_condition: true, reason_template: true, diagnostics: true}
+      nullable: true
+      null_when: ["missing market end date"]
+      missing_behavior: {condition_comparison: "false except missing", score_expression: "zero"}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putMarket", formula: "GammaMarketDto.endDate"}
+      aliases: {equivalent_to: [], differs_from: []}
+      description: "Market end timestamp."
+    market.seconds_to_expiry: &seconds_feature
+      status: implemented
+      type: number
+      unit: seconds
+      range: {min: -Infinity, max: Infinity}
+      typical_range: {min: 0, max: 900}
+      direction: {higher_means: neutral}
+      available_in: {candidate_selection_score: true, entry_condition: true, exit_condition: true, reason_template: true, diagnostics: true}
+      nullable: true
+      null_when: ["missing market end date"]
+      missing_behavior: {condition_comparison: "false except missing", score_expression: "zero"}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putMarket", formula: "Duration.between(now, market.endDate).toSeconds()"}
+      aliases: {equivalent_to: [], differs_from: []}
+      description: "Seconds from replay/current time until market end."
+    market.is_binary:
+      status: implemented
+      type: boolean
+      unit: boolean
+      range: {min: false, max: true}
+      typical_range: {min: true, max: true}
+      direction: {higher_means: neutral}
+      available_in: {candidate_selection_score: false, entry_condition: true, exit_condition: true, reason_template: true, diagnostics: true}
+      nullable: false
+      null_when: []
+      missing_behavior: {condition_comparison: "false except missing", score_expression: "zero"}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putMarket", formula: "marketView.outcomes().size() == 2"}
+      aliases: {equivalent_to: [], differs_from: []}
+      description: "True when the market view has exactly two outcomes."
+    market.is_active:
+      status: implemented
+      type: boolean
+      unit: boolean
+      range: {min: true, max: true}
+      typical_range: {min: true, max: true}
+      direction: {higher_means: neutral}
+      available_in: {candidate_selection_score: false, entry_condition: true, exit_condition: true, reason_template: true, diagnostics: true}
+      nullable: false
+      null_when: []
+      missing_behavior: {condition_comparison: "false except missing", score_expression: "zero"}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putMarket", formula: "constant true"}
+      aliases: {equivalent_to: [], differs_from: []}
+      description: "Current engine only builds contexts for active market views."
+    market.accepting_orders:
+      status: implemented
+      type: boolean
+      unit: boolean
+      range: {min: false, max: true}
+      typical_range: {min: true, max: true}
+      direction: {higher_means: bullish}
+      available_in: {candidate_selection_score: false, entry_condition: true, exit_condition: true, reason_template: true, diagnostics: true}
+      nullable: true
+      null_when: ["market data missing acceptingOrders"]
+      missing_behavior: {condition_comparison: "false except missing", score_expression: "zero"}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putMarket", formula: "GammaMarketDto.acceptingOrders"}
+      aliases: {equivalent_to: [], differs_from: []}
+      description: "Whether Polymarket says the market accepts orders."
+    market.up_mid: &prob_feature
+      status: implemented
+      type: number
+      unit: probability_points
+      range: {min: 0, max: 1}
+      typical_range: {min: 0.01, max: 0.99}
+      direction: {higher_means: bullish}
+      available_in: {candidate_selection_score: true, entry_condition: true, exit_condition: true, reason_template: true, diagnostics: true}
+      nullable: true
+      null_when: ["missing Up outcome"]
+      missing_behavior: {condition_comparison: "false except missing", score_expression: "zero"}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putMarket", formula: "Up mid"}
+      aliases: {equivalent_to: ["up.mid"], differs_from: []}
+      description: "Up outcome midpoint."
+    market.down_mid:
+      <<: *prob_feature
+      null_when: ["missing Down outcome"]
+      aliases: {equivalent_to: ["down.mid"], differs_from: []}
+      description: "Down outcome midpoint."
+    market.mid_sum:
+      <<: *prob_feature
+      range: {min: 0, max: 2}
+      typical_range: {min: 0.97, max: 1.03}
+      direction: {higher_means: neutral}
+      null_when: ["missing Up or Down mid"]
+      aliases: {equivalent_to: [], differs_from: []}
+      description: "Up mid plus Down mid; sanity check for binary market pricing."
+    candidate.outcome: &outcome_name
+      <<: *string_feature
+      nullable: false
+      description: "Outcome label, usually Up or Down."
+    candidate.token_id:
+      <<: *string_feature
+      nullable: false
+      description: "Outcome token id."
+    candidate.bid: &price_feature
+      <<: *prob_feature
+      direction: {higher_means: bullish}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "bid", formula: "best bid, else mid - spread/2"}
+      description: "Best bid or derived bid."
+    candidate.ask:
+      <<: *price_feature
+      direction: {higher_means: bearish}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "ask", formula: "best ask, else mid + spread/2"}
+      description: "Best ask or derived ask."
+    candidate.mid:
+      <<: *price_feature
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putOutcome", formula: "StrategyOutcomeView.mid"}
+      description: "Outcome midpoint."
+    candidate.spread: &spread_feature
+      status: implemented
+      type: number
+      unit: probability_points
+      range: {min: 0, max: 1}
+      typical_range: {min: 0, max: 0.05}
+      direction: {higher_means: wider_spread}
+      available_in: {candidate_selection_score: true, entry_condition: true, exit_condition: true, reason_template: true, diagnostics: true}
+      nullable: true
+      null_when: ["missing price"]
+      missing_behavior: {condition_comparison: "false except missing", score_expression: "zero"}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putOutcome", formula: "StrategyOutcomeView.spread"}
+      aliases: {equivalent_to: [], differs_from: []}
+      description: "Ask minus bid."
+    candidate.price_age_ms: &ms_feature
+      status: implemented
+      type: number
+      unit: milliseconds
+      range: {min: 0, max: Infinity}
+      typical_range: unknown
+      direction: {higher_means: more_risk}
+      available_in: {candidate_selection_score: true, entry_condition: true, exit_condition: true, reason_template: true, diagnostics: true}
+      nullable: true
+      null_when: ["missing price timestamp"]
+      missing_behavior: {condition_comparison: "false except missing", score_expression: "zero"}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putOutcome", formula: "StrategyOutcomeView.priceAgeMs"}
+      aliases: {equivalent_to: [], differs_from: []}
+      description: "Age of top-of-book price."
+    candidate.book_age_ms:
+      <<: *ms_feature
+      null_when: ["missing book timestamp"]
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putOutcome", formula: "StrategyOutcomeView.bookAgeMs"}
+      description: "Age of order book."
+    candidate.bid_depth_total: &shares_feature
+      status: implemented
+      type: number
+      unit: shares
+      range: {min: 0, max: Infinity}
+      typical_range: unknown
+      direction: {higher_means: more_liquidity}
+      available_in: {candidate_selection_score: true, entry_condition: true, exit_condition: true, reason_template: true, diagnostics: true}
+      nullable: false
+      null_when: []
+      missing_behavior: {condition_comparison: "false except missing", score_expression: "zero"}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putOutcome", formula: "StrategyOutcomeView.bidDepth"}
+      aliases: {equivalent_to: [], differs_from: []}
+      description: "Total visible bid depth."
+    candidate.ask_depth_total:
+      <<: *shares_feature
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putOutcome", formula: "StrategyOutcomeView.askDepth"}
+      description: "Total visible ask depth."
+    candidate.mid_move_3s: &move_feature
+      status: implemented
+      type: number
+      unit: probability_points
+      range: {min: -1, max: 1}
+      typical_range: unknown
+      direction: {higher_means: bullish}
+      available_in: {candidate_selection_score: true, entry_condition: true, exit_condition: true, reason_template: true, diagnostics: true}
+      nullable: false
+      null_when: []
+      missing_behavior: {condition_comparison: "false except missing", score_expression: "zero"}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "move", formula: "latest field value minus value at or before window start; zero if insufficient samples"}
+      aliases: {equivalent_to: [], differs_from: []}
+      description: "Short-window midpoint change."
+    candidate.mid_move_5s: {<<: *move_feature, description: "5 second midpoint change."}
+    candidate.mid_move_10s: {<<: *move_feature, description: "10 second midpoint change."}
+    candidate.mid_move_30s: {<<: *move_feature, description: "30 second midpoint change."}
+    candidate.bid_move_3s: {<<: *move_feature, description: "3 second bid change."}
+    candidate.bid_move_5s: {<<: *move_feature, description: "5 second bid change."}
+    candidate.bid_move_10s: {<<: *move_feature, description: "10 second bid change."}
+    candidate.ask_move_3s: {<<: *move_feature, description: "3 second ask change."}
+    candidate.ask_move_5s: {<<: *move_feature, description: "5 second ask change."}
+    candidate.ask_move_10s: {<<: *move_feature, description: "10 second ask change."}
+    candidate.spread_change_5s:
+      <<: *move_feature
+      direction: {higher_means: wider_spread}
+      description: "5 second spread change."
+    candidate.volatility_10s: &vol_feature
+      <<: *move_feature
+      range: {min: 0, max: 1}
+      direction: {higher_means: more_risk}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "volatility", formula: "max mid minus min mid in window; zero if insufficient samples"}
+      description: "10 second midpoint range."
+    candidate.volatility_30s:
+      <<: *vol_feature
+      description: "30 second midpoint range."
+    candidate.microprice:
+      <<: *price_feature
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "microprice", formula: "bid*askSize + ask*bidSize over total top size; falls back to mid"}
+      description: "Top-of-book size-weighted price."
+    candidate.microprice_edge:
+      <<: *move_feature
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putOutcome", formula: "microprice - mid"}
+      description: "Positive when top-of-book size pressure tilts above mid."
+    candidate.mid_edge:
+      <<: *move_feature
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putOutcome", formula: "candidate.mid - opposite.mid"}
+      description: "Candidate midpoint advantage over opposite outcome."
+    candidate.taker_buy.fillable: &bool_feature
+      status: implemented
+      type: boolean
+      unit: boolean
+      range: {min: false, max: true}
+      typical_range: unknown
+      direction: {higher_means: more_liquidity}
+      available_in: {candidate_selection_score: false, entry_condition: true, exit_condition: true, reason_template: true, diagnostics: true}
+      nullable: true
+      null_when: ["missing ask book", "fill estimate unavailable"]
+      missing_behavior: {condition_comparison: "false except missing", score_expression: "zero"}
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putTaker", formula: "FillEstimate.complete for taker buy using orderUsd"}
+      aliases: {equivalent_to: [], differs_from: []}
+      description: "Whether configured orderUsd can fully buy from asks."
+    candidate.taker_buy.avg_price:
+      <<: *price_feature
+      nullable: true
+      description: "Average executable taker buy price."
+    candidate.taker_buy.worst_price:
+      <<: *price_feature
+      nullable: true
+      description: "Worst ask consumed by taker buy estimate."
+    candidate.taker_buy.shares:
+      <<: *shares_feature
+      nullable: true
+      description: "Estimated shares filled by taker buy."
+    candidate.taker_buy.amount_usd:
+      <<: *shares_feature
+      unit: usd
+      nullable: true
+      description: "Notional USD used by taker buy estimate."
+    candidate.taker_buy.slippage:
+      <<: *spread_feature
+      nullable: true
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "putTaker", formula: "avg_price - best ask"}
+      description: "Estimated taker buy slippage above best ask."
+    candidate.taker_buy.fee_usd:
+      <<: *shares_feature
+      unit: usd
+      nullable: true
+      calculation: {source_class: "StrategyOutcomeView", source_method: "estimateTakerFee", formula: "shares * feeRate * price * (1 - price)"}
+      description: "Estimated taker buy fee."
+    candidate.taker_buy.total_cost_usd:
+      <<: *shares_feature
+      unit: usd
+      nullable: true
+      description: "Taker buy notional plus fee."
+    candidate.maker_buy.price:
+      <<: *price_feature
+      description: "Current candidate bid; used as maker buy reference only."
+    candidate.maker_buy.fee_usd:
+      <<: *shares_feature
+      unit: usd
+      nullable: true
+      description: "Estimated maker buy fee, currently zero when fee model is available."
+    trade.estimated_net_pnl_usd:
+      <<: *shares_feature
+      unit: usd
+      range: {min: -Infinity, max: Infinity}
+      direction: {higher_means: bullish}
+      nullable: true
+      null_when: ["no open trade", "missing mark price", "missing filled shares", "missing avg entry price"]
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "unrealizedPnl", formula: "markPrice * filledShares - avgEntryPrice * filledShares - knownFeeOrFallback"}
+      aliases: {equivalent_to: ["position.unrealized_pnl_usd"], differs_from: ["Does not include order-book slippage beyond mark price."]}
+      description: "Fee-aware unrealized PnL estimate. Mark uses current bid when token view is available, otherwise mid."
+    trade.estimated_net_pnl_pct:
+      <<: *move_feature
+      unit: ratio
+      nullable: true
+      calculation: {source_class: "StrategyV2FeatureResolver", source_method: "unrealizedPnlPct", formula: "unrealizedPnl / entryCost"}
+      aliases: {equivalent_to: ["position.unrealized_pnl_pct"], differs_from: []}
+      description: "Unrealized PnL divided by entry cost."
+    trade.hold_seconds:
+      <<: *seconds_feature
+      nullable: true
+      aliases: {equivalent_to: ["position.entry_age_seconds"], differs_from: []}
+      description: "Age of active entry order or persisted trade lastUpdatedAt fallback."
+    trade.filled_shares:
+      <<: *shares_feature
+      nullable: true
+      aliases: {equivalent_to: ["position.filled_shares"], differs_from: []}
+      description: "Runtime filled shares."
+    trade.avg_entry_price:
+      <<: *price_feature
+      nullable: true
+      aliases: {equivalent_to: ["position.avg_entry_price"], differs_from: []}
+      description: "Average entry price."
+    trade.realized_fee_usd:
+      <<: *shares_feature
+      unit: usd
+      nullable: true
+      aliases: {equivalent_to: ["position.realized_fee_usd"], differs_from: []}
+      description: "Recorded fee USD when known."
+    trade.fee_known:
+      <<: *bool_feature
+      aliases: {equivalent_to: ["position.fee_known"], differs_from: []}
+      description: "True when runtime state has known realized fee."
+  generated_feature_patterns:
+    depth_bands:
+      names: ["bid_depth_within_0_01", "bid_depth_within_0_02", "bid_depth_within_0_03", "bid_depth_within_0_05", "ask_depth_within_0_01", "ask_depth_within_0_02", "ask_depth_within_0_03", "ask_depth_within_0_05", "depth_imbalance_0_01", "depth_imbalance_0_02", "depth_imbalance_0_03", "depth_imbalance_0_05"]
+      namespaces: ["candidate", "opposite"]
+      status: implemented
+    opposite_namespace:
+      status: implemented
+      description: "Same generated outcome features as candidate for the opposite outcome."
+    up_down_aliases:
+      names: ["mid", "spread", "mid_edge", "mid_move_5s", "depth_imbalance_0_03", "bid_depth_within_0_03", "ask_depth_within_0_03"]
+      status: implemented
+  unsupported_features:
+    candidate.taker_sell.fillable: {status: unsupported, description: "Not emitted by resolver."}
+    candidate.taker_sell.slippage: {status: unsupported, description: "Not emitted by resolver."}
+    trade.entry_price: {status: unsupported, description: "Use trade.avg_entry_price."}
+    trade.shares: {status: unsupported, description: "Use trade.filled_shares."}
+    trade.fees_paid_usd: {status: unsupported, description: "Use trade.realized_fee_usd."}
+    trade.max_adverse_excursion_usd: {status: unsupported, description: "Not tracked."}
+

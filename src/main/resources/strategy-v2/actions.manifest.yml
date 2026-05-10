@@ -1,0 +1,50 @@
+sides:
+  BUY:
+    status: implemented
+    notes: "Only supported side for entry.action."
+  SELL:
+    status: unsupported
+    notes: "TradeIntent supports SELL, but Strategy V2 entry evaluator rejects non-BUY entry actions. Exits create SELL intents."
+liquidity_roles:
+  MAKER: {status: implemented, fee_behavior_ref: "economics.manifest.yml"}
+  TAKER: {status: implemented, fee_behavior_ref: "economics.manifest.yml"}
+order_types:
+  FOK: {status: implemented, semantics: "Immediate fill-or-kill; order-layer backtest requires complete depth fill."}
+  FAK: {status: implemented, semantics: "Immediate fill-and-kill; order-layer backtest may partially fill."}
+  GTC: {status: implemented, semantics: "Resting maker-capable order in order-layer path."}
+  GTD: {status: implemented, semantics: "Resting maker-capable order with default backtest expiration."}
+price:
+  sources:
+    best_bid: {status: implemented, description: "Uses candidate.bid."}
+    best_ask: {status: implemented, description: "Uses candidate.ask."}
+    mid: {status: implemented, description: "Uses candidate.mid."}
+    fixed: {status: implemented, description: "Uses price.min-price as fixed price."}
+  fields:
+    offset-ticks: {status: implemented, description: "Adds ticks for BUY, subtracts for SELL in shared price method."}
+    improve-by-ticks: {status: implemented, description: "Added to offset-ticks."}
+    tick-size: {status: implemented, description: "Used by rounding and tick offsets."}
+    rounding: {status: implemented, values: ["none", "ceil_to_tick", "floor_to_tick"]}
+    min-price: {status: implemented, description: "Clamps lower bound."}
+    max-price: {status: implemented, description: "Clamps upper bound."}
+    do-not-cross-spread: {status: config_only, warning: "Do not use for generated strategies unless implementation is added."}
+    formula: {status: config_only, warning: "Defined in config but not evaluated by current order builder."}
+size:
+  types:
+    fixed_usd: {status: implemented, description: "Uses paper-usd, then clamps min/max USD."}
+    fixed_shares: {status: implemented, description: "Uses shares and derives amountUsd from shares * price."}
+  fields:
+    paper-usd: {status: implemented}
+    live-usd: {status: config_only}
+    max-usd: {status: implemented}
+    min-usd: {status: implemented}
+    shares: {status: implemented}
+maker_lifecycle:
+  cancel-after-seconds: {status: config_only, notes: "Entry pending cancellation uses entry-order-management.max-pending-seconds, not maker-lifecycle."}
+  max-reposts: {status: config_only}
+  replace-if-best-bid-moves-ticks: {status: config_only}
+reason_template:
+  status: implemented
+  placeholder_syntax: "{{feature.name}}"
+  available_namespaces: ["market", "candidate", "opposite", "up", "down", "trade"]
+  missing_placeholder_behavior: "Unresolved placeholders remain as literal text."
+

@@ -1,0 +1,42 @@
+backtest:
+  execution_modes:
+    order_layer:
+      status: implemented
+      strategy_v2_default: false
+      enabled_by: "voktrader.strategy-v2.execution.use-order-layer=true"
+    legacy:
+      status: implemented
+      strategy_v2_default: true
+      notes: "Default application config sets use-order-layer=false for paper Strategy V2."
+  fill_model:
+    taker_buy: {price: "book-walk average ask in order-layer; expectedPrice in legacy override", fill_assumption: "FOK requires complete fill in order-layer", fee: "taker"}
+    taker_sell: {price: "book-walk average bid in order-layer; expectedPrice in legacy override", fill_assumption: "FOK requires complete fill in order-layer", fee: "taker"}
+    maker_buy: {price: "posted limit", fill_assumption: "cross fill or touch partial depending on BacktestFillModel", fee: "zero"}
+    maker_sell: {price: "posted limit", fill_assumption: "cross fill or touch partial depending on BacktestFillModel", fee: "zero"}
+    resolution: {price: "binary payout", liquidity_required: false, fee: "zero"}
+  partial_fills:
+    supported: true
+    behavior: "FAK and maker touch can partially fill in order-layer backtest; Strategy V2 can exit partial positions only when partial-fill-management.allow-exit-partial-position=true."
+  order_lifecycle:
+    FOK: {behavior: "Immediate, cancelled/rejected if insufficient depth in order-layer."}
+    FAK: {behavior: "Immediate, may partially fill."}
+    GTC: {behavior: "Resting order advanced each replay tick."}
+    GTD: {behavior: "Resting order expires after backtest.execution.default-gtd-seconds."}
+    post_only: {behavior: "Affects expected liquidity role and order price choice; no separate post-only rejection simulation."}
+    reposts: {behavior: "Not implemented."}
+  slippage:
+    model: "observed book depth for feature estimates and order-layer immediate fills; legacy override uses expected price."
+    features: ["candidate.taker_buy.slippage"]
+  position_accounting:
+    multiple_open_positions: false
+    gating: {global: false, per_market: true, per_outcome: true, per_strategy: true}
+    strategy_evaluation_order: "registry active strategy order from config"
+    pending_orders_block_new_entries: true
+    duplicate_entry_behavior: "State-aware engine suppresses entry when active trade exists; risk checks also block duplicate active token trades."
+    duplicate_exit_behavior: "EXIT_PENDING suppresses duplicate normal exits."
+  market_lifecycle:
+    accepting_orders_behavior: "Available as feature; strategy must check it."
+    expiry_behavior: "Replay uses stored snapshots and resolves remaining open trades after market if resolution is known."
+    resolution_behavior: "Winning outcome pays shares, losing pays zero, no exit order."
+    unresolved_market_behavior: "Open trades remain open unless strategy exits."
+

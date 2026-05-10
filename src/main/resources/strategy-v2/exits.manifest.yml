@@ -1,0 +1,45 @@
+exit_actions:
+  SELL_NOW:
+    status: implemented
+    creates_order: true
+    side: SELL
+    liquidity_role_supported: ["TAKER", "MAKER"]
+    order_types_supported: ["FOK", "FAK", "GTC", "GTD"]
+    fee_behavior_ref: "economics.manifest.yml"
+    requires_open_trade: true
+    duplicate_exit_suppression: "Engine does not evaluate normal exits when TradeStatus.isPendingExit."
+    pending_exit_behavior: "May cancel pending exit via exit-order-management max pending seconds."
+    no_match_behavior: "HOLD"
+    description: "Routes SELL intent for filled shares."
+  SELL:
+    status: implemented
+    creates_order: true
+    side: SELL
+    description: "Alias accepted by StrategyV2ExitEvaluator."
+  HOLD:
+    status: implemented
+    creates_order: false
+    description: "Default no-match behavior; explicit HOLD rule action is supported by schema but not routed as order."
+resolution_exit:
+  status: implemented
+  triggered_by: "BacktestReplayService resolves remaining open trades after replay when market resolution is known."
+  creates_order: false
+  requires_liquidity: false
+  fee_charged: false
+  payout:
+    winning_outcome: "shares"
+    losing_outcome: "0"
+  pnl_formula: "resolution_payout - entry_cost - recorded_fees"
+  strategy_implication:
+    - "Maker entry plus resolution exit can avoid entry and exit fees in order-layer backtest."
+    - "Taker entry plus resolution still pays taker entry fee."
+    - "Taker risk exits should be reserved for stop/risk escape unless expected edge exceeds fee and spread drag."
+trade_features_available_in_exits:
+  trade.estimated_net_pnl_usd:
+    liquidation_assumption: "best_bid when available, else mid"
+    includes_entry_fees: true
+    includes_estimated_exit_fees: false
+    includes_slippage: false
+  trade.hold_seconds:
+    unit: seconds
+

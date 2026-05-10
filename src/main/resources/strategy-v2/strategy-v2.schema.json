@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Strategy V2 YAML",
+  "type": "object",
+  "required": ["strategy-v2"],
+  "properties": {
+    "strategy-v2": {
+      "type": "object",
+      "required": ["schema-version", "engine", "strategies"],
+      "properties": {
+        "schema-version": {"const": "2.0"},
+        "engine": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "active-strategy-ids": {"type": "array", "items": {"type": "string"}},
+            "tick-ms": {"type": "integer", "minimum": 1},
+            "decision-mode": {"enum": ["single_market_single_position"]},
+            "decimal-scale": {"type": "integer", "minimum": 0},
+            "require-complete-up-down-price": {"type": "boolean"},
+            "require-mid-sum-sane": {"type": "boolean"},
+            "min-mid-sum": {"type": ["number", "string"]},
+            "max-mid-sum": {"type": ["number", "string"]},
+            "default-profile": {"type": "string"},
+            "safety": {"type": "object", "description": "Config-only guardrail metadata for current Strategy V2 engine."}
+          },
+          "additionalProperties": true
+        },
+        "defaults": {"type": "object"},
+        "strategies": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/strategy"}
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "strategy": {
+      "type": "object",
+      "required": ["strategy-id", "enabled", "candidate-selection", "entry", "exit"],
+      "properties": {
+        "strategy-id": {"type": "string", "minLength": 1},
+        "enabled": {"type": "boolean"},
+        "profile": {"type": "string"},
+        "description": {"type": "string"},
+        "hypothesis": {"type": "string"},
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "allowed-execution-modes": {"type": "array", "items": {"enum": ["PAPER", "LIVE_SHADOW", "LIVE_TINY", "LIVE", "TESTING"]}},
+        "candidate-selection": {"$ref": "#/$defs/candidateSelection"},
+        "entry": {"$ref": "#/$defs/entry"},
+        "exit": {"$ref": "#/$defs/exit"},
+        "partial-fill-management": {"type": "object", "description": "Implemented for partial exit permission and partial entry cancel timing."},
+        "entry-order-management": {"type": "object", "description": "Implemented for pending entry cancellation."},
+        "exit-order-management": {"type": "object", "description": "Implemented for pending exit cancellation."},
+        "simulation": {"type": "object", "description": "Config-only except fill_model validation and external backtest settings."},
+        "diagnostics": {"type": "object"},
+        "market-filter": {"type": "object", "description": "Config-only in current engine."},
+        "data-requirements": {"type": "object", "description": "Config-only in current engine."},
+        "features": {"type": "object", "description": "Config-only in current engine."},
+        "risk": {"type": "object", "description": "Config-only in current engine."},
+        "order-management": {"type": "object", "description": "Config-only in current engine."},
+        "experiment": {"type": "object", "description": "Config-only; StrategyV2ExperimentRunner was removed."}
+      },
+      "additionalProperties": false
+    },
+    "candidateSelection": {
+      "type": "object",
+      "properties": {
+        "type": {"enum": ["fixed_outcome", "lower_ask", "higher_mid", "stronger_momentum", "score"]},
+        "outcome": {"enum": ["Up", "Down"]},
+        "feature": {"type": "string"},
+        "candidates": {"type": "array", "items": {"enum": ["Up", "Down"]}},
+        "score": {"type": "object"},
+        "choose": {"enum": ["highest_score"], "description": "Defined in config, but current selector always chooses highest score."},
+        "min-score": {"type": ["number", "string"]},
+        "tie-breaker": {"enum": ["skip"], "description": "Defined in config, but current selector does not implement tie-breakers."}
+      },
+      "additionalProperties": false
+    },
+    "entry": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "rule-id": {"type": "string"},
+        "when": {"$ref": "#/$defs/condition"},
+        "action": {"$ref": "#/$defs/action"}
+      },
+      "required": ["action"],
+      "additionalProperties": false
+    },
+    "exit": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "rule-id": {"type": "string"},
+        "rules": {"type": "array", "items": {"$ref": "#/$defs/exitRule"}},
+        "default-action": {"enum": ["HOLD"]}
+      },
+      "additionalProperties": false
+    },
+    "exitRule": {
+      "type": "object",
+      "required": ["name", "action", "when"],
+      "properties": {
+        "name": {"type": "string"},
+        "action": {"enum": ["SELL", "SELL_NOW", "HOLD"]},
+        "order-type": {"enum": ["FOK", "FAK", "GTC", "GTD"]},
+        "liquidity-role": {"enum": ["maker", "taker", "MAKER", "TAKER"]},
+        "when": {"$ref": "#/$defs/condition"}
+      },
+      "additionalProperties": false
+    },
+    "condition": {
+      "type": "object",
+      "oneOf": [
+        {"required": ["all"], "properties": {"all": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/condition"}}}},
+        {"required": ["any"], "properties": {"any": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/condition"}}}},
+        {"required": ["not"], "properties": {"not": {"$ref": "#/$defs/condition"}}},
+        {"required": ["feature"], "properties": {"feature": {"type": "string"}, "op": {"$ref": "#/$defs/operator"}, "value": {}, "values": {"type": "array", "minItems": 2, "maxItems": 2}}}
+      ],
+      "additionalProperties": false
+    },
+    "operator": {"enum": ["<", "<=", ">", ">=", "==", "!=", "between", "outside", "contains", "matches_regex", "in", "not_in", "exists", "missing"]},
+    "action": {
+      "type": "object",
+      "properties": {
+        "side": {"enum": ["BUY", "SELL"], "description": "Entry evaluator only supports BUY; SELL is valid TradeIntent side for exits."},
+        "liquidity-role": {"enum": ["maker", "taker", "MAKER", "TAKER"]},
+        "order-type": {"enum": ["FOK", "FAK", "GTC", "GTD"]},
+        "post-only": {"type": "boolean"},
+        "price": {"$ref": "#/$defs/price"},
+        "size": {"$ref": "#/$defs/size"},
+        "fill-constraints": {"type": "object", "description": "Config-only in current order builder; entry conditions must enforce fill constraints."},
+        "maker-lifecycle": {"type": "object", "description": "Config-only in order builder; pending cancellation is handled by entry-order-management."},
+        "reason-template": {"type": "string"}
+      },
+      "required": ["side", "order-type", "price", "size"],
+      "additionalProperties": false
+    },
+    "price": {
+      "type": "object",
+      "properties": {
+        "source": {"enum": ["best_bid", "best_ask", "mid", "fixed"]},
+        "formula": {"type": "string", "description": "Config-only; not evaluated."},
+        "offset-ticks": {"type": "integer"},
+        "improve-by-ticks": {"type": "integer"},
+        "tick-size": {"type": ["number", "string"]},
+        "rounding": {"enum": ["none", "ceil_to_tick", "floor_to_tick"]},
+        "min-price": {"type": ["number", "string"]},
+        "max-price": {"type": ["number", "string"]},
+        "do-not-cross-spread": {"type": "boolean", "description": "Config-only; not enforced."}
+      },
+      "additionalProperties": false
+    },
+    "size": {
+      "type": "object",
+      "properties": {
+        "type": {"enum": ["fixed_usd", "fixed_shares"]},
+        "paper-usd": {"type": ["number", "string"]},
+        "live-usd": {"type": ["number", "string"], "description": "Config-only in current order builder."},
+        "max-usd": {"type": ["number", "string"]},
+        "min-usd": {"type": ["number", "string"]},
+        "shares": {"type": ["number", "string"]}
+      },
+      "additionalProperties": false
+    }
+  }
+}

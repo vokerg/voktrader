@@ -1,0 +1,48 @@
+economics:
+  status: implemented
+  fee_model:
+    formula: "shares * fee_rate * price * (1 - price)"
+    source_class: "PolymarketFeeCalculator"
+    maker_fee_rate: {value: 0.0, charged: false}
+    taker_fee_rate: {default_value: 0.072, source: "voktrader.trading.taker-fee-rate / paper-fee-rate", charged: true}
+  entry_fees:
+    maker_buy: {charged: false, fee_rate: 0.0, strategy_implication: "Preferred when edge can wait for passive fill."}
+    taker_buy: {charged: true, fee_rate_source: "takerFeeRate", strategy_implication: "Requires larger immediate edge."}
+  exit_fees:
+    maker_sell: {charged: false, status: implemented}
+    taker_sell: {charged: true, fee_rate_source: "takerFeeRate"}
+    resolution:
+      charged: false
+      creates_order: false
+      requires_liquidity: false
+      payout: {winning_outcome: "shares", losing_outcome: "0"}
+      pnl_formula: "resolution_payout - entry_cost - recorded_fees"
+  common_paths:
+    maker_entry_resolution_exit: {entry_fee: 0.0, exit_fee: 0.0, spread_crosses: 0, implication: "Lowest fee path, but carries resolution risk."}
+    maker_entry_taker_exit: {entry_fee: 0.0, exit_fee: "taker fee", spread_crosses: 1, implication: "Good for passive entry with risk escape."}
+    taker_entry_resolution_exit: {entry_fee: "taker fee", exit_fee: 0.0, spread_crosses: 1, implication: "Useful for late strong signal where resolution is near."}
+    taker_entry_taker_exit: {entry_fee: "taker fee", exit_fee: "taker fee", spread_crosses: 2, implication: "Hardest path economically; needs strong short-horizon alpha."}
+  strategy_design_notes:
+    - "Maker entry plus resolution exit can be structurally superior if fill assumptions are realistic."
+    - "FOK/taker strategies must clear fee + spread + slippage drag."
+    - "Taker exits should usually be risk exits, not default profit exits, unless the signal is strong enough."
+    - "Backtests report makerFills/takerFills and fee totals; economic path counts are not yet first-class."
+execution_paths:
+  order_layer_backtest:
+    status: implemented
+    maker_fee: 0.0
+    taker_fee: "configured takerFeeRate"
+    resolution_fee: 0.0
+    source_classes: ["BacktestOrderGateway", "PolymarketFeeCalculator", "TradeEntity"]
+  legacy_backtest:
+    status: implemented
+    known_differences:
+      - "BacktestExecutionService treats buy/sell fills as taker and charges taker fee."
+      - "Strategy V2 uses this by default when use-order-layer=false, while state is still provided by BacktestOrderGateway."
+  live:
+    maker_fee: 0.0
+    taker_fee: "configured takerFeeRate or executor-reported fee"
+  paper:
+    maker_fee: "not modeled in PaperExecutionService"
+    taker_fee: "paperFeeRate for both buy and sell"
+

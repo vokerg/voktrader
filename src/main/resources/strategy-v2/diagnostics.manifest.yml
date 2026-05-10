@@ -1,0 +1,41 @@
+backtest_report_contract:
+  status: implemented
+  current_response_fields:
+    - runId
+    - strategyId
+    - marketIds
+    - snapshotCount
+    - tradeCount
+    - closedTradeCount
+    - openTradeCount
+    - resolvedWinningTradeCount
+    - resolvedLosingTradeCount
+    - totalEntryUsd
+    - totalExitUsd
+    - totalFeeUsd
+    - grossPnlUsd
+    - finalPnlUsd
+    - netRoiPct
+    - replayStartedAt
+    - replayEndedAt
+    - replayDurationSeconds
+    - wallClockDurationMs
+    - orderMetrics
+    - eventCounts
+    - entryRejectReasons
+    - executionRejectReasons
+    - strategySkipReasons
+  missing_but_desired:
+    max_drawdown_usd: {status: unsupported}
+    median_pnl_usd: {status: unsupported}
+    avg_hold_seconds: {status: unsupported}
+    exit_reason_counts: {status: unsupported, note: "Exit decisions are emitted, but response does not aggregate rule names yet."}
+    economic_path_counts: {status: unsupported, note: "makerFills/takerFills are reported, but full path classification is not yet aggregated."}
+  llm_tweak_hints:
+    low_trade_count: "tradeCount too low for confidence."
+    too_many_spread_rejections: "entryRejectReasons dominated by candidate.spread."
+    taker_fee_drag_high: "totalFeeUsd large relative to grossPnlUsd."
+    one_condition_blocks_entries: "entryRejectReasons has one condition dominating."
+    entries_too_loose: "grossPnlUsd negative with many trades."
+    entries_too_strict: "tradeCount low with many no candidate/threshold rejections."
+

@@ -1,0 +1,68 @@
+selectors:
+  fixed_outcome:
+    status: implemented
+    required_fields: ["outcome"]
+    optional_fields: ["candidates"]
+    allowed_candidate_values: ["Up", "Down"]
+    allowed_namespaces: ["market", "candidate", "opposite", "up", "down"]
+    unavailable_namespaces: ["trade"]
+    selection_semantics: "Selects the context whose candidate outcome equals candidate-selection.outcome."
+    tie_breaker_semantics: "None; first matching context."
+    missing_feature_behavior: "Not feature based."
+    invalid_expression_behavior: "Not applicable."
+    examples: [{type: fixed_outcome, outcome: Up}]
+  lower_ask:
+    status: implemented
+    required_fields: []
+    optional_fields: ["candidates"]
+    allowed_candidate_values: ["Up", "Down"]
+    allowed_namespaces: ["candidate"]
+    unavailable_namespaces: ["trade"]
+    selection_semantics: "Chooses candidate with minimum candidate.ask."
+    tie_breaker_semantics: "Java stream min comparator; no explicit tie breaker."
+    missing_feature_behavior: "Candidates without candidate.ask are filtered out."
+    invalid_expression_behavior: "Not applicable."
+  higher_mid:
+    status: implemented
+    required_fields: []
+    optional_fields: ["candidates"]
+    allowed_candidate_values: ["Up", "Down"]
+    allowed_namespaces: ["candidate"]
+    unavailable_namespaces: ["trade"]
+    selection_semantics: "Default selector; chooses candidate with maximum candidate.mid."
+    tie_breaker_semantics: "Java stream min with reversed comparator; no explicit tie breaker."
+    missing_feature_behavior: "Candidates without candidate.mid are filtered out."
+    invalid_expression_behavior: "Not applicable."
+  stronger_momentum:
+    status: implemented
+    required_fields: []
+    optional_fields: ["feature", "candidates"]
+    allowed_candidate_values: ["Up", "Down"]
+    allowed_namespaces: ["candidate"]
+    unavailable_namespaces: ["trade"]
+    selection_semantics: "Chooses maximum candidate.<feature>, default candidate.mid_move_5s."
+    tie_breaker_semantics: "No explicit tie breaker."
+    missing_feature_behavior: "Candidates without selected feature are filtered out."
+    invalid_expression_behavior: "Not applicable."
+  score:
+    status: implemented
+    required_fields: ["score"]
+    optional_fields: ["min-score", "candidates", "choose", "tie-breaker"]
+    allowed_candidate_values: ["Up", "Down"]
+    allowed_namespaces: ["market", "candidate", "opposite", "up", "down"]
+    unavailable_namespaces: ["trade"]
+    supports_candidate_namespace: true
+    selection_semantics: "For each candidate, reads score expression by outcome name and chooses highest score."
+    tie_breaker_semantics: "choose and tie-breaker fields are config-only; current implementation always picks first highest score encountered."
+    missing_feature_behavior: "Missing variables evaluate to zero."
+    invalid_expression_behavior: "Parser throws runtime exception."
+    min_score: {behavior: "Chosen candidate rejected if best score is below min-score."}
+    choose: {supported_values: ["highest_score"], config_only_values: ["lowest_score"]}
+    tie_breaker: {supported_values: [], config_only_values: ["skip"]}
+    expression_language:
+      operators: ["+", "-", "*", "/", "parentheses"]
+      supported_functions: ["max(left,right)"]
+      unsupported_functions: ["min", "abs", "if", "pow"]
+      constants: "Decimal number literals."
+      missing_values: "zero"
+
