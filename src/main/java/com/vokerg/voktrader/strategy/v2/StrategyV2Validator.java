@@ -24,14 +24,18 @@ public class StrategyV2Validator {
 
     @PostConstruct
     public void validateAtStartup() {
-        if (!properties.getEngine().isEnabled()) {
+        validate(properties);
+    }
+
+    public void validate(StrategyV2Properties candidate) {
+        if (!candidate.getEngine().isEnabled()) {
             return;
         }
-        if (!"2.0".equals(properties.getSchemaVersion())) {
+        if (!"2.0".equals(candidate.getSchemaVersion())) {
             throw new IllegalStateException("Strategy V2 schema_version must be 2.0");
         }
         Set<String> ids = new HashSet<>();
-        for (StrategyV2Properties.Strategy strategy : properties.getStrategies()) {
+        for (StrategyV2Properties.Strategy strategy : candidate.getStrategies()) {
             require(strategy.getStrategyId() != null && !strategy.getStrategyId().isBlank(), "Strategy V2 strategy_id is required");
             require(ids.add(strategy.getStrategyId()), "Duplicate Strategy V2 strategy_id: " + strategy.getStrategyId());
             validateOrderType(strategy.getEntry().getAction().getOrderType());
@@ -44,7 +48,7 @@ public class StrategyV2Validator {
                 throw new IllegalStateException("Strategy V2 post_only is invalid for FOK/FAK: " + strategy.getStrategyId());
             }
         }
-        for (String active : properties.getEngine().getActiveStrategyIds()) {
+        for (String active : candidate.getEngine().getActiveStrategyIds()) {
             require(ids.contains(active), "Unknown Strategy V2 active_strategy_ids entry: " + active);
         }
     }

@@ -284,16 +284,19 @@ def validate_model_patch(profile: StrategyProfile, obj: Dict[str, Any], exp_clas
 
 
 class BacktestRunner:
-    def __init__(self, repo: Path, repo_win: str, port: int, server_mode: str, run_root: Path) -> None:
+    def __init__(self, repo: Path, repo_win: str, port: int, server_mode: str, run_root: Path, reuse_server: bool) -> None:
         self.repo = repo
         self.repo_win = repo_win
         self.port = port
         self.server_mode = server_mode
         self.run_root = run_root
+        self.reuse_server = reuse_server
         self.proc: Optional[subprocess.Popen] = None
         self.base_url = f"http://localhost:{port}"
+        self.ready = False
 
     def stop_app(self) -> None:
+        self.ready = False
         if self.server_mode != "auto":
             return
         if self.proc and self.proc.poll() is None:
@@ -318,6 +321,8 @@ class BacktestRunner:
         )
 
     def start_app(self, iteration: int) -> None:
+        if self.reuse_server and self.ready:
+            return
         log_file = self.run_root / f"app_{iteration}.log"
         if self.server_mode == "manual":
             print("\nManual server mode:")
@@ -325,11 +330,13 @@ class BacktestRunner:
             print("  2. Start it again from PowerShell:")
             print(f"       cd {self.repo_win}")
             print("       ./mvnw spring-boot:run")
-            input(f"Press Enter when server is ready for iteration {iteration}...")
+            input(f"Press Enter when server is ready for optimizer session starting at iteration {iteration}...")
             self.wait_ready(log_file)
+            self.ready = True
             return
         if self.server_mode == "external":
             self.wait_ready(log_file)
+            self.ready = True
             return
 
         self.stop_app()
@@ -344,6 +351,7 @@ class BacktestRunner:
             stderr=subprocess.STDOUT,
         )
         self.wait_ready(log_file)
+        self.ready = True
 
     def wait_ready(self, log_file: Path, timeout_seconds: int = 240) -> None:
         deadline = time.time() + timeout_seconds
@@ -371,8 +379,17 @@ class BacktestRunner:
         text = path.read_text(encoding="utf-8", errors="replace")
         return "\n".join(text.splitlines()[-lines:])
 
-    def run_backtest(self, iteration: int, strategy_id: str, market_ids: List[str], bot_id: int) -> Dict[str, Any]:
-        body = {"strategyId": strategy_id, "marketIds": market_ids, "botId": bot_id}
+    def run_backtest(
+        self,
+        iteration: int,
+        strategy_id: str,
+        market_ids: List[str],
+        bot_id: int,
+        strategy_yaml_override: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        body: Dict[str, Any] = {"strategyId": strategy_id, "marketIds": market_ids, "botId": bot_id}
+        if strategy_yaml_override is not None:
+            body["strategyYamlOverride"] = strategy_yaml_override
         request_path = self.run_root / f"request_{iteration}.json"
         result_path = self.run_root / f"result_{iteration}.json"
         request_path.write_text(json.dumps(body, indent=2), encoding="utf-8")
@@ -530,6 +547,7 @@ def run_optimizer(args: argparse.Namespace) -> int:
         raise FileNotFoundError(f"Missing strategy file: {strategy_path}")
 
     strategy_id = args.strategy_id or profile.strategy_id
+    use_runtime_override = bool(args.use_strategy_override and profile.supports_runtime_override and strategy_id == "strategy-v2")
     repo_win = args.repo_win or repo_to_windows_path(repo)
     run_root = Path(args.run_root) if args.run_root else repo / "runs" / profile.run_slug / now_stamp()
     if not run_root.is_absolute():
@@ -554,7 +572,7 @@ def run_optimizer(args: argparse.Namespace) -> int:
     experiments_path = run_root / "experiments.jsonl"
     tried_hashes_path = run_root / "tried_hashes.json"
 
-    runner = BacktestRunner(repo, repo_win, args.port, args.server_mode, run_root)
+    runner = BacktestRunner(repo, repo_win, args.port, args.server_mode, run_root, reuse_server=use_runtime_override)
     ollama = OllamaClient(
         args.ollama_url,
         args.model,
@@ -633,12 +651,16 @@ def run_optimizer(args: argparse.Namespace) -> int:
         if not diff:
             raise RuntimeError("empty diff skipped")
 
-        strategy_path.write_text(proposed_yaml, encoding="utf-8")
+        if not use_runtime_override:
+            strategy_path.write_text(proposed_yaml, encoding="utf-8")
         runner.start_app(iteration)
-        try:
-            result = runner.run_backtest(iteration, strategy_id, args.market_ids, args.bot_id)
-        finally:
-            runner.stop_app()
+        result = runner.run_backtest(
+            iteration,
+            strategy_id,
+            args.market_ids,
+            args.bot_id,
+            strategy_yaml_override=proposed_yaml if use_runtime_override else None,
+        )
 
         (run_root / "results" / f"result_{iteration}.json").write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
         score = score_result(result, args.min_trades)
@@ -661,7 +683,8 @@ def run_optimizer(args: argparse.Namespace) -> int:
             best_yaml_path.write_text(proposed_yaml, encoding="utf-8")
             print(f"Accepted new best. score={score:.8f}")
         else:
-            strategy_path.write_text(best_yaml_path.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+            if not use_runtime_override:
+                strategy_path.write_text(best_yaml_path.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
             print(f"Rejected. score={score:.8f}, best={best_score:.8f}")
         return record, param_hash
 
@@ -674,6 +697,7 @@ def run_optimizer(args: argparse.Namespace) -> int:
     print(f"Strategy ID:   {strategy_id}")
     print(f"Run folder:    {run_root}")
     print(f"Model:         {args.model}")
+    print(f"Warm server:   {'on' if use_runtime_override else 'off'}")
     print(f"Ollama stream: {'on' if args.ollama_stream else 'off'}")
     print(f"Ollama think:  {'on' if args.ollama_think else 'off'}")
     print(f"Ollama format: {args.ollama_format}")
@@ -685,10 +709,13 @@ def run_optimizer(args: argparse.Namespace) -> int:
     baseline_params = profile.adapter.extract_params(baseline_yaml, profile)
     baseline_hash = canonical_params_hash(profile, baseline_params)
     runner.start_app(0)
-    try:
-        best_result = runner.run_backtest(0, strategy_id, args.market_ids, args.bot_id)
-    finally:
-        runner.stop_app()
+    best_result = runner.run_backtest(
+        0,
+        strategy_id,
+        args.market_ids,
+        args.bot_id,
+        strategy_yaml_override=baseline_yaml if use_runtime_override else None,
+    )
     (run_root / "results" / "result_0.json").write_text(json.dumps(best_result, indent=2, default=str), encoding="utf-8")
     best_score = score_result(best_result, args.min_trades)
     baseline_record = ExperimentRecord(
@@ -714,7 +741,8 @@ def run_optimizer(args: argparse.Namespace) -> int:
             print(f"Iteration {iteration}/{args.iters}: {exp_class.name}")
             print("=" * 72)
 
-            shutil.copy2(best_yaml_path, strategy_path)
+            if not use_runtime_override:
+                shutil.copy2(best_yaml_path, strategy_path)
             best_params = profile.adapter.extract_params(best_yaml_path.read_text(encoding="utf-8", errors="replace"), profile)
             prompt = build_prompt(profile, iteration, exp_class, best_params, best_result, records, args.min_trades)
 
@@ -776,8 +804,9 @@ def run_optimizer(args: argparse.Namespace) -> int:
                 record_experiment(record)
             except Exception as exc:
                 print(f"Candidate failed/skipped: {exc}")
-                shutil.copy2(best_yaml_path, strategy_path)
-                runner.stop_app()
+                if not use_runtime_override:
+                    shutil.copy2(best_yaml_path, strategy_path)
+                    runner.stop_app()
                 continue
 
             print("\nRecent leaderboard:")
@@ -789,7 +818,8 @@ def run_optimizer(args: argparse.Namespace) -> int:
         print("\nInterrupted. Restoring best YAML and stopping app.")
     finally:
         runner.stop_app()
-        shutil.copy2(best_yaml_path, strategy_path)
+        if not use_runtime_override:
+            shutil.copy2(best_yaml_path, strategy_path)
 
     print("\nDone.")
     print(f"Run folder:    {run_root}")
@@ -839,6 +869,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bot-id", type=int, default=1)
     parser.add_argument("--market-ids", nargs="*", default=None, help="Polymarket market IDs. Defaults come from env or profile.")
     parser.add_argument("--run-root", default="", help="Optional run directory relative to repo or absolute path.")
+    parser.add_argument("--use-strategy-override", dest="use_strategy_override", action="store_true")
+    parser.add_argument("--no-strategy-override", dest="use_strategy_override", action="store_false")
+    parser.set_defaults(use_strategy_override=os.environ.get("USE_STRATEGY_OVERRIDE", "true").lower() == "true")
     return parser
 
 

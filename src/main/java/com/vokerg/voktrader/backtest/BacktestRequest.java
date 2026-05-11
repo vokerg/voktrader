@@ -8,6 +8,7 @@ import java.util.List;
 public record BacktestRequest(
         @NotBlank String strategyId,
         @NotEmpty List<String> marketIds,
-        Long botId
+        Long botId,
+        String strategyYamlOverride
 ) {
 }

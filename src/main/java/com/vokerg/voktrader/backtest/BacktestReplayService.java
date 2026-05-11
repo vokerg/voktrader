@@ -15,6 +15,10 @@ import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.polymarket.dto.PriceLevelDto;
 import com.vokerg.voktrader.strategy.StrategyRegistry;
 import com.vokerg.voktrader.strategy.TradingStrategy;
+import com.vokerg.voktrader.strategy.v2.StrategyV2Engine;
+import com.vokerg.voktrader.strategy.v2.StrategyV2OverrideContext;
+import com.vokerg.voktrader.strategy.v2.StrategyV2OverrideParser;
+import com.vokerg.voktrader.strategy.v2.StrategyV2Properties;
 import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.ExecutionOverrideContext;
 import com.vokerg.voktrader.trade.BacktestTradeStateContext;
@@ -58,6 +62,7 @@ public class BacktestReplayService {
     private final PolymarketFeeCalculator feeCalculator;
     private final TradingProperties tradingProperties;
     private final BacktestExecutionProperties backtestExecutionProperties;
+    private final StrategyV2OverrideParser strategyV2OverrideParser;
 
     @Transactional
     public BacktestResponse run(BacktestRequest request) {
@@ -65,6 +70,7 @@ public class BacktestReplayService {
         String runId = "bt-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         TradingStrategy strategy = strategyRegistry.strategy(request.strategyId());
         List<Long> numericMarketIds = request.marketIds().stream().map(this::parseMarketId).toList();
+        StrategyV2Properties override = strategyOverride(request, strategy);
 
         BacktestRunEntity run = backtestRunRepository.save(new BacktestRunEntity(
                 runId,
@@ -99,61 +105,74 @@ public class BacktestReplayService {
                 priceSnapshotRepository.findByMarketIdInOrderByMarketIdAscCapturedAtAsc(numericMarketIds)
         );
 
-        for (Long marketId : numericMarketIds) {
-            List<PriceSnapshotEntity> snapshots = snapshotsByMarket.getOrDefault(marketId, List.of());
-            MarketEntity marketEntity = marketRepository.findByPolymarketMarketId(marketId.toString()).orElse(null);
-            log.info(
-                    "TIME MACHINE market picked up: runId={} strategy={} marketId={} slug={} snapshots={} firstCapturedAt={} lastCapturedAt={} replaySpan={} endDate={}",
-                    runId,
-                    strategy.id(),
-                    marketId,
-                    marketEntity == null ? null : marketEntity.getSlug(),
-                    snapshots.size(),
-                    snapshots.isEmpty() ? null : snapshots.getFirst().getCapturedAt(),
-                    snapshots.isEmpty() ? null : snapshots.getLast().getCapturedAt(),
-                    replaySpan(snapshots),
-                    marketEntity == null ? null : marketEntity.getEndDate()
-            );
-            long marketSnapshotsSeen = 0;
-            long skippedTicks = 0;
-            for (PriceSnapshotEntity snapshot : snapshots) {
-                List<MarketDepthSnapshotEntity> depthRows = depthSnapshotRepository.findByMarketIdAndCapturedAt(marketId, snapshot.getCapturedAt());
-                ReplayTick tick = tick(marketId, snapshot, depthRows);
-                if (tick == null) {
-                    skippedTicks++;
-                    continue;
+        final long resolvedBotId = botId;
+        final long[] snapshotsSeenRef = {snapshotsSeen};
+        final Instant[] replayStartedRef = {replayStartedAt};
+        final Instant[] replayEndedRef = {replayEndedAt};
+
+        Runnable replay = () -> {
+            for (Long marketId : numericMarketIds) {
+                List<PriceSnapshotEntity> snapshots = snapshotsByMarket.getOrDefault(marketId, List.of());
+                MarketEntity marketEntity = marketRepository.findByPolymarketMarketId(marketId.toString()).orElse(null);
+                log.info(
+                        "TIME MACHINE market picked up: runId={} strategy={} marketId={} slug={} snapshots={} firstCapturedAt={} lastCapturedAt={} replaySpan={} endDate={}",
+                        runId,
+                        strategy.id(),
+                        marketId,
+                        marketEntity == null ? null : marketEntity.getSlug(),
+                        snapshots.size(),
+                        snapshots.isEmpty() ? null : snapshots.getFirst().getCapturedAt(),
+                        snapshots.isEmpty() ? null : snapshots.getLast().getCapturedAt(),
+                        replaySpan(snapshots),
+                        marketEntity == null ? null : marketEntity.getEndDate()
+                );
+                long marketSnapshotsSeen = 0;
+                long skippedTicks = 0;
+                for (PriceSnapshotEntity snapshot : snapshots) {
+                    List<MarketDepthSnapshotEntity> depthRows = depthSnapshotRepository.findByMarketIdAndCapturedAt(marketId, snapshot.getCapturedAt());
+                    ReplayTick tick = tick(marketId, snapshot, depthRows);
+                    if (tick == null) {
+                        skippedTicks++;
+                        continue;
+                    }
+                    replayStartedRef[0] = earlier(replayStartedRef[0], tick.capturedAt());
+                    replayEndedRef[0] = later(replayEndedRef[0], tick.capturedAt());
+                    snapshotsSeenRef[0]++;
+                    marketSnapshotsSeen++;
+                    runTick(resolvedBotId, strategy, executor, orderGateway, diagnostics, tick);
                 }
-                replayStartedAt = earlier(replayStartedAt, tick.capturedAt());
-                replayEndedAt = later(replayEndedAt, tick.capturedAt());
-                snapshotsSeen++;
-                marketSnapshotsSeen++;
-                runTick(botId, strategy, executor, orderGateway, diagnostics, tick);
+                resolveRemainingOpenTrades(runId, marketId);
+                MarketTradeCounts tradeCounts = countMarketTrades(runId, marketId);
+                log.info(
+                        "TIME MACHINE market finished: runId={} strategy={} marketId={} replayedSnapshots={} skippedTicks={} trades={} closedTrades={} openTrades={} totalReplayedSnapshots={}",
+                        runId,
+                        strategy.id(),
+                        marketId,
+                        marketSnapshotsSeen,
+                        skippedTicks,
+                        tradeCounts.total(),
+                        tradeCounts.closed(),
+                        tradeCounts.open(),
+                        snapshotsSeenRef[0]
+                );
             }
-            resolveRemainingOpenTrades(runId, marketId);
-            MarketTradeCounts tradeCounts = countMarketTrades(runId, marketId);
-            log.info(
-                    "TIME MACHINE market finished: runId={} strategy={} marketId={} replayedSnapshots={} skippedTicks={} trades={} closedTrades={} openTrades={} totalReplayedSnapshots={}",
-                    runId,
-                    strategy.id(),
-                    marketId,
-                    marketSnapshotsSeen,
-                    skippedTicks,
-                    tradeCounts.total(),
-                    tradeCounts.closed(),
-                    tradeCounts.open(),
-                    snapshotsSeen
-            );
+        };
+
+        if (override != null) {
+            StrategyV2OverrideContext.runWith(override, replay);
+        } else {
+            replay.run();
         }
 
-        BacktestSummary summary = summarize(runId, orderGateway.metrics(), wallClockStartedAt, replayStartedAt, replayEndedAt);
-        run.complete(snapshotsSeen, summary);
+        BacktestSummary summary = summarize(runId, orderGateway.metrics(), wallClockStartedAt, replayStartedRef[0], replayEndedRef[0]);
+        run.complete(snapshotsSeenRef[0], summary);
         backtestRunRepository.save(run);
 
         return new BacktestResponse(
                 runId,
                 strategy.id(),
                 request.marketIds(),
-                snapshotsSeen,
+                snapshotsSeenRef[0],
                 summary.tradeCount(),
                 summary.closedTradeCount(),
                 summary.openTradeCount(),
@@ -175,6 +194,17 @@ public class BacktestReplayService {
                 diagnostics.executionRejectReasons(),
                 diagnostics.strategySkipReasons()
         );
+    }
+
+    private StrategyV2Properties strategyOverride(BacktestRequest request, TradingStrategy strategy) {
+        String yamlOverride = request.strategyYamlOverride();
+        if (yamlOverride == null || yamlOverride.isBlank()) {
+            return null;
+        }
+        if (!StrategyV2Engine.ID.equals(strategy.id())) {
+            throw new IllegalArgumentException("strategyYamlOverride is supported only for strategy-v2 backtests");
+        }
+        return strategyV2OverrideParser.parse(yamlOverride);
     }
 
     private void runTick(

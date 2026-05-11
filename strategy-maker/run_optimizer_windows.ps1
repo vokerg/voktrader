@@ -111,6 +111,7 @@ $optimizerArgs = @(
     "--repo-win", $RepoWin,
     "--profile", $Profile,
     "--model", $Model,
+    "--use-strategy-override",
     "--iters", "$Iters",
     "--min-trades", "$MinTrades",
     "--port", "$Port",

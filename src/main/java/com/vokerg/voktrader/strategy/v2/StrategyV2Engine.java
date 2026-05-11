@@ -76,9 +76,10 @@ public class StrategyV2Engine implements TradingStrategy {
 
     @Override
     public StrategyDescription description() {
+        StrategyV2Properties effective = effectiveProperties();
         return new StrategyDescription(
                 "Strategy V2 config engine",
-                properties.getEngine().isEnabled() ? "enabled" : "disabled",
+                effective.getEngine().isEnabled() ? "enabled" : "disabled",
                 "Interprets YAML-backed Strategy V2 configs instead of hardcoded strategy classes.",
                 "Uses StrategyMarketView, full book summaries, rolling price samples, and configured feature namespace.",
                 "Selects a candidate, evaluates a small condition tree, and routes configured BUY entry actions.",
@@ -91,7 +92,8 @@ public class StrategyV2Engine implements TradingStrategy {
 
     @Override
     public void tick() {
-        if (!properties.getEngine().isEnabled()) {
+        StrategyV2Properties effective = effectiveProperties();
+        if (!effective.getEngine().isEnabled()) {
             return;
         }
         GammaMarketDto market = trackedMarketState.currentMarket().orElse(null);
@@ -99,7 +101,7 @@ public class StrategyV2Engine implements TradingStrategy {
         if (market == null || marketView == null) {
             return;
         }
-        if (properties.getEngine().isRequireMidSumSane() && !midSumSane(marketView)) {
+        if (effective.getEngine().isRequireMidSumSane() && !midSumSane(marketView)) {
             return;
         }
         ExecutionMode mode = tradingProperties.getMode() == null ? ExecutionMode.PAPER : tradingProperties.getMode();
@@ -135,7 +137,7 @@ public class StrategyV2Engine implements TradingStrategy {
                 ? featureResolver.contexts(market, marketView, orderUsd)
                 : featureResolver.contexts(market, marketView, orderUsd, state);
         return entryEvaluator.evaluate(strategy, contexts, featureResolver, mode)
-                    .map(result -> result.accepted() && "single_market_single_position".equals(properties.getEngine().getDecisionMode()))
+                    .map(result -> result.accepted() && "single_market_single_position".equals(effectiveProperties().getEngine().getDecisionMode()))
                     .orElse(false);
     }
 
@@ -216,11 +218,15 @@ public class StrategyV2Engine implements TradingStrategy {
         BigDecimal up = marketView.outcome("Up").map(com.vokerg.voktrader.strategy.StrategyOutcomeView::mid).orElse(null);
         BigDecimal down = marketView.outcome("Down").map(com.vokerg.voktrader.strategy.StrategyOutcomeView::mid).orElse(null);
         if (up == null || down == null) {
-            return !properties.getEngine().isRequireCompleteUpDownPrice();
+            return !effectiveProperties().getEngine().isRequireCompleteUpDownPrice();
         }
         BigDecimal sum = up.add(down);
-        return sum.compareTo(properties.getEngine().getMinMidSum()) >= 0
-                && sum.compareTo(properties.getEngine().getMaxMidSum()) <= 0;
+        return sum.compareTo(effectiveProperties().getEngine().getMinMidSum()) >= 0
+                && sum.compareTo(effectiveProperties().getEngine().getMaxMidSum()) <= 0;
+    }
+
+    private StrategyV2Properties effectiveProperties() {
+        return StrategyV2OverrideContext.current().orElse(properties);
     }
 
 }

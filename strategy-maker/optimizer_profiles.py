@@ -45,6 +45,7 @@ class StrategyProfile:
     fallback_candidates: Dict[str, List[Dict[str, Any]]]
     adapter: StrategyYamlAdapter
     default_market_ids: Sequence[str]
+    supports_runtime_override: bool = False
 
 
 def clamp_value(profile: StrategyProfile, name: str, value: Any) -> Any:
@@ -445,6 +446,7 @@ STRATEGY_V2_PAPER_PROFILE = StrategyProfile(
         "2184566",
         "2184581",
     ),
+    supports_runtime_override=True,
 )
 
 

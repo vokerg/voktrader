@@ -15,8 +15,9 @@ public class StrategyV2Registry {
     }
 
     public List<StrategyV2Properties.Strategy> activeStrategies() {
+        StrategyV2Properties effective = effectiveProperties();
         Map<String, StrategyV2Properties.Strategy> byId = strategiesById();
-        List<String> active = properties.getEngine().getActiveStrategyIds();
+        List<String> active = effective.getEngine().getActiveStrategyIds();
         if (active == null || active.isEmpty()) {
             return byId.values().stream().filter(StrategyV2Properties.Strategy::isEnabled).toList();
         }
@@ -29,9 +30,13 @@ public class StrategyV2Registry {
 
     public Map<String, StrategyV2Properties.Strategy> strategiesById() {
         Map<String, StrategyV2Properties.Strategy> result = new LinkedHashMap<>();
-        for (StrategyV2Properties.Strategy strategy : properties.getStrategies()) {
+        for (StrategyV2Properties.Strategy strategy : effectiveProperties().getStrategies()) {
             result.put(strategy.getStrategyId(), strategy);
         }
         return result;
+    }
+
+    private StrategyV2Properties effectiveProperties() {
+        return StrategyV2OverrideContext.current().orElse(properties);
     }
 }

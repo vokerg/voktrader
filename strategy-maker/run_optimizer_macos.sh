@@ -155,8 +155,8 @@ echo
 if [[ "$SERVER_MODE" == "manual" ]]; then
   cat <<'EOF'
 Manual server mode:
-  The optimizer will pause before each backtest.
-  In another terminal, restart Spring Boot when prompted:
+  The optimizer will pause once at the start of the optimizer session.
+  In another terminal, start Spring Boot and keep it running:
 
     cd /path/to/voktrader
     ./mvnw spring-boot:run
@@ -172,6 +172,7 @@ CMD_ARGS=(
   --repo "$REPO_ROOT"
   --profile "$PROFILE"
   --model "$MODEL"
+  --use-strategy-override
   --iters "$ITERS"
   --min-trades "$MIN_TRADES"
   --port "$PORT"
