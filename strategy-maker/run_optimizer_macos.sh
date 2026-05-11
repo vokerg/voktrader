@@ -12,14 +12,8 @@ set -euo pipefail
 #   ./strategy-maker/run_optimizer_macos.sh --model qwen3.6:27b --iters 20
 #
 # Important:
-#   The current optimizer's automatic Spring Boot starter is Windows-specific.
-#   This macOS runner defaults to --server-mode manual, which is correct but pauses
-#   before every backtest so you can restart Spring Boot yourself.
-#
-# Later, when the optimizer gets native macOS auto-start support, change:
-#   SERVER_MODE=manual
-# to:
-#   SERVER_MODE=auto
+#   This macOS runner can auto-start Spring Boot now and defaults to auto mode.
+#   Use SERVER_MODE=manual only if you want to keep Spring under your own control.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OPTIMIZER="$SCRIPT_DIR/voktrader_optimizer.py"
@@ -29,7 +23,7 @@ MODEL="${MODEL:-qwen3.6:27b}"
 PROFILE="${PROFILE:-strategy-v2-paper}"
 ITERS="${MAX_ITERS:-20}"
 MIN_TRADES="${MIN_TRADES:-5}"
-SERVER_MODE="${SERVER_MODE:-manual}"
+SERVER_MODE="${SERVER_MODE:-auto}"
 PORT="${APP_PORT:-8080}"
 NUM_CTX="${NUM_CTX:-4096}"
 NUM_PREDICT="${NUM_PREDICT:-160}"
@@ -57,7 +51,7 @@ Options:
   --model MODEL             Default: $MODEL
   --iters N                 Default: $ITERS
   --min-trades N            Default: $MIN_TRADES
-  --server-mode MODE        manual|external. Default: $SERVER_MODE
+  --server-mode MODE        auto|manual|external. Default: $SERVER_MODE
   --port N                  Default: $PORT
   --num-ctx N               Default: $NUM_CTX
   --num-predict N           Default: $NUM_PREDICT
@@ -160,8 +154,6 @@ Manual server mode:
 
     cd /path/to/voktrader
     ./mvnw spring-boot:run
-
-This is intentional for now because the current optimizer's auto-start path is Windows-specific.
 EOF
   echo
 fi

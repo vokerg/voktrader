@@ -7,6 +7,7 @@ import difflib
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -294,6 +295,7 @@ class BacktestRunner:
         self.proc: Optional[subprocess.Popen] = None
         self.base_url = f"http://localhost:{port}"
         self.ready = False
+        self.is_windows = platform.system().lower().startswith("win")
 
     def stop_app(self) -> None:
         self.ready = False
@@ -309,16 +311,7 @@ class BacktestRunner:
                 except Exception:
                     pass
         self.proc = None
-        powershell = (
-            "$ErrorActionPreference = 'SilentlyContinue'; "
-            f"$pidsToKill = @(Get-NetTCPConnection -LocalPort {self.port} | Select-Object -ExpandProperty OwningProcess -Unique); "
-            "foreach ($p in $pidsToKill) { if ($p) { Stop-Process -Id $p -Force } }"
-        )
-        subprocess.run(
-            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", powershell],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        self._kill_port_owners()
 
     def start_app(self, iteration: int) -> None:
         if self.reuse_server and self.ready:
@@ -327,8 +320,8 @@ class BacktestRunner:
         if self.server_mode == "manual":
             print("\nManual server mode:")
             print("  1. Stop the currently running Spring Boot server.")
-            print("  2. Start it again from PowerShell:")
-            print(f"       cd {self.repo_win}")
+            print("  2. Start it again in another terminal:")
+            print(f"       cd {self.repo_win if self.is_windows else self.repo}")
             print("       ./mvnw spring-boot:run")
             input(f"Press Enter when server is ready for optimizer session starting at iteration {iteration}...")
             self.wait_ready(log_file)
@@ -342,14 +335,22 @@ class BacktestRunner:
         self.stop_app()
         log(f"Starting Spring Boot for iteration {iteration}...")
         log(f"App log: {log_file}")
-        command = f"Set-Location -LiteralPath '{self.repo_win}'; & .\\mvnw.cmd spring-boot:run"
         output = open(log_file, "w", encoding="utf-8", errors="replace")
-        self.proc = subprocess.Popen(
-            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
-            cwd=str(self.repo),
-            stdout=output,
-            stderr=subprocess.STDOUT,
-        )
+        if self.is_windows:
+            command = f"Set-Location -LiteralPath '{self.repo_win}'; & .\\mvnw.cmd spring-boot:run"
+            self.proc = subprocess.Popen(
+                ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                cwd=str(self.repo),
+                stdout=output,
+                stderr=subprocess.STDOUT,
+            )
+        else:
+            self.proc = subprocess.Popen(
+                [str(self.repo / "mvnw"), "spring-boot:run"],
+                cwd=str(self.repo),
+                stdout=output,
+                stderr=subprocess.STDOUT,
+            )
         self.wait_ready(log_file)
         self.ready = True
 
@@ -378,6 +379,35 @@ class BacktestRunner:
             return ""
         text = path.read_text(encoding="utf-8", errors="replace")
         return "\n".join(text.splitlines()[-lines:])
+
+    def _kill_port_owners(self) -> None:
+        if self.is_windows:
+            powershell = (
+                "$ErrorActionPreference = 'SilentlyContinue'; "
+                f"$pidsToKill = @(Get-NetTCPConnection -LocalPort {self.port} | Select-Object -ExpandProperty OwningProcess -Unique); "
+                "foreach ($p in $pidsToKill) { if ($p) { Stop-Process -Id $p -Force } }"
+            )
+            subprocess.run(
+                ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", powershell],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return
+
+        lsof = shutil.which("lsof")
+        if not lsof:
+            return
+        try:
+            result = subprocess.run(
+                [lsof, "-ti", f"tcp:{self.port}"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            for pid in [line.strip() for line in result.stdout.splitlines() if line.strip()]:
+                subprocess.run(["kill", "-TERM", pid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        except Exception:
+            pass
 
     def run_backtest(
         self,
