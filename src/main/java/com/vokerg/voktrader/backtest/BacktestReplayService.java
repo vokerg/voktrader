@@ -46,6 +46,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -104,6 +105,9 @@ public class BacktestReplayService {
         Map<Long, List<PriceSnapshotEntity>> snapshotsByMarket = groupByMarket(
                 priceSnapshotRepository.findByMarketIdInOrderByMarketIdAscCapturedAtAsc(numericMarketIds)
         );
+        Map<DepthKey, List<MarketDepthSnapshotEntity>> depthByTick = groupDepthByTick(
+                depthSnapshotRepository.findByMarketIdInOrderByMarketIdAscCapturedAtAsc(numericMarketIds)
+        );
 
         final long resolvedBotId = botId;
         final long[] snapshotsSeenRef = {snapshotsSeen};
@@ -129,8 +133,11 @@ public class BacktestReplayService {
                 long marketSnapshotsSeen = 0;
                 long skippedTicks = 0;
                 for (PriceSnapshotEntity snapshot : snapshots) {
-                    List<MarketDepthSnapshotEntity> depthRows = depthSnapshotRepository.findByMarketIdAndCapturedAt(marketId, snapshot.getCapturedAt());
-                    ReplayTick tick = tick(marketId, snapshot, depthRows);
+                    List<MarketDepthSnapshotEntity> depthRows = depthByTick.getOrDefault(
+                            new DepthKey(marketId, snapshot.getCapturedAt()),
+                            List.of()
+                    );
+                    ReplayTick tick = tick(marketId, marketEntity, snapshot, depthRows);
                     if (tick == null) {
                         skippedTicks++;
                         continue;
@@ -141,7 +148,7 @@ public class BacktestReplayService {
                     marketSnapshotsSeen++;
                     runTick(resolvedBotId, strategy, executor, orderGateway, diagnostics, tick);
                 }
-                resolveRemainingOpenTrades(runId, marketId);
+                resolveRemainingOpenTrades(runId, marketId, marketEntity);
                 MarketTradeCounts tradeCounts = countMarketTrades(runId, marketId);
                 log.info(
                         "TIME MACHINE market finished: runId={} strategy={} marketId={} replayedSnapshots={} skippedTicks={} trades={} closedTrades={} openTrades={} totalReplayedSnapshots={}",
@@ -265,14 +272,18 @@ public class BacktestReplayService {
         });
     }
 
-    private ReplayTick tick(Long marketId, PriceSnapshotEntity snapshot, List<MarketDepthSnapshotEntity> depthRows) {
+    private ReplayTick tick(
+            Long marketId,
+            MarketEntity entity,
+            PriceSnapshotEntity snapshot,
+            List<MarketDepthSnapshotEntity> depthRows
+    ) {
         String upTokenId = tokenId(depthRows, "Up");
         String downTokenId = tokenId(depthRows, "Down");
         if (upTokenId == null || downTokenId == null) {
             return null;
         }
 
-        MarketEntity entity = marketRepository.findByPolymarketMarketId(marketId.toString()).orElse(null);
         Instant endDate = snapshot.getRemainingSeconds() == null
                 ? entity == null ? null : entity.getEndDate()
                 : snapshot.getCapturedAt().plusSeconds(snapshot.getRemainingSeconds());
@@ -310,8 +321,7 @@ public class BacktestReplayService {
                 .orElse(null);
     }
 
-    private void resolveRemainingOpenTrades(String runId, Long marketId) {
-        MarketEntity market = marketRepository.findByPolymarketMarketId(marketId.toString()).orElse(null);
+    private void resolveRemainingOpenTrades(String runId, Long marketId, MarketEntity market) {
         if (market == null || market.getWinningOutcome() == null || market.getWinningOutcome().isBlank()) {
             return;
         }
@@ -411,6 +421,15 @@ public class BacktestReplayService {
         return grouped;
     }
 
+    private Map<DepthKey, List<MarketDepthSnapshotEntity>> groupDepthByTick(List<MarketDepthSnapshotEntity> depthSnapshots) {
+        return depthSnapshots.stream()
+                .collect(Collectors.groupingBy(
+                        snapshot -> new DepthKey(snapshot.getMarketId(), snapshot.getCapturedAt()),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+    }
+
     private String replaySpan(List<PriceSnapshotEntity> snapshots) {
         if (snapshots == null || snapshots.size() < 2) {
             return "PT0S";
@@ -449,6 +468,9 @@ public class BacktestReplayService {
             String downTokenId,
             Instant capturedAt
     ) {
+    }
+
+    private record DepthKey(Long marketId, Instant capturedAt) {
     }
 
     private record MarketTradeCounts(long total, long closed, long open) {

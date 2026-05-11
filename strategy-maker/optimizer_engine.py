@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from dataclasses import dataclass
@@ -285,13 +286,25 @@ def validate_model_patch(profile: StrategyProfile, obj: Dict[str, Any], exp_clas
 
 
 class BacktestRunner:
-    def __init__(self, repo: Path, repo_win: str, port: int, server_mode: str, run_root: Path, reuse_server: bool) -> None:
+    def __init__(
+        self,
+        repo: Path,
+        repo_win: str,
+        port: int,
+        server_mode: str,
+        run_root: Path,
+        reuse_server: bool,
+        backtest_timeout: int,
+        backtest_progress_seconds: int,
+    ) -> None:
         self.repo = repo
         self.repo_win = repo_win
         self.port = port
         self.server_mode = server_mode
         self.run_root = run_root
         self.reuse_server = reuse_server
+        self.backtest_timeout = backtest_timeout
+        self.backtest_progress_seconds = max(1, backtest_progress_seconds)
         self.proc: Optional[subprocess.Popen] = None
         self.base_url = f"http://localhost:{port}"
         self.ready = False
@@ -430,9 +443,30 @@ class BacktestRunner:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        log("Posting backtest request...")
-        with urllib.request.urlopen(request, timeout=600) as response:
-            raw = response.read().decode("utf-8")
+        log(f"Posting backtest request: iteration={iteration}, markets={len(market_ids)}, timeout={self.backtest_timeout}s")
+
+        result_holder: Dict[str, Any] = {}
+        error_holder: Dict[str, BaseException] = {}
+
+        def worker() -> None:
+            try:
+                with urllib.request.urlopen(request, timeout=self.backtest_timeout) as response:
+                    result_holder["raw"] = response.read().decode("utf-8")
+            except BaseException as exc:
+                error_holder["error"] = exc
+
+        started = time.time()
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        while thread.is_alive():
+            thread.join(timeout=self.backtest_progress_seconds)
+            if thread.is_alive():
+                elapsed = int(time.time() - started)
+                log(f"Backtest still running: iteration={iteration}, elapsed={elapsed}s, markets={len(market_ids)}")
+
+        if "error" in error_holder:
+            raise error_holder["error"]
+        raw = str(result_holder["raw"])
         result_path.write_text(raw, encoding="utf-8")
         return json.loads(raw)
 
@@ -602,7 +636,16 @@ def run_optimizer(args: argparse.Namespace) -> int:
     experiments_path = run_root / "experiments.jsonl"
     tried_hashes_path = run_root / "tried_hashes.json"
 
-    runner = BacktestRunner(repo, repo_win, args.port, args.server_mode, run_root, reuse_server=use_runtime_override)
+    runner = BacktestRunner(
+        repo,
+        repo_win,
+        args.port,
+        args.server_mode,
+        run_root,
+        reuse_server=use_runtime_override,
+        backtest_timeout=args.backtest_timeout,
+        backtest_progress_seconds=args.backtest_progress_seconds,
+    )
     ollama = OllamaClient(
         args.ollama_url,
         args.model,
@@ -728,6 +771,7 @@ def run_optimizer(args: argparse.Namespace) -> int:
     print(f"Run folder:    {run_root}")
     print(f"Model:         {args.model}")
     print(f"Warm server:   {'on' if use_runtime_override else 'off'}")
+    print(f"Backtest timeout: {args.backtest_timeout}s")
     print(f"Ollama stream: {'on' if args.ollama_stream else 'off'}")
     print(f"Ollama think:  {'on' if args.ollama_think else 'off'}")
     print(f"Ollama format: {args.ollama_format}")
@@ -893,6 +937,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--iters", type=int, default=int(os.environ.get("MAX_ITERS", "20")))
     parser.add_argument("--ai-retries", type=int, default=2)
     parser.add_argument("--min-trades", type=int, default=int(os.environ.get("MIN_TRADES", "5")))
+    parser.add_argument("--backtest-timeout", type=int, default=int(os.environ.get("BACKTEST_TIMEOUT", "1800")))
+    parser.add_argument("--backtest-progress-seconds", type=int, default=int(os.environ.get("BACKTEST_PROGRESS_SECONDS", "15")))
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--server-mode", choices=["auto", "manual", "external"], default=os.environ.get("SERVER_MODE", "auto"))
     parser.add_argument("--strategy-id", default=os.environ.get("STRATEGY_ID", ""), help="Override backtest strategy id.")

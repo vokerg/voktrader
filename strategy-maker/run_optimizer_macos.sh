@@ -41,6 +41,29 @@ MARKET_IDS="${MARKET_IDS:-2218797 2218853 2218896 2218965 2218999 2219045 221908
 
 EXTRA_ARGS=()
 
+resolve_java_home() {
+  if [[ -n "${JAVA_HOME:-}" && -x "${JAVA_HOME}/bin/java" ]]; then
+    printf '%s\n' "$JAVA_HOME"
+    return 0
+  fi
+
+  local brew_java_home="/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home"
+  if [[ -x "${brew_java_home}/bin/java" ]]; then
+    printf '%s\n' "$brew_java_home"
+    return 0
+  fi
+
+  local version
+  for version in 25 24 23 22; do
+    if /usr/libexec/java_home -v "$version" >/dev/null 2>&1; then
+      /usr/libexec/java_home -v "$version"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 usage() {
   cat <<EOF
 Usage:
@@ -119,6 +142,21 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
+JAVA_HOME_RESOLVED="$(resolve_java_home || true)"
+if [[ -z "$JAVA_HOME_RESOLVED" ]]; then
+  echo "Missing Java 22+ for Spring Boot auto-start. Install Homebrew openjdk or set JAVA_HOME." >&2
+  exit 1
+fi
+export JAVA_HOME="$JAVA_HOME_RESOLVED"
+export PATH="$JAVA_HOME/bin:$PATH"
+
+JAVA_VERSION_OUTPUT="$(java -version 2>&1 | head -n 1)"
+if ! javac --release 22 -version >/dev/null 2>&1; then
+  echo "Resolved JAVA_HOME does not support --release 22: $JAVA_HOME" >&2
+  echo "java -version: $JAVA_VERSION_OUTPUT" >&2
+  exit 1
+fi
+
 if ! curl -fsS "$OLLAMA_URL" >/dev/null 2>&1; then
   echo "Ollama is not reachable at $OLLAMA_URL." >&2
   echo "Start it first, for example:" >&2
@@ -132,6 +170,8 @@ echo "Repo:        $REPO_ROOT"
 echo "Optimizer:   $OPTIMIZER"
 echo "Profile:     $PROFILE"
 echo "Model:       $MODEL"
+echo "JAVA_HOME:   $JAVA_HOME"
+echo "Java:        $JAVA_VERSION_OUTPUT"
 echo "Iters:       $ITERS"
 if [[ "${#MARKET_ID_ARGS[@]}" -gt 0 ]]; then
   echo "Market IDs:  ${MARKET_ID_ARGS[*]}"
@@ -191,6 +231,8 @@ if [[ "${#MARKET_ID_ARGS[@]}" -gt 0 ]]; then
   CMD_ARGS+=(--market-ids "${MARKET_ID_ARGS[@]}")
 fi
 
-CMD_ARGS+=("${EXTRA_ARGS[@]}")
+if [[ "${#EXTRA_ARGS[@]}" -gt 0 ]]; then
+  CMD_ARGS+=("${EXTRA_ARGS[@]}")
+fi
 
 python3 "$OPTIMIZER" "${CMD_ARGS[@]}"
