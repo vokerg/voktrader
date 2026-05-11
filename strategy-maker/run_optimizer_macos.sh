@@ -26,6 +26,7 @@ OPTIMIZER="$SCRIPT_DIR/voktrader_optimizer.py"
 REPO_ROOT_DEFAULT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 MODEL="${MODEL:-qwen3.6:27b}"
+PROFILE="${PROFILE:-strategy-v2-paper}"
 ITERS="${MAX_ITERS:-20}"
 MIN_TRADES="${MIN_TRADES:-5}"
 SERVER_MODE="${SERVER_MODE:-manual}"
@@ -34,7 +35,8 @@ NUM_CTX="${NUM_CTX:-16384}"
 TEMPERATURE="${TEMPERATURE:-0.2}"
 OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
 REPO_ROOT="${REPO:-$REPO_ROOT_DEFAULT}"
-MARKET_IDS="${MARKET_IDS:-2184295 2184298 2184330 2184341 2184493}"
+STRATEGY_FILE="${STRATEGY_FILE:-}"
+MARKET_IDS="${MARKET_IDS:-2218797 2218853 2218896 2218965 2218999 2219045 2219080 2219122 2219153 2219257}"
 
 EXTRA_ARGS=()
 
@@ -44,6 +46,7 @@ Usage:
   ./strategy-maker/run_optimizer_macos.sh [options]
 
 Options:
+  --profile NAME            Default: $PROFILE
   --model MODEL             Default: $MODEL
   --iters N                 Default: $ITERS
   --min-trades N            Default: $MIN_TRADES
@@ -52,7 +55,8 @@ Options:
   --num-ctx N               Default: $NUM_CTX
   --temperature X           Default: $TEMPERATURE
   --ollama-url URL          Default: $OLLAMA_URL
-  --market-ids "IDS"        Space/comma-separated IDs. Default: $MARKET_IDS
+  --strategy-file PATH      Optional YAML override. Default comes from profile
+  --market-ids "IDS"        Space/comma-separated IDs. Default comes from profile
   --repo PATH               Default: $REPO_ROOT
   --                         Pass remaining args directly to optimizer.py
 
@@ -64,6 +68,7 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --profile) PROFILE="$2"; shift 2 ;;
     --model) MODEL="$2"; shift 2 ;;
     --iters) ITERS="$2"; shift 2 ;;
     --min-trades) MIN_TRADES="$2"; shift 2 ;;
@@ -72,6 +77,7 @@ while [[ $# -gt 0 ]]; do
     --num-ctx) NUM_CTX="$2"; shift 2 ;;
     --temperature) TEMPERATURE="$2"; shift 2 ;;
     --ollama-url) OLLAMA_URL="$2"; shift 2 ;;
+    --strategy-file) STRATEGY_FILE="$2"; shift 2 ;;
     --market-ids) MARKET_IDS="$2"; shift 2 ;;
     --repo) REPO_ROOT="$(cd "$2" && pwd)"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
@@ -80,12 +86,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-MARKET_IDS="${MARKET_IDS//,/ }"
-read -r -a MARKET_ID_ARGS <<< "$MARKET_IDS"
-
-if [[ "${#MARKET_ID_ARGS[@]}" -eq 0 ]]; then
-  echo "At least one market id is required. Set MARKET_IDS or pass --market-ids." >&2
-  exit 1
+MARKET_ID_ARGS=()
+if [[ -n "$MARKET_IDS" ]]; then
+  MARKET_IDS="${MARKET_IDS//,/ }"
+  read -r -a MARKET_ID_ARGS <<< "$MARKET_IDS"
 fi
 
 if [[ ! -f "$OPTIMIZER" ]]; then
@@ -94,7 +98,7 @@ if [[ ! -f "$OPTIMIZER" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$REPO_ROOT/src/main/resources/strategy-v2.paper.yml" ]]; then
+if [[ ! -f "$REPO_ROOT/pom.xml" ]]; then
   echo "Repo path does not look like voktrader: $REPO_ROOT" >&2
   exit 1
 fi
@@ -115,9 +119,14 @@ echo
 echo "Voktrader optimizer macOS runner"
 echo "Repo:        $REPO_ROOT"
 echo "Optimizer:   $OPTIMIZER"
+echo "Profile:     $PROFILE"
 echo "Model:       $MODEL"
 echo "Iters:       $ITERS"
-echo "Market IDs:  ${MARKET_ID_ARGS[*]}"
+if [[ "${#MARKET_ID_ARGS[@]}" -gt 0 ]]; then
+  echo "Market IDs:  ${MARKET_ID_ARGS[*]}"
+else
+  echo "Market IDs:  <profile defaults>"
+fi
 echo "Server mode: $SERVER_MODE"
 echo "Ollama URL:  $OLLAMA_URL"
 echo
@@ -138,15 +147,27 @@ fi
 
 cd "$REPO_ROOT"
 
-python3 "$OPTIMIZER" \
-  --repo "$REPO_ROOT" \
-  --model "$MODEL" \
-  --iters "$ITERS" \
-  --min-trades "$MIN_TRADES" \
-  --port "$PORT" \
-  --server-mode "$SERVER_MODE" \
-  --ollama-url "$OLLAMA_URL" \
-  --num-ctx "$NUM_CTX" \
-  --temperature "$TEMPERATURE" \
-  --market-ids "${MARKET_ID_ARGS[@]}" \
-  "${EXTRA_ARGS[@]}"
+CMD_ARGS=(
+  --repo "$REPO_ROOT"
+  --profile "$PROFILE"
+  --model "$MODEL"
+  --iters "$ITERS"
+  --min-trades "$MIN_TRADES"
+  --port "$PORT"
+  --server-mode "$SERVER_MODE"
+  --ollama-url "$OLLAMA_URL"
+  --num-ctx "$NUM_CTX"
+  --temperature "$TEMPERATURE"
+)
+
+if [[ -n "$STRATEGY_FILE" ]]; then
+  CMD_ARGS+=(--strategy-file "$STRATEGY_FILE")
+fi
+
+if [[ "${#MARKET_ID_ARGS[@]}" -gt 0 ]]; then
+  CMD_ARGS+=(--market-ids "${MARKET_ID_ARGS[@]}")
+fi
+
+CMD_ARGS+=("${EXTRA_ARGS[@]}")
+
+python3 "$OPTIMIZER" "${CMD_ARGS[@]}"

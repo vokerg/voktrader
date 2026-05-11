@@ -12,6 +12,7 @@
 #   .\run_optimizer_windows.ps1 -Model qwen3:14b -Iters 20
 
 param(
+    [string]$Profile = $(if ($env:PROFILE) { $env:PROFILE } else { "strategy-v2-paper" }),
     [string]$Model = $(if ($env:MODEL) { $env:MODEL } else { "qwen3:14b" }),
     [int]$Iters = $(if ($env:MAX_ITERS) { [int]$env:MAX_ITERS } else { 20 }),
     [int]$MinTrades = $(if ($env:MIN_TRADES) { [int]$env:MIN_TRADES } else { 5 }),
@@ -21,12 +22,10 @@ param(
     [int]$NumCtx = $(if ($env:NUM_CTX) { [int]$env:NUM_CTX } else { 16384 }),
     [double]$Temperature = $(if ($env:TEMPERATURE) { [double]$env:TEMPERATURE } else { 0.2 }),
     [string]$OllamaUrl = $(if ($env:OLLAMA_URL) { $env:OLLAMA_URL } else { "http://localhost:11434" }),
-    [string[]]$MarketIds = $(if ($env:MARKET_IDS) { $env:MARKET_IDS -split '[,\s]+' | Where-Object { $_ } } else { @(
-        "2184295", "2184298", "2184330", "2184341", "2184493", "2184500",
-        "2184524", "2184531", "2184560", "2184566", "2184581"
-    ) }),
+    [string[]]$MarketIds = $(if ($env:MARKET_IDS) { $env:MARKET_IDS -split '[,\s]+' | Where-Object { $_ } } else { @() }),
     [string]$Repo = "",
     [string]$RepoWin = "",
+    [string]$StrategyFile = $(if ($env:STRATEGY_FILE) { $env:STRATEGY_FILE } else { "" }),
     [switch]$ShowOllamaPs,
     [Parameter(ValueFromRemainingArguments=$true)]
     [string[]]$ExtraArgs
@@ -73,7 +72,7 @@ if ([string]::IsNullOrWhiteSpace($RepoWin)) {
     $RepoWin = $RepoResolved
 }
 
-if (-not (Test-Path -LiteralPath (Join-Path $RepoResolved "src\main\resources\strategy-v2.paper.yml"))) {
+if (-not (Test-Path -LiteralPath (Join-Path $RepoResolved "pom.xml"))) {
     throw "Repo path does not look like voktrader: $RepoResolved"
 }
 
@@ -81,9 +80,10 @@ Write-Host ""
 Write-Host "Voktrader optimizer Windows runner"
 Write-Host "Repo:        $RepoResolved"
 Write-Host "Optimizer:   $Optimizer"
+Write-Host "Profile:     $Profile"
 Write-Host "Model:       $Model"
 Write-Host "Iters:       $Iters"
-Write-Host "Market IDs:  $($MarketIds -join ', ')"
+Write-Host "Market IDs:  $(if ($MarketIds.Count -gt 0) { $MarketIds -join ', ' } else { '<profile defaults>' })"
 Write-Host "Server mode: $ServerMode"
 Write-Host "Ollama URL:  $OllamaUrl"
 Write-Host ""
@@ -109,6 +109,7 @@ $optimizerArgs = @(
     $Optimizer,
     "--repo", $RepoResolved,
     "--repo-win", $RepoWin,
+    "--profile", $Profile,
     "--model", $Model,
     "--iters", "$Iters",
     "--min-trades", "$MinTrades",
@@ -116,11 +117,17 @@ $optimizerArgs = @(
     "--server-mode", $ServerMode,
     "--ollama-url", $OllamaUrl,
     "--num-ctx", "$NumCtx",
-    "--temperature", "$Temperature",
-    "--market-ids"
+    "--temperature", "$Temperature"
 )
 
-$optimizerArgs += $MarketIds
+if (-not [string]::IsNullOrWhiteSpace($StrategyFile)) {
+    $optimizerArgs += @("--strategy-file", $StrategyFile)
+}
+
+if ($MarketIds -and $MarketIds.Count -gt 0) {
+    $optimizerArgs += "--market-ids"
+    $optimizerArgs += $MarketIds
+}
 
 if ($ExtraArgs -and $ExtraArgs.Count -gt 0) {
     $optimizerArgs += $ExtraArgs
