@@ -48,10 +48,6 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 VERSION = "python-ollama-ledger-v1"
 
-DEFAULT_MARKET_IDS = [
-    "2184295", "2184298", "2184330", "2184341", "2184493",
-]
-
 PARAM_SPECS: Dict[str, Dict[str, Any]] = {
     "expiry_min": {"lo": 15, "hi": 90, "type": "int"},
     "expiry_max": {"lo": 120, "hi": 400, "type": "int"},
@@ -1128,12 +1124,16 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--server-mode", choices=["auto", "manual", "external"], default=os.environ.get("SERVER_MODE", "auto"))
     parser.add_argument("--strategy-id", default="strategy-v2")
     parser.add_argument("--bot-id", type=int, default=1)
-    parser.add_argument("--market-ids", nargs="*", default=DEFAULT_MARKET_IDS)
+    parser.add_argument("--market-ids", nargs="*", default=None, help="Polymarket market IDs. Runner scripts provide OS-specific defaults.")
     parser.add_argument("--run-root", default="", help="Optional run directory relative to repo or absolute path.")
     args = parser.parse_args(argv)
 
     if not args.model:
         parser.error("--model is required unless MODEL is set")
+    if args.market_ids is None:
+        args.market_ids = parse_market_ids_env(os.environ.get("MARKET_IDS", ""))
+    if not args.market_ids:
+        parser.error("--market-ids is required unless MARKET_IDS is set")
 
     if args.run_root:
         rr = Path(args.run_root)
@@ -1142,6 +1142,10 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         else:
             args.run_root = str(Path(args.run_root))
     return args
+
+
+def parse_market_ids_env(value: str) -> List[str]:
+    return [part for part in re.split(r"[\s,]+", value.strip()) if part]
 
 
 if __name__ == "__main__":

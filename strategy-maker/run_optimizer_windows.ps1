@@ -21,6 +21,10 @@ param(
     [int]$NumCtx = $(if ($env:NUM_CTX) { [int]$env:NUM_CTX } else { 16384 }),
     [double]$Temperature = $(if ($env:TEMPERATURE) { [double]$env:TEMPERATURE } else { 0.2 }),
     [string]$OllamaUrl = $(if ($env:OLLAMA_URL) { $env:OLLAMA_URL } else { "http://localhost:11434" }),
+    [string[]]$MarketIds = $(if ($env:MARKET_IDS) { $env:MARKET_IDS -split '[,\s]+' | Where-Object { $_ } } else { @(
+        "2184295", "2184298", "2184330", "2184341", "2184493", "2184500",
+        "2184524", "2184531", "2184560", "2184566", "2184581"
+    ) }),
     [string]$Repo = "",
     [string]$RepoWin = "",
     [switch]$ShowOllamaPs,
@@ -79,6 +83,7 @@ Write-Host "Repo:        $RepoResolved"
 Write-Host "Optimizer:   $Optimizer"
 Write-Host "Model:       $Model"
 Write-Host "Iters:       $Iters"
+Write-Host "Market IDs:  $($MarketIds -join ', ')"
 Write-Host "Server mode: $ServerMode"
 Write-Host "Ollama URL:  $OllamaUrl"
 Write-Host ""
@@ -111,8 +116,11 @@ $optimizerArgs = @(
     "--server-mode", $ServerMode,
     "--ollama-url", $OllamaUrl,
     "--num-ctx", "$NumCtx",
-    "--temperature", "$Temperature"
+    "--temperature", "$Temperature",
+    "--market-ids"
 )
+
+$optimizerArgs += $MarketIds
 
 if ($ExtraArgs -and $ExtraArgs.Count -gt 0) {
     $optimizerArgs += $ExtraArgs
