@@ -31,8 +31,15 @@ ITERS="${MAX_ITERS:-20}"
 MIN_TRADES="${MIN_TRADES:-5}"
 SERVER_MODE="${SERVER_MODE:-manual}"
 PORT="${APP_PORT:-8080}"
-NUM_CTX="${NUM_CTX:-16384}"
-TEMPERATURE="${TEMPERATURE:-0.2}"
+NUM_CTX="${NUM_CTX:-4096}"
+NUM_PREDICT="${NUM_PREDICT:-160}"
+TEMPERATURE="${TEMPERATURE:-0.0}"
+TOP_K="${TOP_K:-20}"
+TOP_P="${TOP_P:-0.8}"
+REPEAT_PENALTY="${REPEAT_PENALTY:-1.0}"
+SEED="${SEED:-42}"
+OLLAMA_FORMAT="${OLLAMA_FORMAT:-simple_patch}"
+OLLAMA_KEEP_ALIVE="${OLLAMA_KEEP_ALIVE:-30m}"
 OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
 REPO_ROOT="${REPO:-$REPO_ROOT_DEFAULT}"
 STRATEGY_FILE="${STRATEGY_FILE:-}"
@@ -53,7 +60,12 @@ Options:
   --server-mode MODE        manual|external. Default: $SERVER_MODE
   --port N                  Default: $PORT
   --num-ctx N               Default: $NUM_CTX
+  --num-predict N           Default: $NUM_PREDICT
   --temperature X           Default: $TEMPERATURE
+  --top-k N                 Default: $TOP_K
+  --top-p X                 Default: $TOP_P
+  --repeat-penalty X        Default: $REPEAT_PENALTY
+  --seed N                  Default: $SEED
   --ollama-url URL          Default: $OLLAMA_URL
   --strategy-file PATH      Optional YAML override. Default comes from profile
   --market-ids "IDS"        Space/comma-separated IDs. Default comes from profile
@@ -75,7 +87,12 @@ while [[ $# -gt 0 ]]; do
     --server-mode) SERVER_MODE="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --num-ctx) NUM_CTX="$2"; shift 2 ;;
+    --num-predict) NUM_PREDICT="$2"; shift 2 ;;
     --temperature) TEMPERATURE="$2"; shift 2 ;;
+    --top-k) TOP_K="$2"; shift 2 ;;
+    --top-p) TOP_P="$2"; shift 2 ;;
+    --repeat-penalty) REPEAT_PENALTY="$2"; shift 2 ;;
+    --seed) SEED="$2"; shift 2 ;;
     --ollama-url) OLLAMA_URL="$2"; shift 2 ;;
     --strategy-file) STRATEGY_FILE="$2"; shift 2 ;;
     --market-ids) MARKET_IDS="$2"; shift 2 ;;
@@ -127,6 +144,10 @@ if [[ "${#MARKET_ID_ARGS[@]}" -gt 0 ]]; then
 else
   echo "Market IDs:  <profile defaults>"
 fi
+echo "Num ctx:     $NUM_CTX"
+echo "Num predict: $NUM_PREDICT"
+echo "Temp/top-p:  $TEMPERATURE / $TOP_P"
+echo "Top-k/seed:  $TOP_K / $SEED"
 echo "Server mode: $SERVER_MODE"
 echo "Ollama URL:  $OLLAMA_URL"
 echo
@@ -156,8 +177,17 @@ CMD_ARGS=(
   --port "$PORT"
   --server-mode "$SERVER_MODE"
   --ollama-url "$OLLAMA_URL"
+  --ollama-keep-alive "$OLLAMA_KEEP_ALIVE"
+  --no-ollama-stream
+  --no-ollama-think
+  --ollama-format "$OLLAMA_FORMAT"
   --num-ctx "$NUM_CTX"
+  --num-predict "$NUM_PREDICT"
   --temperature "$TEMPERATURE"
+  --top-k "$TOP_K"
+  --top-p "$TOP_P"
+  --repeat-penalty "$REPEAT_PENALTY"
+  --seed "$SEED"
 )
 
 if [[ -n "$STRATEGY_FILE" ]]; then

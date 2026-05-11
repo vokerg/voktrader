@@ -92,26 +92,82 @@ class ExperimentRecord:
 
 
 class OllamaClient:
-    def __init__(self, base_url: str, model: str, timeout: int, num_ctx: int, temperature: float, progress_seconds: int) -> None:
+    SIMPLE_PATCH_SCHEMA = {
+        "type": "object",
+        "properties": {
+            "hypothesis": {"type": "string"},
+            "changes": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": ["number", "integer", "string", "boolean"],
+                },
+            },
+        },
+        "required": ["hypothesis", "changes"],
+    }
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        timeout: int,
+        num_ctx: int,
+        temperature: float,
+        progress_seconds: int,
+        *,
+        keep_alive: str,
+        stream: bool,
+        think: bool,
+        response_format: str,
+        num_predict: int,
+        top_k: int,
+        top_p: float,
+        repeat_penalty: float,
+        seed: int,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
         self.num_ctx = num_ctx
         self.temperature = temperature
         self.progress_seconds = max(1, progress_seconds)
+        self.keep_alive = keep_alive
+        self.stream = stream
+        self.think = think
+        self.response_format = response_format
+        self.num_predict = num_predict
+        self.top_k = top_k
+        self.top_p = top_p
+        self.repeat_penalty = repeat_penalty
+        self.seed = seed
+
+    def _resolve_format(self) -> Optional[Dict[str, Any]]:
+        if self.response_format == "none":
+            return None
+        if self.response_format == "simple_patch":
+            return self.SIMPLE_PATCH_SCHEMA
+        raise ValueError(f"Unsupported Ollama response format preset: {self.response_format}")
 
     def generate(self, prompt: str, raw_path: Optional[Path] = None) -> str:
         payload = {
             "model": self.model,
             "prompt": prompt,
-            "stream": True,
-            "keep_alive": "30m",
+            "stream": self.stream,
+            "think": self.think,
+            "keep_alive": self.keep_alive,
             "options": {
                 "temperature": self.temperature,
-                "top_p": 0.9,
                 "num_ctx": self.num_ctx,
+                "num_predict": self.num_predict,
+                "top_k": self.top_k,
+                "top_p": self.top_p,
+                "repeat_penalty": self.repeat_penalty,
+                "seed": self.seed,
             },
         }
+        response_format = self._resolve_format()
+        if response_format is not None:
+            payload["format"] = response_format
         request = urllib.request.Request(
             f"{self.base_url}/api/generate",
             data=json.dumps(payload).encode("utf-8"),
@@ -124,9 +180,22 @@ class OllamaClient:
         last_progress = started
         log(
             "Ollama request started: "
-            f"model={self.model}, num_ctx={self.num_ctx}, temperature={self.temperature}, raw={raw_path or '<memory>'}"
+            f"model={self.model}, num_ctx={self.num_ctx}, num_predict={self.num_predict}, "
+            f"temperature={self.temperature}, stream={self.stream}, think={self.think}, "
+            f"format={self.response_format}, raw={raw_path or '<memory>'}"
         )
         with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            if not self.stream:
+                obj = json.loads(response.read().decode("utf-8"))
+                piece = str(obj.get("response", ""))
+                if piece:
+                    chunks.append(piece)
+                    if raw_path is not None:
+                        raw_path.write_text(piece, encoding="utf-8")
+                elapsed = int(time.time() - started)
+                log(f"Ollama response complete: elapsed={elapsed}s, chars={sum(len(chunk) for chunk in chunks)}")
+                return "".join(chunks)
+
             for line in response:
                 if not line.strip():
                     continue
@@ -493,6 +562,15 @@ def run_optimizer(args: argparse.Namespace) -> int:
         args.num_ctx,
         args.temperature,
         args.ollama_progress_seconds,
+        keep_alive=args.ollama_keep_alive,
+        stream=args.ollama_stream,
+        think=args.ollama_think,
+        response_format=args.ollama_format,
+        num_predict=args.num_predict,
+        top_k=args.top_k,
+        top_p=args.top_p,
+        repeat_penalty=args.repeat_penalty,
+        seed=args.seed,
     )
 
     records: List[ExperimentRecord] = []
@@ -596,6 +674,9 @@ def run_optimizer(args: argparse.Namespace) -> int:
     print(f"Strategy ID:   {strategy_id}")
     print(f"Run folder:    {run_root}")
     print(f"Model:         {args.model}")
+    print(f"Ollama stream: {'on' if args.ollama_stream else 'off'}")
+    print(f"Ollama think:  {'on' if args.ollama_think else 'off'}")
+    print(f"Ollama format: {args.ollama_format}")
     print(f"Server mode:   {args.server_mode}")
     print()
 
@@ -734,8 +815,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ollama-url", default="http://localhost:11434")
     parser.add_argument("--ollama-timeout", type=int, default=420)
     parser.add_argument("--ollama-progress-seconds", type=int, default=15)
+    parser.add_argument("--ollama-keep-alive", default=os.environ.get("OLLAMA_KEEP_ALIVE", "30m"))
+    parser.add_argument("--ollama-stream", dest="ollama_stream", action="store_true")
+    parser.add_argument("--no-ollama-stream", dest="ollama_stream", action="store_false")
+    parser.set_defaults(ollama_stream=os.environ.get("OLLAMA_STREAM", "true").lower() == "true")
+    parser.add_argument("--ollama-think", dest="ollama_think", action="store_true")
+    parser.add_argument("--no-ollama-think", dest="ollama_think", action="store_false")
+    parser.set_defaults(ollama_think=os.environ.get("OLLAMA_THINK", "true").lower() == "true")
+    parser.add_argument("--ollama-format", choices=["none", "simple_patch"], default=os.environ.get("OLLAMA_FORMAT", "none"))
     parser.add_argument("--num-ctx", type=int, default=16384)
+    parser.add_argument("--num-predict", type=int, default=int(os.environ.get("NUM_PREDICT", "256")))
     parser.add_argument("--temperature", type=float, default=0.2)
+    parser.add_argument("--top-k", type=int, default=int(os.environ.get("TOP_K", "40")))
+    parser.add_argument("--top-p", type=float, default=float(os.environ.get("TOP_P", "0.9")))
+    parser.add_argument("--repeat-penalty", type=float, default=float(os.environ.get("REPEAT_PENALTY", "1.1")))
+    parser.add_argument("--seed", type=int, default=int(os.environ.get("SEED", "0")))
     parser.add_argument("--iters", type=int, default=int(os.environ.get("MAX_ITERS", "20")))
     parser.add_argument("--ai-retries", type=int, default=2)
     parser.add_argument("--min-trades", type=int, default=int(os.environ.get("MIN_TRADES", "5")))
