@@ -68,6 +68,7 @@ public class BacktestReplayService {
     @Transactional
     public BacktestResponse run(BacktestRequest request) {
         Instant wallClockStartedAt = Instant.now();
+        long wallClockStartedNs = System.nanoTime();
         String runId = "bt-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         TradingStrategy strategy = strategyRegistry.strategy(request.strategyId());
         List<Long> numericMarketIds = request.marketIds().stream().map(this::parseMarketId).toList();
@@ -102,11 +103,32 @@ public class BacktestReplayService {
         long snapshotsSeen = 0;
         Instant replayStartedAt = null;
         Instant replayEndedAt = null;
-        Map<Long, List<PriceSnapshotEntity>> snapshotsByMarket = groupByMarket(
-                priceSnapshotRepository.findByMarketIdInOrderByMarketIdAscCapturedAtAsc(numericMarketIds)
-        );
-        Map<DepthKey, List<MarketDepthSnapshotEntity>> depthByTick = groupDepthByTick(
-                depthSnapshotRepository.findByMarketIdInOrderByMarketIdAscCapturedAtAsc(numericMarketIds)
+        long priceLoadStartedNs = System.nanoTime();
+        List<PriceSnapshotEntity> priceSnapshots =
+                priceSnapshotRepository.findByMarketIdInOrderByMarketIdAscCapturedAtAsc(numericMarketIds);
+        long priceLoadEndedNs = System.nanoTime();
+        long priceGroupStartedNs = System.nanoTime();
+        Map<Long, List<PriceSnapshotEntity>> snapshotsByMarket = groupByMarket(priceSnapshots);
+        long priceGroupEndedNs = System.nanoTime();
+        long depthLoadStartedNs = System.nanoTime();
+        List<MarketDepthSnapshotEntity> depthSnapshots =
+                depthSnapshotRepository.findByMarketIdInOrderByMarketIdAscCapturedAtAsc(numericMarketIds);
+        long depthLoadEndedNs = System.nanoTime();
+        long depthGroupStartedNs = System.nanoTime();
+        Map<DepthKey, List<MarketDepthSnapshotEntity>> depthByTick = groupDepthByTick(depthSnapshots);
+        long depthGroupEndedNs = System.nanoTime();
+
+        log.info(
+                "TIME MACHINE preload: runId={} strategy={} markets={} priceRows={} depthRows={} loadPricesMs={} groupPricesMs={} loadDepthMs={} groupDepthMs={}",
+                runId,
+                strategy.id(),
+                numericMarketIds.size(),
+                priceSnapshots.size(),
+                depthSnapshots.size(),
+                elapsedMs(priceLoadStartedNs, priceLoadEndedNs),
+                elapsedMs(priceGroupStartedNs, priceGroupEndedNs),
+                elapsedMs(depthLoadStartedNs, depthLoadEndedNs),
+                elapsedMs(depthGroupStartedNs, depthGroupEndedNs)
         );
 
         final long resolvedBotId = botId;
@@ -116,8 +138,11 @@ public class BacktestReplayService {
 
         Runnable replay = () -> {
             for (Long marketId : numericMarketIds) {
+                long marketStartedNs = System.nanoTime();
                 List<PriceSnapshotEntity> snapshots = snapshotsByMarket.getOrDefault(marketId, List.of());
+                long marketLookupEndedNs = System.nanoTime();
                 MarketEntity marketEntity = marketRepository.findByPolymarketMarketId(marketId.toString()).orElse(null);
+                long marketEntityEndedNs = System.nanoTime();
                 log.info(
                         "TIME MACHINE market picked up: runId={} strategy={} marketId={} slug={} snapshots={} firstCapturedAt={} lastCapturedAt={} replaySpan={} endDate={}",
                         runId,
@@ -132,6 +157,7 @@ public class BacktestReplayService {
                 );
                 long marketSnapshotsSeen = 0;
                 long skippedTicks = 0;
+                long tickLoopStartedNs = System.nanoTime();
                 for (PriceSnapshotEntity snapshot : snapshots) {
                     List<MarketDepthSnapshotEntity> depthRows = depthByTick.getOrDefault(
                             new DepthKey(marketId, snapshot.getCapturedAt()),
@@ -148,10 +174,15 @@ public class BacktestReplayService {
                     marketSnapshotsSeen++;
                     runTick(resolvedBotId, strategy, executor, orderGateway, diagnostics, tick);
                 }
+                long tickLoopEndedNs = System.nanoTime();
+                long resolveStartedNs = System.nanoTime();
                 resolveRemainingOpenTrades(runId, marketId, marketEntity);
+                long resolveEndedNs = System.nanoTime();
+                long countStartedNs = System.nanoTime();
                 MarketTradeCounts tradeCounts = countMarketTrades(runId, marketId);
+                long countEndedNs = System.nanoTime();
                 log.info(
-                        "TIME MACHINE market finished: runId={} strategy={} marketId={} replayedSnapshots={} skippedTicks={} trades={} closedTrades={} openTrades={} totalReplayedSnapshots={}",
+                        "TIME MACHINE market finished: runId={} strategy={} marketId={} replayedSnapshots={} skippedTicks={} trades={} closedTrades={} openTrades={} totalReplayedSnapshots={} lookupSnapshotsMs={} loadMarketEntityMs={} tickLoopMs={} resolveOpenMs={} countTradesMs={} totalMarketMs={}",
                         runId,
                         strategy.id(),
                         marketId,
@@ -160,20 +191,46 @@ public class BacktestReplayService {
                         tradeCounts.total(),
                         tradeCounts.closed(),
                         tradeCounts.open(),
-                        snapshotsSeenRef[0]
+                        snapshotsSeenRef[0],
+                        elapsedMs(marketStartedNs, marketLookupEndedNs),
+                        elapsedMs(marketLookupEndedNs, marketEntityEndedNs),
+                        elapsedMs(tickLoopStartedNs, tickLoopEndedNs),
+                        elapsedMs(resolveStartedNs, resolveEndedNs),
+                        elapsedMs(countStartedNs, countEndedNs),
+                        elapsedMs(marketStartedNs, countEndedNs)
                 );
             }
         };
 
+        long replayStartedNs = System.nanoTime();
         if (override != null) {
             StrategyV2OverrideContext.runWith(override, replay);
         } else {
             replay.run();
         }
+        long replayEndedNs = System.nanoTime();
 
+        long summaryStartedNs = System.nanoTime();
         BacktestSummary summary = summarize(runId, orderGateway.metrics(), wallClockStartedAt, replayStartedRef[0], replayEndedRef[0]);
+        long summaryEndedNs = System.nanoTime();
+        long runPersistStartedNs = System.nanoTime();
         run.complete(snapshotsSeenRef[0], summary);
         backtestRunRepository.save(run);
+        long runPersistEndedNs = System.nanoTime();
+
+        log.info(
+                "TIME MACHINE summary: runId={} strategy={} snapshots={} trades={} closedTrades={} openTrades={} summaryMs={} persistRunMs={} replayMs={} totalMs={}",
+                runId,
+                strategy.id(),
+                snapshotsSeenRef[0],
+                summary.tradeCount(),
+                summary.closedTradeCount(),
+                summary.openTradeCount(),
+                elapsedMs(summaryStartedNs, summaryEndedNs),
+                elapsedMs(runPersistStartedNs, runPersistEndedNs),
+                elapsedMs(replayStartedNs, replayEndedNs),
+                elapsedMs(wallClockStartedNs, runPersistEndedNs)
+        );
 
         return new BacktestResponse(
                 runId,
@@ -457,6 +514,10 @@ public class BacktestReplayService {
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("Backtest currently requires numeric Polymarket market ids: " + marketId);
         }
+    }
+
+    private long elapsedMs(long startedNs, long endedNs) {
+        return Duration.ofNanos(Math.max(0L, endedNs - startedNs)).toMillis();
     }
 
     private record ReplayTick(

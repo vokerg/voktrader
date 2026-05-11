@@ -602,6 +602,71 @@ def append_csv(path: Path, row: Dict[str, Any]) -> None:
         writer.writerow({key: row.get(key, "") for key in fieldnames})
 
 
+def write_run_config(
+    path: Path,
+    *,
+    version: str,
+    argv: List[str],
+    profile: StrategyProfile,
+    strategy_id: str,
+    strategy_file: str,
+    run_root: Path,
+    repo: Path,
+    repo_win: str,
+    use_runtime_override: bool,
+    args: argparse.Namespace,
+) -> None:
+    payload = {
+        "version": version,
+        "argv": argv,
+        "cwd": os.getcwd(),
+        "repo": str(repo),
+        "repo_win": repo_win,
+        "run_root": str(run_root),
+        "profile": profile.name,
+        "strategy_id": strategy_id,
+        "strategy_file": strategy_file,
+        "use_runtime_override": use_runtime_override,
+        "parsed_args": {
+            "model": args.model,
+            "iters": args.iters,
+            "min_trades": args.min_trades,
+            "market_ids": list(args.market_ids),
+            "bot_id": args.bot_id,
+            "server_mode": args.server_mode,
+            "port": args.port,
+            "backtest_timeout": args.backtest_timeout,
+            "backtest_progress_seconds": args.backtest_progress_seconds,
+            "ollama_url": args.ollama_url,
+            "ollama_keep_alive": args.ollama_keep_alive,
+            "ollama_stream": args.ollama_stream,
+            "ollama_think": args.ollama_think,
+            "ollama_format": args.ollama_format,
+            "num_ctx": args.num_ctx,
+            "num_predict": args.num_predict,
+            "temperature": args.temperature,
+            "top_k": args.top_k,
+            "top_p": args.top_p,
+            "repeat_penalty": args.repeat_penalty,
+            "seed": args.seed,
+            "strategy_file_override": args.strategy_file,
+            "strategy_id_override": args.strategy_id,
+            "use_strategy_override_flag": args.use_strategy_override,
+        },
+        "relevant_env": {
+            "MAX_ITERS": os.environ.get("MAX_ITERS"),
+            "MIN_TRADES": os.environ.get("MIN_TRADES"),
+            "MARKET_IDS": os.environ.get("MARKET_IDS"),
+            "MODEL": os.environ.get("MODEL"),
+            "SERVER_MODE": os.environ.get("SERVER_MODE"),
+            "USE_STRATEGY_OVERRIDE": os.environ.get("USE_STRATEGY_OVERRIDE"),
+            "OLLAMA_URL": os.environ.get("OLLAMA_URL"),
+            "OLLAMA_KEEP_ALIVE": os.environ.get("OLLAMA_KEEP_ALIVE"),
+        },
+    }
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 def run_optimizer(args: argparse.Namespace) -> int:
     profile = get_profile(args.profile)
     repo = Path(args.repo).resolve()
@@ -619,6 +684,19 @@ def run_optimizer(args: argparse.Namespace) -> int:
     run_root.mkdir(parents=True, exist_ok=True)
     for subdir in ["prompts", "raw_model", "patches", "proposed", "diffs", "results"]:
         (run_root / subdir).mkdir(exist_ok=True)
+    write_run_config(
+        run_root / "run_config.json",
+        version=VERSION,
+        argv=sys.argv,
+        profile=profile,
+        strategy_id=strategy_id,
+        strategy_file=strategy_file,
+        run_root=run_root,
+        repo=repo,
+        repo_win=repo_win,
+        use_runtime_override=use_runtime_override,
+        args=args,
+    )
 
     exclude = repo / ".git" / "info" / "exclude"
     if exclude.parent.exists():
@@ -770,6 +848,8 @@ def run_optimizer(args: argparse.Namespace) -> int:
     print(f"Strategy ID:   {strategy_id}")
     print(f"Run folder:    {run_root}")
     print(f"Model:         {args.model}")
+    print(f"Iters:         {args.iters}")
+    print(f"Market count:  {len(args.market_ids)}")
     print(f"Warm server:   {'on' if use_runtime_override else 'off'}")
     print(f"Backtest timeout: {args.backtest_timeout}s")
     print(f"Ollama stream: {'on' if args.ollama_stream else 'off'}")
@@ -899,8 +979,12 @@ def run_optimizer(args: argparse.Namespace) -> int:
     print(f"Run folder:    {run_root}")
     print(f"Leaderboard:   {leaderboard_path}")
     print(f"Experiments:   {experiments_path}")
+    print(f"Run config:    {run_root / 'run_config.json'}")
     print(f"Best YAML:     {best_yaml_path}")
-    print(f"Best restored: {strategy_path}")
+    if use_runtime_override:
+        print(f"Repo YAML:     unchanged during run ({strategy_path})")
+    else:
+        print(f"Best restored: {strategy_path}")
     return 0
 
 
