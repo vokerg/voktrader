@@ -9,7 +9,7 @@ set -euo pipefail
 #
 # Run:
 #   cd /path/to/voktrader
-#   ./strategy-maker/run_optimizer_macos.sh --model qwen3-coder:30b --iters 20
+#   ./strategy-maker/run_optimizer_macos.sh --model qwen3.6:27b --iters 20
 #
 # Important:
 #   The current optimizer's automatic Spring Boot starter is Windows-specific.
@@ -25,7 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OPTIMIZER="$SCRIPT_DIR/voktrader_optimizer.py"
 REPO_ROOT_DEFAULT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-MODEL="${MODEL:-qwen3-coder:30b}"
+MODEL="${MODEL:-qwen3.6:27b}"
 ITERS="${MAX_ITERS:-20}"
 MIN_TRADES="${MIN_TRADES:-5}"
 SERVER_MODE="${SERVER_MODE:-manual}"
@@ -55,8 +55,8 @@ Options:
   --                         Pass remaining args directly to optimizer.py
 
 Examples:
-  ./strategy-maker/run_optimizer_macos.sh --model qwen3-coder:30b --iters 20
-  SERVER_MODE=manual MODEL=qwen3-coder:30b ./strategy-maker/run_optimizer_macos.sh
+  ./strategy-maker/run_optimizer_macos.sh --model qwen3.6:27b --iters 20
+  SERVER_MODE=manual MODEL=qwen3.6:27b ./strategy-maker/run_optimizer_macos.sh
 EOF
 }
 

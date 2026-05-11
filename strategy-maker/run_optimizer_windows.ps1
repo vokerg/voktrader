@@ -6,13 +6,13 @@
 #
 # Run from PowerShell:
 #   cd C:\repos\voktrader
-#   .\strategy-maker\run_optimizer_windows.ps1 -Model qwen3-coder:30b -Iters 20
+#   .\strategy-maker\run_optimizer_windows.ps1 -Model qwen3:14b -Iters 20
 #
 # Or from strategy-maker:
-#   .\run_optimizer_windows.ps1 -Model qwen3-coder:30b -Iters 20
+#   .\run_optimizer_windows.ps1 -Model qwen3:14b -Iters 20
 
 param(
-    [string]$Model = $(if ($env:MODEL) { $env:MODEL } else { "qwen3-coder:30b" }),
+    [string]$Model = $(if ($env:MODEL) { $env:MODEL } else { "qwen3:14b" }),
     [int]$Iters = $(if ($env:MAX_ITERS) { [int]$env:MAX_ITERS } else { 20 }),
     [int]$MinTrades = $(if ($env:MIN_TRADES) { [int]$env:MIN_TRADES } else { 5 }),
     [ValidateSet("auto", "manual", "external")]

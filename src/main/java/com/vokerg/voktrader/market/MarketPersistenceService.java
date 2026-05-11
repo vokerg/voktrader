@@ -2,6 +2,7 @@ package com.vokerg.voktrader.market;
 
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,7 +14,6 @@ public class MarketPersistenceService {
 
     private final MarketRepository marketRepository;
 
-    @Transactional
     public synchronized MarketEntity saveOrUpdate(GammaMarketDto market) {
         Instant now = Instant.now();
 
@@ -25,6 +25,19 @@ public class MarketPersistenceService {
                     return created;
                 });
 
+        updateFromMarket(entity, market, now);
+
+        try {
+            return marketRepository.saveAndFlush(entity);
+        } catch (DataIntegrityViolationException e) {
+            MarketEntity existing = marketRepository.findByPolymarketMarketId(market.id())
+                    .orElseThrow(() -> e);
+            updateFromMarket(existing, market, Instant.now());
+            return marketRepository.saveAndFlush(existing);
+        }
+    }
+
+    private void updateFromMarket(MarketEntity entity, GammaMarketDto market, Instant now) {
         entity.setConditionId(market.conditionId());
         entity.setQuestion(market.question());
         entity.setSlug(market.slug());
@@ -40,8 +53,6 @@ public class MarketPersistenceService {
             entity.setResolutionAttempts(0);
         }
         entity.setLastSeenAt(now);
-
-        return marketRepository.saveAndFlush(entity);
     }
 
     @Transactional

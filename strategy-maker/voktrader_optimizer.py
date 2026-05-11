@@ -15,11 +15,11 @@ Design:
 
 Typical use from C:\repos\voktrader:
 
-    python voktrader_optimizer.py --model qwen3-coder:30b --iters 20
+    python voktrader_optimizer.py --model <ollama-model> --iters 20
 
 If auto-start ever gives trouble:
 
-    python voktrader_optimizer.py --model qwen3-coder:30b --server-mode manual --iters 10
+    python voktrader_optimizer.py --model <ollama-model> --server-mode manual --iters 10
 
 Manual mode pauses before every backtest so you can restart Spring Boot yourself.
 """
@@ -49,8 +49,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 VERSION = "python-ollama-ledger-v1"
 
 DEFAULT_MARKET_IDS = [
-    "2184295", "2184298", "2184330", "2184341", "2184493", "2184500",
-    "2184524", "2184531", "2184560", "2184566", "2184581",
+    "2184295", "2184298", "2184330", "2184341", "2184493",
 ]
 
 PARAM_SPECS: Dict[str, Dict[str, Any]] = {
@@ -427,18 +426,19 @@ class ExperimentRecord:
 
 
 class OllamaClient:
-    def __init__(self, base_url: str, model: str, timeout: int, num_ctx: int, temperature: float) -> None:
+    def __init__(self, base_url: str, model: str, timeout: int, num_ctx: int, temperature: float, progress_seconds: int) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
         self.num_ctx = num_ctx
         self.temperature = temperature
+        self.progress_seconds = max(1, progress_seconds)
 
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str, raw_path: Optional[Path] = None) -> str:
         payload = {
             "model": self.model,
             "prompt": prompt,
-            "stream": False,
+            "stream": True,
             "keep_alive": "30m",
             "options": {
                 "temperature": self.temperature,
@@ -453,9 +453,38 @@ class OllamaClient:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
+
+        chunks: List[str] = []
+        started = time.time()
+        last_progress = started
+        log(
+            "Ollama request started: "
+            f"model={self.model}, num_ctx={self.num_ctx}, temperature={self.temperature}, raw={raw_path or '<memory>'}"
+        )
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            obj = json.loads(resp.read().decode("utf-8"))
-        return str(obj.get("response", ""))
+            for line in resp:
+                if not line.strip():
+                    continue
+                obj = json.loads(line.decode("utf-8"))
+                piece = str(obj.get("response", ""))
+                if piece:
+                    chunks.append(piece)
+                    if raw_path is not None:
+                        with open(raw_path, "a", encoding="utf-8", errors="replace") as f:
+                            f.write(piece)
+
+                now = time.time()
+                if now - last_progress >= self.progress_seconds:
+                    elapsed = int(now - started)
+                    log(f"Ollama still generating: elapsed={elapsed}s, chars={sum(len(c) for c in chunks)}")
+                    last_progress = now
+
+                if obj.get("done"):
+                    elapsed = int(time.time() - started)
+                    log(f"Ollama response complete: elapsed={elapsed}s, chars={sum(len(c) for c in chunks)}")
+                    break
+
+        return "".join(chunks)
 
 
 def extract_json_object(text: str) -> Dict[str, Any]:
@@ -845,7 +874,14 @@ def run_optimizer(args: argparse.Namespace) -> int:
     tried_hashes_path = run_root / "tried_hashes.json"
 
     runner = BacktestRunner(repo, repo_win, args.port, args.server_mode, run_root)
-    ollama = OllamaClient(args.ollama_url, args.model, args.ollama_timeout, args.num_ctx, args.temperature)
+    ollama = OllamaClient(
+        args.ollama_url,
+        args.model,
+        args.ollama_timeout,
+        args.num_ctx,
+        args.temperature,
+        args.ollama_progress_seconds,
+    )
 
     records: List[ExperimentRecord] = []
     tried_hashes: set[str] = set()
@@ -1000,8 +1036,8 @@ def run_optimizer(args: argparse.Namespace) -> int:
             for attempt in range(1, args.ai_retries + 1):
                 try:
                     log(f"Calling Ollama for {exp_class['name']} proposal, attempt {attempt}...")
-                    raw = ollama.generate(prompt)
-                    raw_path.write_text(raw, encoding="utf-8", errors="replace")
+                    raw_path.write_text("", encoding="utf-8")
+                    raw = ollama.generate(prompt, raw_path)
                     obj = extract_json_object(raw)
                     patch = validate_model_patch(obj, exp_class)
                     # Pre-check duplicate vector.
@@ -1079,9 +1115,10 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--repo", default=os.getcwd(), help="Repo path. Default: current working directory.")
     parser.add_argument("--repo-win", default="", help="Windows repo path for PowerShell, e.g. C:\\repos\\voktrader. Usually auto-detected.")
     parser.add_argument("--strategy-file", default="src/main/resources/strategy-v2.paper.yml")
-    parser.add_argument("--model", default=os.environ.get("MODEL", "qwen3-coder:30b"))
+    parser.add_argument("--model", default=os.environ.get("MODEL"), help="Ollama model name. Runner scripts provide OS-specific defaults.")
     parser.add_argument("--ollama-url", default="http://localhost:11434")
     parser.add_argument("--ollama-timeout", type=int, default=420)
+    parser.add_argument("--ollama-progress-seconds", type=int, default=15)
     parser.add_argument("--num-ctx", type=int, default=16384)
     parser.add_argument("--temperature", type=float, default=0.2)
     parser.add_argument("--iters", type=int, default=int(os.environ.get("MAX_ITERS", "20")))
@@ -1094,6 +1131,9 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--market-ids", nargs="*", default=DEFAULT_MARKET_IDS)
     parser.add_argument("--run-root", default="", help="Optional run directory relative to repo or absolute path.")
     args = parser.parse_args(argv)
+
+    if not args.model:
+        parser.error("--model is required unless MODEL is set")
 
     if args.run_root:
         rr = Path(args.run_root)
