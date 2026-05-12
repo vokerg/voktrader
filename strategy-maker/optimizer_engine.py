@@ -292,6 +292,7 @@ class BacktestRunner:
         repo_win: str,
         port: int,
         server_mode: str,
+        app_profile: str,
         run_root: Path,
         reuse_server: bool,
         backtest_timeout: int,
@@ -301,6 +302,7 @@ class BacktestRunner:
         self.repo_win = repo_win
         self.port = port
         self.server_mode = server_mode
+        self.app_profile = app_profile
         self.run_root = run_root
         self.reuse_server = reuse_server
         self.backtest_timeout = backtest_timeout
@@ -335,7 +337,8 @@ class BacktestRunner:
             print("  1. Stop the currently running Spring Boot server.")
             print("  2. Start it again in another terminal:")
             print(f"       cd {self.repo_win if self.is_windows else self.repo}")
-            print("       ./mvnw spring-boot:run")
+            mvnw = ".\\mvnw.cmd" if self.is_windows else "./mvnw"
+            print(f"       {mvnw} spring-boot:run -Dspring-boot.run.profiles={self.app_profile} -Dspring-boot.run.arguments=--server.port={self.port}")
             input(f"Press Enter when server is ready for optimizer session starting at iteration {iteration}...")
             self.wait_ready(log_file)
             self.ready = True
@@ -350,7 +353,12 @@ class BacktestRunner:
         log(f"App log: {log_file}")
         output = open(log_file, "w", encoding="utf-8", errors="replace")
         if self.is_windows:
-            command = f"Set-Location -LiteralPath '{self.repo_win}'; & .\\mvnw.cmd spring-boot:run"
+            command = (
+                f"Set-Location -LiteralPath '{self.repo_win}'; "
+                f"& .\\mvnw.cmd spring-boot:run "
+                f"-Dspring-boot.run.profiles={self.app_profile} "
+                f"-Dspring-boot.run.arguments=--server.port={self.port}"
+            )
             self.proc = subprocess.Popen(
                 ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
                 cwd=str(self.repo),
@@ -359,7 +367,12 @@ class BacktestRunner:
             )
         else:
             self.proc = subprocess.Popen(
-                [str(self.repo / "mvnw"), "spring-boot:run"],
+                [
+                    str(self.repo / "mvnw"),
+                    "spring-boot:run",
+                    f"-Dspring-boot.run.profiles={self.app_profile}",
+                    f"-Dspring-boot.run.arguments=--server.port={self.port}",
+                ],
                 cwd=str(self.repo),
                 stdout=output,
                 stderr=subprocess.STDOUT,
@@ -634,6 +647,7 @@ def write_run_config(
             "market_ids": list(args.market_ids),
             "bot_id": args.bot_id,
             "server_mode": args.server_mode,
+            "app_profile": args.app_profile,
             "port": args.port,
             "backtest_timeout": args.backtest_timeout,
             "backtest_progress_seconds": args.backtest_progress_seconds,
@@ -659,6 +673,7 @@ def write_run_config(
             "MARKET_IDS": os.environ.get("MARKET_IDS"),
             "MODEL": os.environ.get("MODEL"),
             "SERVER_MODE": os.environ.get("SERVER_MODE"),
+            "APP_PROFILE": os.environ.get("APP_PROFILE"),
             "USE_STRATEGY_OVERRIDE": os.environ.get("USE_STRATEGY_OVERRIDE"),
             "OLLAMA_URL": os.environ.get("OLLAMA_URL"),
             "OLLAMA_KEEP_ALIVE": os.environ.get("OLLAMA_KEEP_ALIVE"),
@@ -719,6 +734,7 @@ def run_optimizer(args: argparse.Namespace) -> int:
         repo_win,
         args.port,
         args.server_mode,
+        args.app_profile,
         run_root,
         reuse_server=use_runtime_override,
         backtest_timeout=args.backtest_timeout,
@@ -856,6 +872,7 @@ def run_optimizer(args: argparse.Namespace) -> int:
     print(f"Ollama think:  {'on' if args.ollama_think else 'off'}")
     print(f"Ollama format: {args.ollama_format}")
     print(f"Server mode:   {args.server_mode}")
+    print(f"App profile:   {args.app_profile}")
     print()
 
     log("Running baseline...")
@@ -1025,6 +1042,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--backtest-progress-seconds", type=int, default=int(os.environ.get("BACKTEST_PROGRESS_SECONDS", "15")))
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--server-mode", choices=["auto", "manual", "external"], default=os.environ.get("SERVER_MODE", "auto"))
+    parser.add_argument("--app-profile", default=os.environ.get("APP_PROFILE", "optimizer"), help="Spring profile used when launching the Java app in auto/manual mode.")
     parser.add_argument("--strategy-id", default=os.environ.get("STRATEGY_ID", ""), help="Override backtest strategy id.")
     parser.add_argument("--bot-id", type=int, default=1)
     parser.add_argument("--market-ids", nargs="*", default=None, help="Polymarket market IDs. Defaults come from env or profile.")

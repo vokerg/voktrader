@@ -24,6 +24,7 @@ PROFILE="${PROFILE:-strategy-v2-paper}"
 ITERS="${MAX_ITERS:-20}"
 MIN_TRADES="${MIN_TRADES:-5}"
 SERVER_MODE="${SERVER_MODE:-auto}"
+APP_PROFILE="${APP_PROFILE:-optimizer}"
 PORT="${APP_PORT:-8080}"
 NUM_CTX="${NUM_CTX:-4096}"
 NUM_PREDICT="${NUM_PREDICT:-160}"
@@ -75,6 +76,7 @@ Options:
   --iters N                 Default: $ITERS
   --min-trades N            Default: $MIN_TRADES
   --server-mode MODE        auto|manual|external. Default: $SERVER_MODE
+  --app-profile PROFILE     Spring profile for Java auto/manual mode. Default: $APP_PROFILE
   --port N                  Default: $PORT
   --num-ctx N               Default: $NUM_CTX
   --num-predict N           Default: $NUM_PREDICT
@@ -102,6 +104,7 @@ while [[ $# -gt 0 ]]; do
     --iters) ITERS="$2"; shift 2 ;;
     --min-trades) MIN_TRADES="$2"; shift 2 ;;
     --server-mode) SERVER_MODE="$2"; shift 2 ;;
+    --app-profile) APP_PROFILE="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --num-ctx) NUM_CTX="$2"; shift 2 ;;
     --num-predict) NUM_PREDICT="$2"; shift 2 ;;
@@ -183,17 +186,18 @@ echo "Num predict: $NUM_PREDICT"
 echo "Temp/top-p:  $TEMPERATURE / $TOP_P"
 echo "Top-k/seed:  $TOP_K / $SEED"
 echo "Server mode: $SERVER_MODE"
+echo "App profile: $APP_PROFILE"
 echo "Ollama URL:  $OLLAMA_URL"
 echo
 
 if [[ "$SERVER_MODE" == "manual" ]]; then
-  cat <<'EOF'
+  cat <<EOF
 Manual server mode:
   The optimizer will pause once at the start of the optimizer session.
   In another terminal, start Spring Boot and keep it running:
 
     cd /path/to/voktrader
-    ./mvnw spring-boot:run
+    ./mvnw spring-boot:run -Dspring-boot.run.profiles=$APP_PROFILE -Dspring-boot.run.arguments=--server.port=$PORT
 EOF
   echo
 fi
@@ -209,6 +213,7 @@ CMD_ARGS=(
   --min-trades "$MIN_TRADES"
   --port "$PORT"
   --server-mode "$SERVER_MODE"
+  --app-profile "$APP_PROFILE"
   --ollama-url "$OLLAMA_URL"
   --ollama-keep-alive "$OLLAMA_KEEP_ALIVE"
   --no-ollama-stream

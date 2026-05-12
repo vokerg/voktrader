@@ -18,6 +18,7 @@ param(
     [int]$MinTrades = $(if ($env:MIN_TRADES) { [int]$env:MIN_TRADES } else { 5 }),
     [ValidateSet("auto", "manual", "external")]
     [string]$ServerMode = $(if ($env:SERVER_MODE) { $env:SERVER_MODE } else { "auto" }),
+    [string]$AppProfile = $(if ($env:APP_PROFILE) { $env:APP_PROFILE } else { "optimizer" }),
     [int]$Port = $(if ($env:APP_PORT) { [int]$env:APP_PORT } else { 8080 }),
     [int]$NumCtx = $(if ($env:NUM_CTX) { [int]$env:NUM_CTX } else { 16384 }),
     [double]$Temperature = $(if ($env:TEMPERATURE) { [double]$env:TEMPERATURE } else { 0.2 }),
@@ -85,6 +86,7 @@ Write-Host "Model:       $Model"
 Write-Host "Iters:       $Iters"
 Write-Host "Market IDs:  $(if ($MarketIds.Count -gt 0) { $MarketIds -join ', ' } else { '<profile defaults>' })"
 Write-Host "Server mode: $ServerMode"
+Write-Host "App profile: $AppProfile"
 Write-Host "Ollama URL:  $OllamaUrl"
 Write-Host ""
 
@@ -116,6 +118,7 @@ $optimizerArgs = @(
     "--min-trades", "$MinTrades",
     "--port", "$Port",
     "--server-mode", $ServerMode,
+    "--app-profile", $AppProfile,
     "--ollama-url", $OllamaUrl,
     "--num-ctx", "$NumCtx",
     "--temperature", "$Temperature"
