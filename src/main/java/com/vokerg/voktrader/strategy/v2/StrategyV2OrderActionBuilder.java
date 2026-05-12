@@ -11,6 +11,7 @@ import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradeOrderType;
 import com.vokerg.voktrader.trade.TradeSide;
+import com.vokerg.voktrader.trade.TradingProperties;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -22,15 +23,18 @@ public class StrategyV2OrderActionBuilder {
     private final StrategyV2ExecutionProperties executionProperties;
     private final ExecutionRouter executionRouter;
     private final OrderGateway orderGateway;
+    private final TradingProperties tradingProperties;
 
     public StrategyV2OrderActionBuilder(
             StrategyV2ExecutionProperties executionProperties,
             ExecutionRouter executionRouter,
-            OrderGateway orderGateway
+            OrderGateway orderGateway,
+            TradingProperties tradingProperties
     ) {
         this.executionProperties = executionProperties;
         this.executionRouter = executionRouter;
         this.orderGateway = orderGateway;
+        this.tradingProperties = tradingProperties;
     }
 
     public TradeExecutionResult routeEntry(
@@ -47,7 +51,7 @@ public class StrategyV2OrderActionBuilder {
                 ? action.getPostOnly()
                 : "maker".equalsIgnoreCase(action.getLiquidityRole());
         BigDecimal price = price(action, context);
-        BigDecimal shares = shares(action);
+        BigDecimal shares = shares(action, orderType, postOnly);
         BigDecimal amountUsd = amountUsd(action, price, shares);
         OutcomePrice outcomePrice = new OutcomePrice(
                 context.candidate().tokenId(),
@@ -141,12 +145,18 @@ public class StrategyV2OrderActionBuilder {
         return value;
     }
 
-    private BigDecimal shares(StrategyV2Properties.Action action) {
+    private BigDecimal shares(StrategyV2Properties.Action action, TradeOrderType orderType, boolean postOnly) {
         StrategyV2Properties.Size size = action.getSize();
         if (!"fixed_shares".equalsIgnoreCase(size.getType())) {
             return null;
         }
-        return size.getShares() == null ? new BigDecimal("5.00") : size.getShares();
+        if (size.getShares() != null) {
+            return size.getShares();
+        }
+        if (postOnly || orderType.canRestOnBook()) {
+            return tradingProperties.getMinMakerOrderShares();
+        }
+        return BigDecimal.ONE;
     }
 
     private BigDecimal price(StrategyV2Properties.Action action, StrategyV2FeatureContext context) {

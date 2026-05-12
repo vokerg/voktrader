@@ -5,6 +5,8 @@ import {
   BotConfigResponse, 
   DashboardOptionsResponse, 
   MarketSummaryResponse, 
+  RuntimeStatusResponse,
+  StrategyCatalogResponse,
   TradeSummaryResponse 
 } from '../models/api.models';
 
@@ -23,6 +25,14 @@ export class ApiService {
     return this.http.get<DashboardOptionsResponse>(`${this.baseUrl}/dashboard/options`);
   }
 
+  getRuntimeStatus(): Observable<RuntimeStatusResponse> {
+    return this.http.get<RuntimeStatusResponse>(`${this.baseUrl}/runtime/status`);
+  }
+
+  getStrategies(): Observable<StrategyCatalogResponse> {
+    return this.http.get<StrategyCatalogResponse>(`${this.baseUrl}/strategies`);
+  }
+
   getMarkets(params: any = {}): Observable<MarketSummaryResponse[]> {
     return this.http.get<MarketSummaryResponse[]>(`${this.baseUrl}/markets`, { params });
   }
@@ -37,5 +47,17 @@ export class ApiService {
 
   resumeBot(id: number): Observable<BotConfigResponse> {
     return this.http.post<BotConfigResponse>(`${this.baseUrl}/bots/${id}/resume`, {});
+  }
+
+  includeBotRuntime(id: number): Observable<BotConfigResponse> {
+    return this.http.post<BotConfigResponse>(`${this.baseUrl}/bots/${id}/runtime-include`, {});
+  }
+
+  excludeBotRuntime(id: number): Observable<BotConfigResponse> {
+    return this.http.post<BotConfigResponse>(`${this.baseUrl}/bots/${id}/runtime-exclude`, {});
+  }
+
+  killAllBots(): Observable<BotConfigResponse[]> {
+    return this.http.post<BotConfigResponse[]>(`${this.baseUrl}/bots/kill-all`, {});
   }
 }

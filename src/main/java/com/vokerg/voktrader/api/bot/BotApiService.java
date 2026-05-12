@@ -5,6 +5,7 @@ import com.vokerg.voktrader.bot.BotConfigEntity;
 import com.vokerg.voktrader.bot.BotConfigService;
 import com.vokerg.voktrader.bot.BotRuntime;
 import com.vokerg.voktrader.bot.BotRuntimeManager;
+import com.vokerg.voktrader.bot.BotRuntimeProperties;
 import com.vokerg.voktrader.bot.BotStatus;
 import com.vokerg.voktrader.bot.MarketFamily;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -20,10 +21,16 @@ import java.util.stream.Collectors;
 public class BotApiService {
     private final BotConfigService configService;
     private final BotRuntimeManager runtimeManager;
+    private final BotRuntimeProperties runtimeProperties;
 
-    public BotApiService(BotConfigService configService, BotRuntimeManager runtimeManager) {
+    public BotApiService(
+            BotConfigService configService,
+            BotRuntimeManager runtimeManager,
+            BotRuntimeProperties runtimeProperties
+    ) {
         this.configService = configService;
         this.runtimeManager = runtimeManager;
+        this.runtimeProperties = runtimeProperties;
     }
 
     public List<BotConfigResponse> list(String status, Boolean enabled, String marketFamily, String asset, String interval, String strategyId, String subStrategyId) {
@@ -33,7 +40,7 @@ public class BotApiService {
                 : MarketFamily.fromNameOrCodes(marketFamily, asset, interval);
         Set<Long> activeRuntimeIds = activeRuntimeIds();
         return configService.list(parsedStatus, enabled, parsedFamily, strategyId, subStrategyId).stream()
-                .map(bot -> BotConfigResponse.from(bot, activeRuntimeIds.contains(bot.getId())))
+                .map(bot -> response(bot, activeRuntimeIds.contains(bot.getId())))
                 .toList();
     }
 
@@ -42,7 +49,7 @@ public class BotApiService {
         return configService.list().stream()
                 .filter(bot -> bot.getId().equals(id))
                 .findFirst()
-                .map(bot -> BotConfigResponse.from(bot, activeRuntimeIds.contains(bot.getId())))
+                .map(bot -> response(bot, activeRuntimeIds.contains(bot.getId())))
                 .orElseThrow(() -> new IllegalArgumentException("Unknown bot id: " + id));
     }
 
@@ -54,7 +61,7 @@ public class BotApiService {
                 : name.trim();
         BotConfigEntity created = configService.create(resolvedName, family, strategyId, strategySetId, subStrategyId, actualEnabled);
         runtimeManager.restart(created.getId(), "created via api");
-        return BotConfigResponse.from(created, actualEnabled);
+        return response(created, runtimeManager.runtimes().stream().anyMatch(runtime -> runtime.botId().equals(created.getId())));
     }
 
     public BotConfigResponse update(Long id, String marketFamily, String asset, String interval, String strategyId, String strategySetId, String subStrategyId, Boolean enabled) {
@@ -63,27 +70,41 @@ public class BotApiService {
                 : MarketFamily.fromNameOrCodes(marketFamily, asset, interval);
         BotConfigEntity updated = configService.switchConfig(id, family, strategyId, strategySetId, subStrategyId, enabled);
         runtimeManager.restart(id, "updated via api");
-        return BotConfigResponse.from(updated, updated.isEnabled());
+        return response(updated, runtimeManager.runtimes().stream().anyMatch(runtime -> runtime.botId().equals(id)));
     }
 
     public List<BotConfigResponse> killAll() {
         List<BotConfigEntity> updated = configService.pauseAll();
         runtimeManager.stopAll("kill-all via api");
         return updated.stream()
-                .map(bot -> BotConfigResponse.from(bot, false))
+                .map(bot -> response(bot, false))
                 .toList();
     }
 
     public BotConfigResponse pause(Long id) {
         BotConfigEntity updated = configService.pause(id);
         runtimeManager.restart(id, "paused via api");
-        return BotConfigResponse.from(updated, false);
+        return response(updated, false);
     }
 
     public BotConfigResponse resume(Long id) {
         BotConfigEntity updated = configService.resume(id);
         runtimeManager.restart(id, "resumed via api");
-        return BotConfigResponse.from(updated, true);
+        return response(updated, runtimeManager.runtimes().stream().anyMatch(runtime -> runtime.botId().equals(id)));
+    }
+
+    public BotConfigResponse includeRuntime(Long id) {
+        BotConfigEntity bot = getEntity(id);
+        runtimeProperties.include(id);
+        runtimeManager.reload("runtime include via api");
+        return response(bot, runtimeManager.runtimes().stream().anyMatch(runtime -> runtime.botId().equals(id)));
+    }
+
+    public BotConfigResponse excludeRuntime(Long id) {
+        BotConfigEntity bot = getEntity(id);
+        runtimeProperties.exclude(id);
+        runtimeManager.reload("runtime exclude via api");
+        return response(bot, false);
     }
 
     public BotConfigResponse roll(Long id) {
@@ -105,6 +126,22 @@ public class BotApiService {
         return runtimeManager.runtimes().stream()
                 .map(BotRuntime::botId)
                 .collect(Collectors.toSet());
+    }
+
+    private BotConfigEntity getEntity(Long id) {
+        return configService.list().stream()
+                .filter(bot -> bot.getId().equals(id))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown bot id: " + id));
+    }
+
+    private BotConfigResponse response(BotConfigEntity entity, boolean runtimeActive) {
+        return BotConfigResponse.from(
+                entity,
+                runtimeActive,
+                runtimeProperties.includes(entity.getId()),
+                runtimeProperties.isRestricted()
+        );
     }
 }
 

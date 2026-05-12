@@ -104,6 +104,7 @@ public class BotRuntimeManager implements CommandLineRunner {
         }
         configRepository.findById(botId)
                 .filter(BotConfigEntity::isEnabled)
+                .filter(config -> botRuntimeProperties.includes(config.getId()))
                 .ifPresent(config -> {
                     BotRuntime runtime = newRuntime(config);
                     runtimes.put(botId, runtime);

@@ -15,6 +15,7 @@ import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradeOrderStatus;
 import com.vokerg.voktrader.trade.TradeSide;
 import com.vokerg.voktrader.trade.TradeStatus;
+import com.vokerg.voktrader.trade.TradingProperties;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -36,11 +37,13 @@ class StrategyV2ExitEvaluatorTest {
     private final StrategyV2ExecutionProperties executionProperties = new StrategyV2ExecutionProperties();
     private final ExecutionRouter executionRouter = mock(ExecutionRouter.class);
     private final OrderGateway orderGateway = mock(OrderGateway.class);
+    private final TradingProperties tradingProperties = new TradingProperties();
     private final StrategyV2DiagnosticsRecorder diagnosticsRecorder = mock(StrategyV2DiagnosticsRecorder.class);
     private final StrategyV2OrderActionBuilder orderActionBuilder = new StrategyV2OrderActionBuilder(
             executionProperties,
             executionRouter,
-            orderGateway
+            orderGateway,
+            tradingProperties
     );
     private final StrategyV2ExitEvaluator evaluator = new StrategyV2ExitEvaluator(
             featureResolver,

@@ -11,6 +11,7 @@ import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradeOrderStatus;
 import com.vokerg.voktrader.trade.TradeOrderType;
 import com.vokerg.voktrader.trade.TradeStatus;
+import com.vokerg.voktrader.trade.TradingProperties;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -30,10 +31,12 @@ class StrategyV2OrderActionBuilderTest {
     private final StrategyV2ExecutionProperties executionProperties = new StrategyV2ExecutionProperties();
     private final ExecutionRouter executionRouter = mock(ExecutionRouter.class);
     private final OrderGateway orderGateway = mock(OrderGateway.class);
+    private final TradingProperties tradingProperties = new TradingProperties();
     private final StrategyV2OrderActionBuilder builder = new StrategyV2OrderActionBuilder(
             executionProperties,
             executionRouter,
-            orderGateway
+            orderGateway,
+            tradingProperties
     );
 
     @Test
@@ -126,6 +129,33 @@ class StrategyV2OrderActionBuilderTest {
         verify(orderGateway).submitOrder(intent.capture(), any(), any());
         assertThat(intent.getValue().shares()).isEqualByComparingTo("5.00");
         assertThat(intent.getValue().amountUsd()).isEqualByComparingTo("2.55");
+    }
+
+    @Test
+    void makerFixedSharesUsesConfiguredMinimumWhenSharesOmitted() {
+        tradingProperties.setMinMakerOrderShares(new BigDecimal("6.00"));
+        executionProperties.setUseOrderLayer(true);
+        when(orderGateway.submitOrder(any(TradeIntent.class), any(), any())).thenReturn(new OrderLifecycleResult(
+                true,
+                1L,
+                2L,
+                "local-1",
+                "remote-1",
+                TradeStatus.ENTRY_PENDING,
+                TradeOrderStatus.RESTING,
+                "resting",
+                null
+        ));
+
+        StrategyV2Properties.Strategy strategy = fixedSharesStrategy();
+        strategy.getEntry().getAction().getSize().setShares(null);
+
+        builder.routeEntry(strategy, context(), ExecutionMode.TESTING);
+
+        ArgumentCaptor<TradeIntent> intent = ArgumentCaptor.forClass(TradeIntent.class);
+        verify(orderGateway).submitOrder(intent.capture(), any(), any());
+        assertThat(intent.getValue().shares()).isEqualByComparingTo("6.00");
+        assertThat(intent.getValue().amountUsd()).isEqualByComparingTo("3.06");
     }
 
 

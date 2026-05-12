@@ -86,6 +86,16 @@ public class BotApiController {
         return botApiService.resume(id);
     }
 
+    @PostMapping("/{id}/runtime-include")
+    public BotConfigResponse includeRuntime(@PathVariable Long id) {
+        return botApiService.includeRuntime(id);
+    }
+
+    @PostMapping("/{id}/runtime-exclude")
+    public BotConfigResponse excludeRuntime(@PathVariable Long id) {
+        return botApiService.excludeRuntime(id);
+    }
+
     @PostMapping("/{id}/roll")
     public BotConfigResponse roll(@PathVariable Long id) {
         return botApiService.roll(id);

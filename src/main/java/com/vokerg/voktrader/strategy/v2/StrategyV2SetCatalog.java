@@ -25,6 +25,7 @@ public class StrategyV2SetCatalog {
         Map<String, String> resources = new LinkedHashMap<>();
         resources.put("paper", "classpath:strategy-v2.paper.yml");
         resources.put("deep-research", "classpath:strategy-v2.deep-research.yml");
+        resources.put("gtg-attempt", "classpath:strategy-v2-gtg-attempt.yml");
         this.resourcesById = Map.copyOf(resources);
     }
 

@@ -1,7 +1,7 @@
 import { Component, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ApiService } from '../../services/api.service';
-import { BotConfigResponse, TradeSummaryResponse } from '../../models/api.models';
+import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, TradeSummaryResponse } from '../../models/api.models';
 
 @Component({
   selector: 'app-dashboard',
@@ -23,6 +23,83 @@ import { BotConfigResponse, TradeSummaryResponse } from '../../models/api.models
         </div>
       </div>
     </div>
+
+    <section class="runtime-section" *ngIf="runtimeStatus() as runtime">
+      <h2>Runtime</h2>
+      <div class="runtime-grid">
+        <div class="card panel">
+          <h3>Mode</h3>
+          <dl>
+            <div><dt>Profiles</dt><dd>{{ runtime.activeProfiles.join(', ') || 'default' }}</dd></div>
+            <div><dt>Trading</dt><dd>{{ runtime.tradingMode }}</dd></div>
+            <div><dt>Kill Switch</dt><dd [class.negative]="runtime.killSwitchEnabled" [class.positive]="!runtime.killSwitchEnabled">{{ runtime.killSwitchEnabled ? 'ON' : 'OFF' }}</dd></div>
+            <div><dt>Live Enabled</dt><dd [class.positive]="runtime.liveEnabled" [class.negative]="!runtime.liveEnabled">{{ runtime.liveEnabled ? 'YES' : 'NO' }}</dd></div>
+          </dl>
+        </div>
+
+        <div class="card panel">
+          <h3>Risk</h3>
+          <dl>
+            <div><dt>Max Order</dt><dd>$ {{ runtime.maxOrderUsd | number:'1.2-2' }}</dd></div>
+            <div><dt>Trades / Market</dt><dd>{{ runtime.maxTradesPerMarket }}</dd></div>
+            <div><dt>Open Live</dt><dd>{{ runtime.maxOpenLiveTrades }}</dd></div>
+            <div><dt>Allowed</dt><dd>{{ runtime.allowedStrategyIds.join(', ') }}</dd></div>
+          </dl>
+        </div>
+
+        <div class="card panel">
+          <h3>Executor</h3>
+          <dl>
+            <div><dt>Enabled</dt><dd>{{ runtime.executor.enabled ? 'YES' : 'NO' }}</dd></div>
+            <div><dt>Dry Run</dt><dd>{{ runtime.executor.dryRun ? 'YES' : 'NO' }}</dd></div>
+            <div><dt>Base URL</dt><dd>{{ runtime.executor.baseUrl }}</dd></div>
+            <div><dt>Order Layer</dt><dd>{{ runtime.orderLayer.enabled ? 'ON' : 'OFF' }}</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <section class="runtime-section" *ngIf="strategyCatalog() as catalog">
+      <h2>Strategies</h2>
+      <div class="card panel">
+        <dl>
+          <div><dt>Default</dt><dd>{{ catalog.currentDefaultActiveStrategy }}</dd></div>
+          <div><dt>V2 Sets</dt><dd>{{ catalog.strategyV2SetIds.join(', ') }}</dd></div>
+          <div><dt>V2 Active Inner IDs</dt><dd>{{ catalog.strategyV2ActiveInnerStrategyIds.join(', ') }}</dd></div>
+          <div><dt>Backtest IDs</dt><dd>{{ catalog.validBacktestStrategyIds.join(', ') }}</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="runtime-section" *ngIf="runtimeStatus()?.enabledBots?.length">
+      <h2>Enabled Bots</h2>
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Market</th>
+              <th>Strategy</th>
+              <th>Set</th>
+              <th>Sub</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let bot of runtimeStatus()?.enabledBots">
+              <td>{{ bot.id }}</td>
+              <td>{{ bot.name }}</td>
+              <td>{{ bot.marketFamily }}</td>
+              <td>{{ bot.strategyId }}</td>
+              <td>{{ bot.strategySetId || '-' }}</td>
+              <td>{{ bot.subStrategyId || '-' }}</td>
+              <td>{{ bot.status }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
     <div class="recent-section">
       <h2>Recent Trades</h2>
@@ -91,11 +168,61 @@ import { BotConfigResponse, TradeSummaryResponse } from '../../models/api.models
       font-size: 20px;
     }
 
+    .runtime-section {
+      margin-bottom: 32px;
+    }
+
+    .runtime-section h2 {
+      margin-bottom: 16px;
+      font-size: 20px;
+    }
+
+    .runtime-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
     .card {
       background-color: #fff;
       border-radius: 8px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
       overflow: hidden;
+    }
+
+    .panel {
+      padding: 18px;
+    }
+
+    .panel h3 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      text-transform: uppercase;
+      color: #6b7280;
+    }
+
+    dl {
+      margin: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    dl div {
+      display: grid;
+      grid-template-columns: 120px minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    dt {
+      color: #6b7280;
+      font-size: 13px;
+    }
+
+    dd {
+      margin: 0;
+      font-size: 13px;
+      overflow-wrap: anywhere;
+      font-weight: 600;
     }
 
     table {
@@ -130,6 +257,8 @@ export class Dashboard implements OnInit {
   
   bots = signal<BotConfigResponse[]>([]);
   trades = signal<TradeSummaryResponse[]>([]);
+  runtimeStatus = signal<RuntimeStatusResponse | null>(null);
+  strategyCatalog = signal<StrategyCatalogResponse | null>(null);
   
   activeBotsCount = signal(0);
   dailyPnl = signal(0);
@@ -149,5 +278,8 @@ export class Dashboard implements OnInit {
       const pnl = trades.reduce((acc, t) => acc + (t.finalPnlUsd || 0), 0);
       this.dailyPnl.set(pnl);
     });
+
+    this.apiService.getRuntimeStatus().subscribe(status => this.runtimeStatus.set(status));
+    this.apiService.getStrategies().subscribe(catalog => this.strategyCatalog.set(catalog));
   }
 }

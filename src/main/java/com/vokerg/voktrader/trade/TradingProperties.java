@@ -23,6 +23,7 @@ public class TradingProperties {
     private boolean liveEnabled = false;
 
     private BigDecimal maxOrderUsd = new BigDecimal("1.00");
+    private BigDecimal minMakerOrderShares = new BigDecimal("5.00");
     private BigDecimal maxSpread = new BigDecimal("0.03");
     private long maxPriceAgeMs = 1500;
     private int maxOpenLiveTrades = 1;
@@ -68,6 +69,14 @@ public class TradingProperties {
 
     public void setMaxOrderUsd(BigDecimal maxOrderUsd) {
         this.maxOrderUsd = maxOrderUsd;
+    }
+
+    public BigDecimal getMinMakerOrderShares() {
+        return minMakerOrderShares;
+    }
+
+    public void setMinMakerOrderShares(BigDecimal minMakerOrderShares) {
+        this.minMakerOrderShares = minMakerOrderShares;
     }
 
     public BigDecimal getMaxSpread() {

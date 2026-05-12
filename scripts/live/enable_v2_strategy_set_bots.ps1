@@ -1,6 +1,6 @@
 param(
     [string]$BaseUrl = "http://localhost:8080",
-    [string[]]$strategySetIds = @("paper", "deep-research"),
+    [string[]]$strategySetIds = @("paper", "deep-research", "gtg-attempt"),
     [string[]]$MarketFamilies = @("BTC_5M", "ETH_5M", "SOL_5M"),
     [bool]$Enabled = $true
 )

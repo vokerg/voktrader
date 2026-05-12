@@ -2,19 +2,29 @@ package com.vokerg.voktrader.strategy.v2;
 
 import com.vokerg.voktrader.telemetry.TelemetryData;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
+import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class StrategyV2DiagnosticsRecorder {
     private final TradingEventLogger eventLogger;
+    private final StrategyV2DiagnosticsProperties properties;
+    private final Map<String, Instant> entryPulseAt = new ConcurrentHashMap<>();
 
-    public StrategyV2DiagnosticsRecorder(TradingEventLogger eventLogger) {
+    public StrategyV2DiagnosticsRecorder(
+            TradingEventLogger eventLogger,
+            StrategyV2DiagnosticsProperties properties
+    ) {
         this.eventLogger = eventLogger;
+        this.properties = properties;
     }
 
     public void rejected(StrategyV2Properties.Strategy strategy, StrategyV2FeatureContext context, String reason) {
@@ -35,6 +45,7 @@ public class StrategyV2DiagnosticsRecorder {
         if (details != null) {
             data.putAll(details);
         }
+        entryPulse(strategy, context, reason, data);
         eventLogger.entryRejected(
                 strategy.getStrategyId(),
                 strategy.getEntry() == null ? null : strategy.getEntry().getRuleId(),
@@ -42,6 +53,43 @@ public class StrategyV2DiagnosticsRecorder {
                 null,
                 reason,
                 data
+        );
+    }
+
+    private void entryPulse(
+            StrategyV2Properties.Strategy strategy,
+            StrategyV2FeatureContext context,
+            String reason,
+            Map<String, Object> data
+    ) {
+        if (!properties.isEntryPulseEnabled() || strategy == null) {
+            return;
+        }
+        long intervalSeconds = Math.max(1, properties.getEntryPulseSeconds());
+        Instant now = Instant.now();
+        String failedFeature = String.valueOf(data.getOrDefault("failedFeature", "candidate"));
+        String key = BotRuntimeContextHolder.currentBotId().orElse(null)
+                + "|" + strategy.getStrategyId()
+                + "|" + (context == null || context.market() == null ? null : context.market().id())
+                + "|" + failedFeature;
+        Instant previous = entryPulseAt.get(key);
+        if (previous != null && Duration.between(previous, now).getSeconds() < intervalSeconds) {
+            return;
+        }
+        entryPulseAt.put(key, now);
+
+        eventLogger.execution(
+                "STRATEGY_V2_ENTRY_PULSE",
+                "ENTRY_V2",
+                strategy.getStrategyId(),
+                strategy.getEntry() == null ? null : strategy.getEntry().getRuleId(),
+                BotRuntimeContextHolder.currentBotId().orElse(null),
+                context == null || context.market() == null ? null : context.market().id(),
+                context == null || context.candidate() == null ? null : context.candidate().tokenId(),
+                context == null || context.candidate() == null ? null : context.candidate().outcome(),
+                reason,
+                data,
+                true
         );
     }
 

@@ -17,12 +17,23 @@ public record BotConfigResponse(
         String strategyId,
         String strategySetId,
         String subStrategyId,
+        boolean runtimeIncluded,
+        boolean runtimeIncludeGuardActive,
         BotStatus status,
         String lastError,
         Instant createdAt,
         Instant updatedAt
 ) {
     public static BotConfigResponse from(BotConfigEntity entity, boolean runtimeActive) {
+        return from(entity, runtimeActive, true, false);
+    }
+
+    public static BotConfigResponse from(
+            BotConfigEntity entity,
+            boolean runtimeActive,
+            boolean runtimeIncluded,
+            boolean runtimeIncludeGuardActive
+    ) {
         return new BotConfigResponse(
                 entity.getId(),
                 entity.getName(),
@@ -34,6 +45,8 @@ public record BotConfigResponse(
                 entity.getStrategyId(),
                 entity.getStrategySetId(),
                 entity.getSubStrategyId(),
+                runtimeIncluded,
+                runtimeIncludeGuardActive,
                 entity.getStatus(),
                 entity.getLastError(),
                 entity.getCreatedAt(),
