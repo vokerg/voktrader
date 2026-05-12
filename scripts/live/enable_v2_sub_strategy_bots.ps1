@@ -1,6 +1,6 @@
 param(
     [string]$BaseUrl = "http://localhost:8080",
-    [string[]]$StrategyConfigIds = @("paper", "deep-research"),
+    [string[]]$strategySetIds = @("paper", "deep-research"),
     [string[]]$MarketFamilies = @("BTC_5M", "ETH_5M", "SOL_5M"),
     [bool]$Enabled = $true
 )
@@ -12,14 +12,14 @@ $ErrorActionPreference = "Stop"
 
 $created = @()
 
-foreach ($strategyConfigId in $StrategyConfigIds) {
+foreach ($strategySetId in $strategySetIds) {
     foreach ($marketFamily in $MarketFamilies) {
-        $name = "live-v2-$($strategyConfigId.ToLowerInvariant().Replace('_', '-'))-$($marketFamily.ToLowerInvariant().Replace('_', '-'))"
+        $name = "live-v2-$($strategySetId.ToLowerInvariant().Replace('_', '-'))-$($marketFamily.ToLowerInvariant().Replace('_', '-'))"
         $body = @{
             name = $name
             marketFamily = $marketFamily
             strategyId = "strategy-v2"
-            strategyConfigId = $strategyConfigId
+            strategySetId = $strategySetId
             subStrategyId = ""
             enabled = $Enabled
         } | ConvertTo-Json -Compress
@@ -32,9 +32,10 @@ foreach ($strategyConfigId in $StrategyConfigIds) {
     }
 }
 
-$created | Format-Table id, name, enabled, runtimeActive, marketFamily, strategyId, strategyConfigId, subStrategyId, status -AutoSize
+$created | Format-Table id, name, enabled, runtimeActive, marketFamily, strategyId, strategySetId, subStrategyId, status -AutoSize
 
 $ids = ($created | ForEach-Object { $_.id }) -join ","
 Write-Host ""
 Write-Host "For the live-test profile include guard, use:"
 Write-Host "voktrader.bots.include-ids=$ids"
+

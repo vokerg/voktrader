@@ -1,5 +1,6 @@
-strategy-v2.1:
+strategy-v2:
   schema-version: '2.0'
+  set-id: deep-research
   engine:
     enabled: true
     active-strategy-ids:

@@ -13,13 +13,13 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
-public class StrategyV2ConfigCatalog {
+public class StrategyV2SetCatalog {
     private final ResourceLoader resourceLoader;
     private final StrategyV2OverrideParser parser;
     private final Map<String, String> resourcesById;
     private final Map<String, StrategyV2Properties> cache = new ConcurrentHashMap<>();
 
-    public StrategyV2ConfigCatalog(ResourceLoader resourceLoader, StrategyV2OverrideParser parser) {
+    public StrategyV2SetCatalog(ResourceLoader resourceLoader, StrategyV2OverrideParser parser) {
         this.resourceLoader = resourceLoader;
         this.parser = parser;
         Map<String, String> resources = new LinkedHashMap<>();
@@ -28,32 +28,33 @@ public class StrategyV2ConfigCatalog {
         this.resourcesById = Map.copyOf(resources);
     }
 
-    public Optional<StrategyV2Properties> propertiesFor(String configId) {
-        if (configId == null || configId.isBlank()) {
+    public Optional<StrategyV2Properties> propertiesFor(String setId) {
+        if (setId == null || setId.isBlank()) {
             return Optional.empty();
         }
-        String normalized = normalize(configId);
+        String normalized = normalize(setId);
         if (!resourcesById.containsKey(normalized)) {
-            throw new IllegalArgumentException("Unknown Strategy V2 config id '" + configId + "'. Available config ids: " + resourcesById.keySet());
+            throw new IllegalArgumentException("Unknown Strategy V2 set id '" + setId + "'. Available set ids: " + resourcesById.keySet());
         }
         return Optional.of(cache.computeIfAbsent(normalized, this::load));
     }
 
-    public Set<String> configIds() {
+    public Set<String> setIds() {
         return resourcesById.keySet();
     }
 
-    private StrategyV2Properties load(String configId) {
-        String location = resourcesById.get(configId);
+    private StrategyV2Properties load(String setId) {
+        String location = resourcesById.get(setId);
         Resource resource = resourceLoader.getResource(location);
         try {
             return parser.parse(resource.getContentAsString(StandardCharsets.UTF_8));
         } catch (IOException e) {
-            throw new IllegalStateException("Could not load Strategy V2 config id '" + configId + "' from " + location, e);
+            throw new IllegalStateException("Could not load Strategy V2 set id '" + setId + "' from " + location, e);
         }
     }
 
-    private String normalize(String configId) {
-        return configId.trim().toLowerCase(java.util.Locale.ROOT);
+    private String normalize(String setId) {
+        return setId.trim().toLowerCase(java.util.Locale.ROOT);
     }
 }
+

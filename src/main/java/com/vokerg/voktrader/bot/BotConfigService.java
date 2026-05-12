@@ -65,30 +65,30 @@ public class BotConfigService {
     }
 
     @Transactional
-    public BotConfigEntity create(String name, MarketFamily family, String strategyId, String strategyConfigId, String subStrategyId, boolean enabled) {
+    public BotConfigEntity create(String name, MarketFamily family, String strategyId, String strategySetId, String subStrategyId, boolean enabled) {
         String normalizedName = name == null ? null : name.trim();
         return repository.findByName(normalizedName)
                 .map(existing -> {
-                    existing.switchTo(family, strategyId, strategyConfigId, subStrategyId, enabled);
+                    existing.switchTo(family, strategyId, strategySetId, subStrategyId, enabled);
                     log.info(
-                            "Updated existing bot config during create: id={} name={} family={} strategy={} strategyConfig={} subStrategy={} enabled={}",
+                            "Updated existing bot config during create: id={} name={} family={} strategy={} strategySet={} subStrategy={} enabled={}",
                             existing.getId(),
                             existing.getName(),
                             existing.getMarketFamily(),
                             existing.getStrategyId(),
-                            existing.getStrategyConfigId(),
+                            existing.getStrategySetId(),
                             existing.getSubStrategyId(),
                             existing.isEnabled()
                     );
                     return repository.save(existing);
                 })
-                .orElseGet(() -> repository.save(BotConfigEntity.create(normalizedName, family, strategyId, strategyConfigId, subStrategyId, enabled)));
+                .orElseGet(() -> repository.save(BotConfigEntity.create(normalizedName, family, strategyId, strategySetId, subStrategyId, enabled)));
     }
 
     @Transactional
-    public BotConfigEntity switchConfig(Long id, MarketFamily family, String strategyId, String strategyConfigId, String subStrategyId, Boolean enabled) {
+    public BotConfigEntity switchConfig(Long id, MarketFamily family, String strategyId, String strategySetId, String subStrategyId, Boolean enabled) {
         BotConfigEntity bot = getRequired(id);
-        bot.switchTo(family, strategyId, strategyConfigId, subStrategyId, enabled);
+        bot.switchTo(family, strategyId, strategySetId, subStrategyId, enabled);
         return repository.save(bot);
     }
 
@@ -126,3 +126,4 @@ public class BotConfigService {
                 .orElseThrow(() -> new IllegalArgumentException("Unknown bot id: " + id));
     }
 }
+

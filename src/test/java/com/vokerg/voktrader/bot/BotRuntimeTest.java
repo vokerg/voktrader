@@ -1,4 +1,4 @@
-package com.vokerg.voktrader.bot;
+﻿package com.vokerg.voktrader.bot;
 
 import com.vokerg.voktrader.config.MarketSelectionProperties;
 import com.vokerg.voktrader.market.MarketPersistenceService;
@@ -114,3 +114,4 @@ class BotRuntimeTest {
         );
     }
 }
+

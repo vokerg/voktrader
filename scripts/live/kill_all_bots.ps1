@@ -8,4 +8,5 @@ $response = Invoke-RestMethod `
     -Method Post `
     -Uri "$BaseUrl/api/bots/kill-all"
 
-$response | Format-Table id, name, enabled, runtimeActive, marketFamily, strategyId, strategyConfigId, subStrategyId, status -AutoSize
+$response | Format-Table id, name, enabled, runtimeActive, marketFamily, strategyId, strategySetId, subStrategyId, status -AutoSize
+

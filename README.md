@@ -1,4 +1,4 @@
-﻿# Voktrader
+# Voktrader
 
 Voktrader is a Spring Boot trading and research app for short Polymarket Up/Down markets. It records market data, runs paper and backtest strategies, manages runtime bot configs, and can route tiny live orders through a separate Python executor sidecar.
 
@@ -49,7 +49,8 @@ $env:SPRING_PROFILES_ACTIVE="live-tiny,live-test"
 - Main app config: `src/main/resources/application.properties`
 - Profiles: `application-paper.properties`, `application-shadow.properties`, `application-live-tiny.properties`, `application-live-test.properties`, `application-optimizer.properties`
 - Strategy V2 YAML: `src/main/resources/strategy-v2.paper.yml`, `src/main/resources/strategy-v2.deep-research.yml`, `src/main/resources/strategy-v2.example.yml`
-- Per-bot Strategy V2 bundle selection: `bot_configs.strategy_config_id` (`paper` or `deep-research`)
+- Per-bot Strategy V2 bundle selection: `bot_configs.strategy_set_id` (`paper` or `deep-research`)
 - Python executor: `executor-python/`
 
 See [docs/runbook.md](docs/runbook.md) for the operational source of truth.
+

@@ -15,7 +15,7 @@ public record BotConfigResponse(
         String asset,
         String interval,
         String strategyId,
-        String strategyConfigId,
+        String strategySetId,
         String subStrategyId,
         BotStatus status,
         String lastError,
@@ -32,7 +32,7 @@ public record BotConfigResponse(
                 entity.getMarketFamily().asset().name(),
                 entity.getMarketFamily().intervalCode(),
                 entity.getStrategyId(),
-                entity.getStrategyConfigId(),
+                entity.getStrategySetId(),
                 entity.getSubStrategyId(),
                 entity.getStatus(),
                 entity.getLastError(),
@@ -41,3 +41,4 @@ public record BotConfigResponse(
         );
     }
 }
+

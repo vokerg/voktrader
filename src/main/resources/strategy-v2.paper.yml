@@ -2,6 +2,7 @@
 # from strategy-v2.example.yml so local paper runs do not inherit sample strategies.
 strategy-v2:
   schema-version: "2.0"
+  set-id: "paper"
   engine:
     enabled: true
     active-strategy-ids: ["cfg_v2_liquidity_momentum_paper"]

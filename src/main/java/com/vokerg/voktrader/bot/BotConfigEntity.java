@@ -26,8 +26,8 @@ public class BotConfigEntity {
     @Column(name = "strategy_id", nullable = false)
     private String strategyId;
 
-    @Column(name = "strategy_config_id")
-    private String strategyConfigId;
+    @Column(name = "strategy_set_id")
+    private String strategySetId;
 
     @Column(name = "sub_strategy_id")
     private String subStrategyId;
@@ -48,13 +48,13 @@ public class BotConfigEntity {
     protected BotConfigEntity() {
     }
 
-    public static BotConfigEntity create(String name, MarketFamily marketFamily, String strategyId, String strategyConfigId, String subStrategyId, boolean enabled) {
+    public static BotConfigEntity create(String name, MarketFamily marketFamily, String strategyId, String strategySetId, String subStrategyId, boolean enabled) {
         Instant now = Instant.now();
         BotConfigEntity entity = new BotConfigEntity();
         entity.name = name;
         entity.marketFamily = marketFamily;
         entity.strategyId = strategyId;
-        entity.strategyConfigId = normalizeOptionalId(strategyConfigId);
+        entity.strategySetId = normalizeOptionalId(strategySetId);
         entity.subStrategyId = normalizeSubStrategyId(subStrategyId);
         entity.enabled = enabled;
         entity.status = enabled ? BotStatus.RUNNING : BotStatus.PAUSED;
@@ -63,15 +63,15 @@ public class BotConfigEntity {
         return entity;
     }
 
-    public void switchTo(MarketFamily marketFamily, String strategyId, String strategyConfigId, String subStrategyId, Boolean enabled) {
+    public void switchTo(MarketFamily marketFamily, String strategyId, String strategySetId, String subStrategyId, Boolean enabled) {
         if (marketFamily != null) {
             this.marketFamily = marketFamily;
         }
         if (strategyId != null && !strategyId.isBlank()) {
             this.strategyId = strategyId.trim();
         }
-        if (strategyConfigId != null) {
-            this.strategyConfigId = normalizeOptionalId(strategyConfigId);
+        if (strategySetId != null) {
+            this.strategySetId = normalizeOptionalId(strategySetId);
         }
         if (subStrategyId != null) {
             this.subStrategyId = normalizeSubStrategyId(subStrategyId);
@@ -112,7 +112,7 @@ public class BotConfigEntity {
     public boolean isEnabled() { return enabled; }
     public MarketFamily getMarketFamily() { return marketFamily; }
     public String getStrategyId() { return strategyId; }
-    public String getStrategyConfigId() { return strategyConfigId; }
+    public String getStrategySetId() { return strategySetId; }
     public String getSubStrategyId() { return subStrategyId; }
     public BotStatus getStatus() { return status; }
     public String getLastError() { return lastError; }
@@ -123,7 +123,7 @@ public class BotConfigEntity {
     public void setEnabled(boolean enabled) { this.enabled = enabled; this.status = enabled ? BotStatus.RUNNING : BotStatus.PAUSED; touch(); }
     public void setMarketFamily(MarketFamily marketFamily) { this.marketFamily = marketFamily; touch(); }
     public void setStrategyId(String strategyId) { this.strategyId = strategyId; touch(); }
-    public void setStrategyConfigId(String strategyConfigId) { this.strategyConfigId = normalizeOptionalId(strategyConfigId); touch(); }
+    public void setStrategySetId(String strategySetId) { this.strategySetId = normalizeOptionalId(strategySetId); touch(); }
     public void setSubStrategyId(String subStrategyId) { this.subStrategyId = normalizeSubStrategyId(subStrategyId); touch(); }
     public void setStatus(BotStatus status) { this.status = status; touch(); }
     public void setLastError(String lastError) { this.lastError = lastError; touch(); }
@@ -140,3 +140,4 @@ public class BotConfigEntity {
         return trimmed.isBlank() ? null : trimmed;
     }
 }
+

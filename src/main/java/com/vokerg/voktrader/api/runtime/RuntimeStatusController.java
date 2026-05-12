@@ -122,7 +122,7 @@ public class RuntimeStatusController {
             Long id,
             String name,
             String strategyId,
-            String strategyConfigId,
+            String strategySetId,
             String subStrategyId,
             String marketFamily,
             String status,
@@ -133,7 +133,7 @@ public class RuntimeStatusController {
                     entity.getId(),
                     entity.getName(),
                     entity.getStrategyId(),
-                    entity.getStrategyConfigId(),
+                    entity.getStrategySetId(),
                     entity.getSubStrategyId(),
                     entity.getMarketFamily() == null ? null : entity.getMarketFamily().name(),
                     entity.getStatus() == null ? null : entity.getStatus().name(),
@@ -142,3 +142,4 @@ public class RuntimeStatusController {
         }
     }
 }
+

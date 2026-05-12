@@ -5,8 +5,9 @@ public record BotUpdateRequest(
         String asset,
         String interval,
         String strategyId,
-        String strategyConfigId,
+        String strategySetId,
         String subStrategyId,
         Boolean enabled
 ) {
 }
+

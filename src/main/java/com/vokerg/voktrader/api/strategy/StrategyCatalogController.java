@@ -3,7 +3,7 @@ package com.vokerg.voktrader.api.strategy;
 import com.vokerg.voktrader.strategy.StrategyProperties;
 import com.vokerg.voktrader.strategy.StrategyRegistry;
 import com.vokerg.voktrader.strategy.TradingStrategy;
-import com.vokerg.voktrader.strategy.v2.StrategyV2ConfigCatalog;
+import com.vokerg.voktrader.strategy.v2.StrategyV2SetCatalog;
 import com.vokerg.voktrader.strategy.v2.StrategyV2Engine;
 import com.vokerg.voktrader.strategy.v2.StrategyV2Properties;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,18 +19,18 @@ public class StrategyCatalogController {
     private final StrategyRegistry strategyRegistry;
     private final StrategyProperties strategyProperties;
     private final StrategyV2Properties strategyV2Properties;
-    private final StrategyV2ConfigCatalog strategyV2ConfigCatalog;
+    private final StrategyV2SetCatalog strategyV2SetCatalog;
 
     public StrategyCatalogController(
             StrategyRegistry strategyRegistry,
             StrategyProperties strategyProperties,
             StrategyV2Properties strategyV2Properties,
-            StrategyV2ConfigCatalog strategyV2ConfigCatalog
+            StrategyV2SetCatalog strategyV2SetCatalog
     ) {
         this.strategyRegistry = strategyRegistry;
         this.strategyProperties = strategyProperties;
         this.strategyV2Properties = strategyV2Properties;
-        this.strategyV2ConfigCatalog = strategyV2ConfigCatalog;
+        this.strategyV2SetCatalog = strategyV2SetCatalog;
     }
 
     @GetMapping
@@ -53,7 +53,7 @@ public class StrategyCatalogController {
                 strategyProperties.activeOrDefault(),
                 strategyV2Properties.getEngine().getActiveStrategyIds(),
                 v2Strategies,
-                strategyV2ConfigCatalog.configIds().stream().sorted().toList(),
+                strategyV2SetCatalog.setIds().stream().sorted().toList(),
                 strategyRegistry.strategyIds().stream().sorted().toList(),
                 StrategyV2Engine.ID,
                 "Only top-level registered strategy IDs are valid for /api/backtests.strategyId. Use strategy-v2 for Strategy V2; inner YAML IDs are selected by strategy-v2.engine.active-strategy-ids or strategyYamlOverride."
@@ -65,7 +65,7 @@ public class StrategyCatalogController {
             String currentDefaultActiveStrategy,
             List<String> strategyV2ActiveInnerStrategyIds,
             List<StrategyV2InnerStrategy> strategyV2ConfiguredStrategies,
-            List<String> strategyV2ConfigIds,
+            List<String> strategyV2SetIds,
             List<String> validBacktestStrategyIds,
             String strategyV2TopLevelBacktestId,
             String backtestStrategyIdRule
@@ -87,3 +87,4 @@ public class StrategyCatalogController {
     ) {
     }
 }
+

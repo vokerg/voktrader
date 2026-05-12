@@ -77,8 +77,9 @@ class RuntimeStatusControllerTest {
         assertThat(response.strategyV2ActiveInnerStrategyIds()).containsExactly("ANTI_CHOP_FOK_A");
         assertThat(response.enabledBots()).singleElement()
                 .satisfies(enabledBot -> {
-                    assertThat(enabledBot.strategyConfigId()).isEqualTo("deep-research");
+                    assertThat(enabledBot.strategySetId()).isEqualTo("deep-research");
                     assertThat(enabledBot.subStrategyId()).isEqualTo("ANTI_CHOP_FOK_A");
                 });
     }
 }
+

@@ -11,12 +11,15 @@ import java.util.Map;
 @ConfigurationProperties(prefix = "strategy-v2")
 public class StrategyV2Properties {
     private String schemaVersion = "2.0";
+    private String setId;
     private Engine engine = new Engine();
     private Map<String, Profile> defaults = new LinkedHashMap<>();
     private List<Strategy> strategies = new ArrayList<>();
 
     public String getSchemaVersion() { return schemaVersion; }
     public void setSchemaVersion(String schemaVersion) { this.schemaVersion = schemaVersion; }
+    public String getSetId() { return setId; }
+    public void setSetId(String setId) { this.setId = setId; }
     public Engine getEngine() { return engine; }
     public void setEngine(Engine engine) { this.engine = engine == null ? new Engine() : engine; }
     public Map<String, Profile> getDefaults() { return defaults; }

@@ -41,7 +41,7 @@ public class StrategyV2Engine implements TradingStrategy {
     private final TradeStateProvider tradeStateProvider;
     private final OrderGateway orderGateway;
     private final TradingProperties tradingProperties;
-    private final StrategyV2ConfigCatalog configCatalog;
+    private final StrategyV2SetCatalog configCatalog;
 
     public StrategyV2Engine(
             StrategyV2Properties properties,
@@ -56,7 +56,7 @@ public class StrategyV2Engine implements TradingStrategy {
             TradeStateProvider tradeStateProvider,
             OrderGateway orderGateway,
             TradingProperties tradingProperties,
-            StrategyV2ConfigCatalog configCatalog
+            StrategyV2SetCatalog configCatalog
     ) {
         this.properties = properties;
         this.registry = registry;
@@ -100,7 +100,7 @@ public class StrategyV2Engine implements TradingStrategy {
             tickWithEffectiveConfig();
             return;
         }
-        configCatalog.propertiesFor(BotRuntimeContextHolder.currentStrategyConfigId().orElse(null))
+        configCatalog.propertiesFor(BotRuntimeContextHolder.currentStrategySetId().orElse(null))
                 .ifPresentOrElse(
                         selected -> StrategyV2OverrideContext.runWith(selected, this::tickWithEffectiveConfig),
                         this::tickWithEffectiveConfig
@@ -259,3 +259,4 @@ public class StrategyV2Engine implements TradingStrategy {
     }
 
 }
+
