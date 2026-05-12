@@ -280,7 +280,7 @@ public class StrategyV2FeatureResolver {
         BigDecimal ask = ask(view);
         BigDecimal spread = bid == null || ask == null ? null : ask.subtract(bid);
         Sample sample = new Sample(now, view.mid(), bid, ask, spread);
-        samplesByToken.compute(view.tokenId(), (ignored, deque) -> {
+        samples().compute(view.tokenId(), (ignored, deque) -> {
             ArrayDeque<Sample> samples = deque == null ? new ArrayDeque<>() : deque;
             samples.addLast(sample);
             Instant floor = now.minusSeconds(120);
@@ -299,7 +299,7 @@ public class StrategyV2FeatureResolver {
     }
 
     private BigDecimal move(String tokenId, String field, int seconds) {
-        ArrayDeque<Sample> samples = samplesByToken.get(tokenId);
+        ArrayDeque<Sample> samples = samples().get(tokenId);
         if (samples == null || samples.size() < 2) {
             return BigDecimal.ZERO;
         }
@@ -313,7 +313,7 @@ public class StrategyV2FeatureResolver {
     }
 
     private BigDecimal volatility(String tokenId, int seconds) {
-        ArrayDeque<Sample> samples = samplesByToken.get(tokenId);
+        ArrayDeque<Sample> samples = samples().get(tokenId);
         if (samples == null || samples.size() < 2) {
             return BigDecimal.ZERO;
         }
@@ -373,11 +373,15 @@ public class StrategyV2FeatureResolver {
                         : view.mid().add(view.spread().divide(TWO, SCALE, RoundingMode.HALF_UP)));
     }
 
+    private Map<String, ArrayDeque<Sample>> samples() {
+        return StrategyV2FeatureSampleContext.current().orElse(samplesByToken);
+    }
+
     private static BigDecimal value(Object value) {
         return value instanceof BigDecimal decimal ? decimal : BigDecimal.ZERO;
     }
 
-    private record Sample(Instant at, BigDecimal mid, BigDecimal bid, BigDecimal ask, BigDecimal spread) {
+    record Sample(Instant at, BigDecimal mid, BigDecimal bid, BigDecimal ask, BigDecimal spread) {
         BigDecimal value(String field) {
             return switch (field) {
                 case "bid" -> bid;

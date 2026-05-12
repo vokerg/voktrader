@@ -16,6 +16,7 @@ import com.vokerg.voktrader.polymarket.dto.PriceLevelDto;
 import com.vokerg.voktrader.strategy.StrategyRegistry;
 import com.vokerg.voktrader.strategy.TradingStrategy;
 import com.vokerg.voktrader.strategy.v2.StrategyV2Engine;
+import com.vokerg.voktrader.strategy.v2.StrategyV2FeatureSampleContext;
 import com.vokerg.voktrader.strategy.v2.StrategyV2OverrideContext;
 import com.vokerg.voktrader.strategy.v2.StrategyV2OverrideParser;
 import com.vokerg.voktrader.strategy.v2.StrategyV2Properties;
@@ -204,7 +205,9 @@ public class BacktestReplayService {
 
         long replayStartedNs = System.nanoTime();
         if (override != null) {
-            StrategyV2OverrideContext.runWith(override, replay);
+            runStrategyV2Backtest(override, replay);
+        } else if (StrategyV2Engine.ID.equals(strategy.id())) {
+            StrategyV2FeatureSampleContext.runIsolated(replay);
         } else {
             replay.run();
         }
@@ -257,6 +260,13 @@ public class BacktestReplayService {
                 diagnostics.entryRejectReasons(),
                 diagnostics.executionRejectReasons(),
                 diagnostics.strategySkipReasons()
+        );
+    }
+
+    private void runStrategyV2Backtest(StrategyV2Properties override, Runnable replay) {
+        StrategyV2OverrideContext.runWith(
+                override,
+                () -> StrategyV2FeatureSampleContext.runIsolated(replay)
         );
     }
 
