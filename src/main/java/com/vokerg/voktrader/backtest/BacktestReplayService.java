@@ -310,6 +310,7 @@ public class BacktestReplayService {
                     null,
                     strategy.id(),
                     null,
+                    null,
                     trackedMarketState,
                     latestPriceState,
                     orderBookState

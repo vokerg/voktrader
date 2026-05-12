@@ -5,9 +5,6 @@ param(
     [bool]$Enabled = $true
 )
 
-# Compatibility wrapper kept under the old name. It now creates Strategy V2
-# config-level bots, not one bot per inner sub-strategy.
-
 $ErrorActionPreference = "Stop"
 
 $created = @()

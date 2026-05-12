@@ -51,6 +51,7 @@ public class BotApiController {
                 request.asset(),
                 request.interval(),
                 request.strategyId(),
+                request.strategyConfigId(),
                 request.subStrategyId(),
                 request.enabled()
         );
@@ -64,6 +65,7 @@ public class BotApiController {
                 request.asset(),
                 request.interval(),
                 request.strategyId(),
+                request.strategyConfigId(),
                 request.subStrategyId(),
                 request.enabled()
         );

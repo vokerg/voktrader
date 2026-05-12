@@ -20,9 +20,9 @@ class BotConfigServiceTest {
 
     @Test
     void filtersOverviewByStatusFamilyAndStrategy() {
-        BotConfigEntity runningV2 = BotConfigEntity.create("v2-btc", MarketFamily.BTC_5M, "strategy-v2", "ANTI_CHOP_FOK_A", true);
-        BotConfigEntity pausedV2 = BotConfigEntity.create("v2-eth", MarketFamily.ETH_5M, "strategy-v2", "SNIPER_FOK_A", false);
-        BotConfigEntity runningOther = BotConfigEntity.create("other-btc", MarketFamily.BTC_5M, "order-book-liquidity", null, true);
+        BotConfigEntity runningV2 = BotConfigEntity.create("v2-btc", MarketFamily.BTC_5M, "strategy-v2", "deep-research", "ANTI_CHOP_FOK_A", true);
+        BotConfigEntity pausedV2 = BotConfigEntity.create("v2-eth", MarketFamily.ETH_5M, "strategy-v2", "paper", "SNIPER_FOK_A", false);
+        BotConfigEntity runningOther = BotConfigEntity.create("other-btc", MarketFamily.BTC_5M, "order-book-liquidity", null, null, true);
         when(repository.findAllByOrderByIdAsc()).thenReturn(List.of(runningV2, pausedV2, runningOther));
 
         List<BotConfigEntity> result = service.list(BotStatus.RUNNING, true, MarketFamily.BTC_5M, "Strategy-V2", "anti_chop_fok_a");
@@ -32,8 +32,8 @@ class BotConfigServiceTest {
 
     @Test
     void filtersOverviewByPausedStatus() {
-        BotConfigEntity running = BotConfigEntity.create("running", MarketFamily.BTC_5M, "strategy-v2", null, true);
-        BotConfigEntity paused = BotConfigEntity.create("paused", MarketFamily.BTC_5M, "strategy-v2", null, false);
+        BotConfigEntity running = BotConfigEntity.create("running", MarketFamily.BTC_5M, "strategy-v2", null, null, true);
+        BotConfigEntity paused = BotConfigEntity.create("paused", MarketFamily.BTC_5M, "strategy-v2", null, null, false);
         when(repository.findAllByOrderByIdAsc()).thenReturn(List.of(running, paused));
 
         List<BotConfigEntity> result = service.list(BotStatus.PAUSED, null, null, null, null);

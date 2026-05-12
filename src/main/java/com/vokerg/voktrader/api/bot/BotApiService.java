@@ -46,22 +46,22 @@ public class BotApiService {
                 .orElseThrow(() -> new IllegalArgumentException("Unknown bot id: " + id));
     }
 
-    public BotConfigResponse create(String name, String marketFamily, String asset, String interval, String strategyId, String subStrategyId, Boolean enabled) {
+    public BotConfigResponse create(String name, String marketFamily, String asset, String interval, String strategyId, String strategyConfigId, String subStrategyId, Boolean enabled) {
         MarketFamily family = MarketFamily.fromNameOrCodes(marketFamily, asset, interval);
         boolean actualEnabled = enabled == null || enabled;
         String resolvedName = name == null || name.isBlank()
-                ? family.name().toLowerCase(Locale.ROOT) + "-" + strategyId + (subStrategyId == null || subStrategyId.isBlank() ? "" : "-" + subStrategyId)
+                ? family.name().toLowerCase(Locale.ROOT) + "-" + strategyId + (strategyConfigId == null || strategyConfigId.isBlank() ? "" : "-" + strategyConfigId)
                 : name.trim();
-        BotConfigEntity created = configService.create(resolvedName, family, strategyId, subStrategyId, actualEnabled);
+        BotConfigEntity created = configService.create(resolvedName, family, strategyId, strategyConfigId, subStrategyId, actualEnabled);
         runtimeManager.restart(created.getId(), "created via api");
         return BotConfigResponse.from(created, actualEnabled);
     }
 
-    public BotConfigResponse update(Long id, String marketFamily, String asset, String interval, String strategyId, String subStrategyId, Boolean enabled) {
+    public BotConfigResponse update(Long id, String marketFamily, String asset, String interval, String strategyId, String strategyConfigId, String subStrategyId, Boolean enabled) {
         MarketFamily family = marketFamily == null && asset == null && interval == null
                 ? null
                 : MarketFamily.fromNameOrCodes(marketFamily, asset, interval);
-        BotConfigEntity updated = configService.switchConfig(id, family, strategyId, subStrategyId, enabled);
+        BotConfigEntity updated = configService.switchConfig(id, family, strategyId, strategyConfigId, subStrategyId, enabled);
         runtimeManager.restart(id, "updated via api");
         return BotConfigResponse.from(updated, updated.isEnabled());
     }

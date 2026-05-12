@@ -47,9 +47,9 @@ class RuntimeStatusControllerTest {
         StrategyV2Properties strategyV2 = new StrategyV2Properties();
         strategyV2.getEngine().setActiveStrategyIds(List.of("ANTI_CHOP_FOK_A"));
 
-        BotConfigEntity bot = BotConfigEntity.create("bot", MarketFamily.BTC_5M, "strategy-v2", "ANTI_CHOP_FOK_A", true);
+        BotConfigEntity botEntity = BotConfigEntity.create("bot", MarketFamily.BTC_5M, "strategy-v2", "deep-research", "ANTI_CHOP_FOK_A", true);
         BotConfigRepository repository = mock(BotConfigRepository.class);
-        when(repository.findAllByEnabledTrueOrderByIdAsc()).thenReturn(List.of(bot));
+        when(repository.findAllByEnabledTrueOrderByIdAsc()).thenReturn(List.of(botEntity));
 
         RuntimeStatusController controller = new RuntimeStatusController(
                 environment,
@@ -76,7 +76,9 @@ class RuntimeStatusControllerTest {
         assertThat(response.currentTopLevelActiveStrategy()).isEqualTo("strategy-v2");
         assertThat(response.strategyV2ActiveInnerStrategyIds()).containsExactly("ANTI_CHOP_FOK_A");
         assertThat(response.enabledBots()).singleElement()
-                .extracting(RuntimeStatusController.EnabledBotStatus::subStrategyId)
-                .isEqualTo("ANTI_CHOP_FOK_A");
+                .satisfies(enabledBot -> {
+                    assertThat(enabledBot.strategyConfigId()).isEqualTo("deep-research");
+                    assertThat(enabledBot.subStrategyId()).isEqualTo("ANTI_CHOP_FOK_A");
+                });
     }
 }

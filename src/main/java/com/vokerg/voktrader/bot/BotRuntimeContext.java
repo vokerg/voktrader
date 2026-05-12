@@ -8,6 +8,7 @@ public record BotRuntimeContext(
         Long botId,
         MarketFamily marketFamily,
         String strategyId,
+        String strategyConfigId,
         String subStrategyId,
         TrackedMarketState trackedMarketState,
         LatestPriceState latestPriceState,

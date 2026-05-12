@@ -282,6 +282,7 @@ class BacktestOrderGatewayTest {
                 null,
                 "strategy-test",
                 null,
+                null,
                 new TrackedMarketState(),
                 new LatestPriceState(),
                 orderBookState

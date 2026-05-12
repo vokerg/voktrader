@@ -20,7 +20,14 @@ Strategy V2 inner YAML strategy IDs live inside a Strategy V2 config file such a
 - `ANTI_CHOP_FOK_A`
 - `RP_FOK_B`
 
-Use `strategyId=strategy-v2` to run the Java Strategy V2 engine. The engine then uses `strategy-v2.engine.active-strategy-ids`, or a bot `subStrategyId`, to select inner YAML strategies.
+Use `strategyId=strategy-v2` to run the Java Strategy V2 engine. A bot can optionally set `strategyConfigId` to choose a whole Strategy V2 YAML bundle:
+
+- `paper` loads `strategy-v2.paper.yml`
+- `deep-research` loads `strategy-v2.deep-research.yml`
+
+If `strategyConfigId` is blank, Strategy V2 uses the app-level imported config. After the YAML bundle is selected, the engine uses that bundle's `strategy-v2.engine.active-strategy-ids`.
+
+`subStrategyId` is an advanced isolation/debug field. If set, it filters the selected YAML bundle down to one inner strategy. Leave it blank for normal portfolio-style operation.
 
 Important: `cfg_v2_liquidity_momentum_paper` is not a top-level `/api/backtests.strategyId`. It is a Strategy V2 inner ID.
 
@@ -64,7 +71,7 @@ $env:SPRING_PROFILES_ACTIVE="paper"
 .\mvnw.cmd spring-boot:run
 ```
 
-On a fresh DB, the app seeds one default bot from `voktrader.strategy.active`. With an existing DB, runtime bots use persisted `bot_configs.strategy_id`; changing `voktrader.strategy.active` does not automatically update existing bots.
+On a fresh DB, the app seeds one default bot from `voktrader.strategy.active`. With an existing DB, runtime bots use persisted `bot_configs.strategy_id`; changing `voktrader.strategy.active` does not automatically update existing bots. For Strategy V2 bots, `bot_configs.strategy_config_id` can select the whole YAML bundle per bot.
 
 Run all enabled bots:
 
@@ -163,9 +170,9 @@ The old `voktrader.risk.enable-live-tiny`, `voktrader.risk.enable-live-full`, an
 | Mode | ExecutionMode | Strategy source | Sends real order? |
 | --- | --- | --- | --- |
 | Backtest | `TESTING` / replay context | Request `strategyId`; Strategy V2 may use YAML override | No |
-| Paper | `PAPER` | Bot `strategy_id`; V2 inner IDs from YAML or bot `subStrategyId` | No |
-| Shadow | `LIVE_SHADOW` | Bot `strategy_id`; V2 inner IDs from YAML or bot `subStrategyId` | No |
-| Live tiny | `LIVE_TINY` | Bot `strategy_id`; V2 inner IDs from YAML or bot `subStrategyId` | Yes, through Python executor |
+| Paper | `PAPER` | Bot `strategy_id`; V2 YAML bundle from `strategy_config_id` or app import | No |
+| Shadow | `LIVE_SHADOW` | Bot `strategy_id`; V2 YAML bundle from `strategy_config_id` or app import | No |
+| Live tiny | `LIVE_TINY` | Bot `strategy_id`; V2 YAML bundle from `strategy_config_id` or app import | Yes, through Python executor |
 | Full live | `LIVE` | Not a default operator profile | Do not enable by default |
 
 ## Visibility Endpoints

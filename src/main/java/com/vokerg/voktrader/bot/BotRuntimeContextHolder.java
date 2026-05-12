@@ -25,6 +25,11 @@ public final class BotRuntimeContextHolder {
                 .filter(value -> value != null && !value.isBlank());
     }
 
+    public static Optional<String> currentStrategyConfigId() {
+        return current().map(BotRuntimeContext::strategyConfigId)
+                .filter(value -> value != null && !value.isBlank());
+    }
+
     public static Optional<LatestPriceState> currentLatestPriceState() {
         return current().map(BotRuntimeContext::latestPriceState);
     }

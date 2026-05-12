@@ -6,6 +6,7 @@ public record BotCreateRequest(
         String asset,
         String interval,
         String strategyId,
+        String strategyConfigId,
         String subStrategyId,
         Boolean enabled
 ) {

@@ -140,6 +140,8 @@ class StrategyV2RuntimeStateAwarenessTest {
         when(featureResolver.contexts(any(), any(), any())).thenReturn(contexts);
         when(featureResolver.contexts(any(), any(), any(), any())).thenReturn(contexts);
         when(entryEvaluator.evaluate(any(), anyList(), eq(featureResolver), any())).thenReturn(Optional.empty());
+        StrategyV2ConfigCatalog configCatalog = mock(StrategyV2ConfigCatalog.class);
+        when(configCatalog.propertiesFor(any())).thenReturn(Optional.empty());
         StrategyV2Engine engine = new StrategyV2Engine(
                 properties,
                 registry,
@@ -152,7 +154,8 @@ class StrategyV2RuntimeStateAwarenessTest {
                 executionProperties,
                 tradeStateProvider,
                 orderGateway,
-                tradingProperties
+                tradingProperties,
+                configCatalog
         );
         return new EngineFixture(engine, strategy);
     }

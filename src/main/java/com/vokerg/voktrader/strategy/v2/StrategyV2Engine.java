@@ -41,6 +41,7 @@ public class StrategyV2Engine implements TradingStrategy {
     private final TradeStateProvider tradeStateProvider;
     private final OrderGateway orderGateway;
     private final TradingProperties tradingProperties;
+    private final StrategyV2ConfigCatalog configCatalog;
 
     public StrategyV2Engine(
             StrategyV2Properties properties,
@@ -54,7 +55,8 @@ public class StrategyV2Engine implements TradingStrategy {
             StrategyV2ExecutionProperties executionProperties,
             TradeStateProvider tradeStateProvider,
             OrderGateway orderGateway,
-            TradingProperties tradingProperties
+            TradingProperties tradingProperties,
+            StrategyV2ConfigCatalog configCatalog
     ) {
         this.properties = properties;
         this.registry = registry;
@@ -68,6 +70,7 @@ public class StrategyV2Engine implements TradingStrategy {
         this.tradeStateProvider = tradeStateProvider;
         this.orderGateway = orderGateway;
         this.tradingProperties = tradingProperties;
+        this.configCatalog = configCatalog;
     }
 
     @Override
@@ -93,6 +96,18 @@ public class StrategyV2Engine implements TradingStrategy {
 
     @Override
     public void tick() {
+        if (StrategyV2OverrideContext.current().isPresent()) {
+            tickWithEffectiveConfig();
+            return;
+        }
+        configCatalog.propertiesFor(BotRuntimeContextHolder.currentStrategyConfigId().orElse(null))
+                .ifPresentOrElse(
+                        selected -> StrategyV2OverrideContext.runWith(selected, this::tickWithEffectiveConfig),
+                        this::tickWithEffectiveConfig
+                );
+    }
+
+    private void tickWithEffectiveConfig() {
         StrategyV2Properties effective = effectiveProperties();
         if (!effective.getEngine().isEnabled()) {
             return;
