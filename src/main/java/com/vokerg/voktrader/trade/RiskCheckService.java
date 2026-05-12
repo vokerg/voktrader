@@ -22,6 +22,13 @@ public class RiskCheckService {
             TradeStatus.OPEN,
             TradeStatus.EXIT_PENDING
     );
+    private static final List<TradeOrderStatus> COOLDOWN_STATUSES = List.of(
+            TradeOrderStatus.FAILED,
+            TradeOrderStatus.REJECTED,
+            TradeOrderStatus.CANCELLED,
+            TradeOrderStatus.EXPIRED,
+            TradeOrderStatus.TIMEOUT
+    );
 
     private final TradingProperties properties;
     private final TradeRepository tradeRepository;
@@ -81,6 +88,26 @@ public class RiskCheckService {
                 idempotencyOk ? "idempotency key accepted" : "duplicate idempotency key belongs to a different order"));
 
         if (mode == ExecutionMode.LIVE_TINY || mode == ExecutionMode.LIVE) {
+            long cooldownSeconds = properties.getLiveRetryCooldownSeconds();
+            if (cooldownSeconds > 0 && intent.side() == TradeSide.BUY) {
+                Instant cooldownSince = Instant.now().minus(Duration.ofSeconds(cooldownSeconds));
+                boolean hasRecentRejectedEntry = tradeOrderRepository.existsRecentOrder(
+                        intent.botId(),
+                        intent.strategyId(),
+                        intent.marketId(),
+                        intent.tokenId(),
+                        intent.side(),
+                        TradeOrderPhase.ENTRY,
+                        mode,
+                        COOLDOWN_STATUSES,
+                        cooldownSince
+                );
+                assessment.add(check(tradeId, orderId, mode, "LIVE_RETRY_COOLDOWN", !hasRecentRejectedEntry,
+                        hasRecentRejectedEntry ? "recent rejected entry" : "no recent rejected entry",
+                        cooldownSeconds + "s",
+                        hasRecentRejectedEntry ? "recent live entry attempt was rejected" : "live retry cooldown accepted"));
+            }
+
             boolean killSwitchOk = !properties.isKillSwitchEnabled();
             assessment.add(check(tradeId, orderId, mode, "KILL_SWITCH", killSwitchOk,
                     properties.isKillSwitchEnabled(), false,

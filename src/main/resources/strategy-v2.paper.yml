@@ -50,10 +50,10 @@ strategy-v2:
     - strategy-id: "cfg_v2_liquidity_momentum_paper"
       enabled: true
       profile: "paper_data_collection"
-      description: "Paper-only Strategy V2 liquidity and momentum confirmation."
+      description: "Strategy V2 liquidity and momentum confirmation for paper and tiny live validation."
       hypothesis: "Enter when one side has a real edge, fresh book, acceptable taker fill quality, and supportive short-horizon momentum; exit on fee-aware profit, stop loss, momentum failure, or time decay."
-      tags: ["paper", "v2", "liquidity", "momentum", "fee-aware"]
-      allowed-execution-modes: ["PAPER"]
+      tags: ["paper", "live-tiny", "v2", "liquidity", "momentum", "fee-aware"]
+      allowed-execution-modes: ["PAPER", "LIVE_TINY"]
 
       candidate-selection:
         type: "score"
@@ -87,7 +87,7 @@ strategy-v2:
               value: "0.025"
             - feature: "candidate.ask"
               op: "<="
-              value: "0.65"
+              value: "0.58"
             - feature: "candidate.bid"
               op: ">="
               value: "0.45"
@@ -99,7 +99,7 @@ strategy-v2:
               value: "0.10"
             - feature: "candidate.mid_move_5s"
               op: ">="
-              value: "0.012"
+              value: "0.010"
             - feature: "candidate.bid_move_3s"
               op: ">="
               value: "-0.004"
@@ -114,7 +114,7 @@ strategy-v2:
               value: true
             - feature: "candidate.taker_buy.worst_price"
               op: "<="
-              value: "0.65"
+              value: "0.60"
             - feature: "candidate.taker_buy.slippage"
               op: "<="
               value: "0.015"

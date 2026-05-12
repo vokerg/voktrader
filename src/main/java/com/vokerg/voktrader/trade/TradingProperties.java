@@ -27,6 +27,7 @@ public class TradingProperties {
     private long maxPriceAgeMs = 1500;
     private int maxOpenLiveTrades = 1;
     private int maxTradesPerMarket = 1;
+    private long liveRetryCooldownSeconds = 0;
     private int minSecondsToExpiry = 30;
     private BigDecimal paperFeeRate = new BigDecimal("0.072");
     private BigDecimal makerFeeRate = BigDecimal.ZERO;
@@ -99,6 +100,14 @@ public class TradingProperties {
 
     public void setMaxTradesPerMarket(int maxTradesPerMarket) {
         this.maxTradesPerMarket = maxTradesPerMarket;
+    }
+
+    public long getLiveRetryCooldownSeconds() {
+        return liveRetryCooldownSeconds;
+    }
+
+    public void setLiveRetryCooldownSeconds(long liveRetryCooldownSeconds) {
+        this.liveRetryCooldownSeconds = liveRetryCooldownSeconds;
     }
 
     public int getMinSecondsToExpiry() {

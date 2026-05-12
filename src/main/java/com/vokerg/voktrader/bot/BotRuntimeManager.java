@@ -38,6 +38,7 @@ public class BotRuntimeManager implements CommandLineRunner {
     private final MarketResolutionService marketResolutionService;
     private final StrategyRegistry strategyRegistry;
     private final TradingEventLogger eventLogger;
+    private final BotRuntimeProperties botRuntimeProperties;
 
     private final Map<Long, BotRuntime> runtimes = new ConcurrentHashMap<>();
 
@@ -76,6 +77,9 @@ public class BotRuntimeManager implements CommandLineRunner {
     public synchronized void reload(String reason) {
         Set<Long> desired = new HashSet<>();
         for (BotConfigEntity config : configRepository.findAllByEnabledTrueOrderByIdAsc()) {
+            if (!botRuntimeProperties.includes(config.getId())) {
+                continue;
+            }
             desired.add(config.getId());
             runtimes.computeIfAbsent(config.getId(), ignored -> {
                 BotRuntime runtime = newRuntime(config);
