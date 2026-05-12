@@ -32,9 +32,10 @@ public class BotApiController {
             @RequestParam(required = false) String marketFamily,
             @RequestParam(required = false) String asset,
             @RequestParam(required = false) String interval,
-            @RequestParam(required = false) String strategyId
+            @RequestParam(required = false) String strategyId,
+            @RequestParam(required = false) String subStrategyId
     ) {
-        return botApiService.list(status, enabled, marketFamily, asset, interval, strategyId);
+        return botApiService.list(status, enabled, marketFamily, asset, interval, strategyId, subStrategyId);
     }
 
     @GetMapping("/{id}")
@@ -50,6 +51,7 @@ public class BotApiController {
                 request.asset(),
                 request.interval(),
                 request.strategyId(),
+                request.subStrategyId(),
                 request.enabled()
         );
     }
@@ -62,8 +64,14 @@ public class BotApiController {
                 request.asset(),
                 request.interval(),
                 request.strategyId(),
+                request.subStrategyId(),
                 request.enabled()
         );
+    }
+
+    @PostMapping("/kill-all")
+    public List<BotConfigResponse> killAll() {
+        return botApiService.killAll();
     }
 
     @PostMapping("/{id}/pause")

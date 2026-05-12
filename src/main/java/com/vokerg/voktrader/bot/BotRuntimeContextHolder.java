@@ -20,6 +20,11 @@ public final class BotRuntimeContextHolder {
         return current().map(BotRuntimeContext::botId);
     }
 
+    public static Optional<String> currentSubStrategyId() {
+        return current().map(BotRuntimeContext::subStrategyId)
+                .filter(value -> value != null && !value.isBlank());
+    }
+
     public static Optional<LatestPriceState> currentLatestPriceState() {
         return current().map(BotRuntimeContext::latestPriceState);
     }

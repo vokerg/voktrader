@@ -26,6 +26,9 @@ public class BotConfigEntity {
     @Column(name = "strategy_id", nullable = false)
     private String strategyId;
 
+    @Column(name = "sub_strategy_id")
+    private String subStrategyId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private BotStatus status;
@@ -42,12 +45,13 @@ public class BotConfigEntity {
     protected BotConfigEntity() {
     }
 
-    public static BotConfigEntity create(String name, MarketFamily marketFamily, String strategyId, boolean enabled) {
+    public static BotConfigEntity create(String name, MarketFamily marketFamily, String strategyId, String subStrategyId, boolean enabled) {
         Instant now = Instant.now();
         BotConfigEntity entity = new BotConfigEntity();
         entity.name = name;
         entity.marketFamily = marketFamily;
         entity.strategyId = strategyId;
+        entity.subStrategyId = normalizeSubStrategyId(subStrategyId);
         entity.enabled = enabled;
         entity.status = enabled ? BotStatus.RUNNING : BotStatus.PAUSED;
         entity.createdAt = now;
@@ -55,12 +59,15 @@ public class BotConfigEntity {
         return entity;
     }
 
-    public void switchTo(MarketFamily marketFamily, String strategyId, Boolean enabled) {
+    public void switchTo(MarketFamily marketFamily, String strategyId, String subStrategyId, Boolean enabled) {
         if (marketFamily != null) {
             this.marketFamily = marketFamily;
         }
         if (strategyId != null && !strategyId.isBlank()) {
             this.strategyId = strategyId.trim();
+        }
+        if (subStrategyId != null) {
+            this.subStrategyId = normalizeSubStrategyId(subStrategyId);
         }
         if (enabled != null) {
             this.enabled = enabled;
@@ -98,6 +105,7 @@ public class BotConfigEntity {
     public boolean isEnabled() { return enabled; }
     public MarketFamily getMarketFamily() { return marketFamily; }
     public String getStrategyId() { return strategyId; }
+    public String getSubStrategyId() { return subStrategyId; }
     public BotStatus getStatus() { return status; }
     public String getLastError() { return lastError; }
     public Instant getCreatedAt() { return createdAt; }
@@ -107,6 +115,15 @@ public class BotConfigEntity {
     public void setEnabled(boolean enabled) { this.enabled = enabled; this.status = enabled ? BotStatus.RUNNING : BotStatus.PAUSED; touch(); }
     public void setMarketFamily(MarketFamily marketFamily) { this.marketFamily = marketFamily; touch(); }
     public void setStrategyId(String strategyId) { this.strategyId = strategyId; touch(); }
+    public void setSubStrategyId(String subStrategyId) { this.subStrategyId = normalizeSubStrategyId(subStrategyId); touch(); }
     public void setStatus(BotStatus status) { this.status = status; touch(); }
     public void setLastError(String lastError) { this.lastError = lastError; touch(); }
+
+    private static String normalizeSubStrategyId(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
+    }
 }

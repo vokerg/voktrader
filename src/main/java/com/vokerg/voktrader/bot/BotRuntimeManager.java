@@ -115,6 +115,12 @@ public class BotRuntimeManager implements CommandLineRunner {
         return List.copyOf(runtimes.values());
     }
 
+    public synchronized void stopAll(String reason) {
+        log.info("Stopping all bot runtimes: {}", reason);
+        runtimes.values().forEach(BotRuntime::shutdown);
+        runtimes.clear();
+    }
+
     private BotRuntime newRuntime(BotConfigEntity config) {
         return new BotRuntime(
                 config,

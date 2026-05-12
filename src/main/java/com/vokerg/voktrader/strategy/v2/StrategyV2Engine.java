@@ -22,6 +22,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Locale;
 
 @Slf4j
 @Component
@@ -105,7 +106,7 @@ public class StrategyV2Engine implements TradingStrategy {
             return;
         }
         ExecutionMode mode = tradingProperties.getMode() == null ? ExecutionMode.PAPER : tradingProperties.getMode();
-        for (StrategyV2Properties.Strategy strategy : registry.activeStrategies()) {
+        for (StrategyV2Properties.Strategy strategy : strategiesForCurrentBot()) {
             if (!modeAllowed(strategy, mode)) {
                 continue;
             }
@@ -212,6 +213,19 @@ public class StrategyV2Engine implements TradingStrategy {
     private boolean modeAllowed(StrategyV2Properties.Strategy strategy, ExecutionMode mode) {
         List<String> allowed = strategy.getAllowedExecutionModes();
         return allowed == null || allowed.isEmpty() || allowed.stream().anyMatch(value -> value.equalsIgnoreCase(mode.name()));
+    }
+
+    private List<StrategyV2Properties.Strategy> strategiesForCurrentBot() {
+        String subStrategyId = BotRuntimeContextHolder.currentSubStrategyId().orElse(null);
+        List<StrategyV2Properties.Strategy> active = registry.activeStrategies();
+        if (subStrategyId == null || subStrategyId.isBlank()) {
+            return active;
+        }
+        String normalized = subStrategyId.trim().toLowerCase(Locale.ROOT);
+        return active.stream()
+                .filter(strategy -> strategy.getStrategyId() != null
+                        && strategy.getStrategyId().toLowerCase(Locale.ROOT).equals(normalized))
+                .toList();
     }
 
     private boolean midSumSane(StrategyMarketView marketView) {

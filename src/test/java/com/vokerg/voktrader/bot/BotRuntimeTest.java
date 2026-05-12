@@ -26,6 +26,7 @@ class BotRuntimeTest {
                 "test-bot",
                 MarketFamily.BTC_5M,
                 "cost-aware-momentum-paper",
+                null,
                 true
         );
         GammaClient gammaClient = mock(GammaClient.class);
@@ -75,6 +76,7 @@ class BotRuntimeTest {
                 "test-bot",
                 MarketFamily.BTC_5M,
                 "cost-aware-momentum-paper",
+                null,
                 true
         );
         GammaClient gammaClient = mock(GammaClient.class);

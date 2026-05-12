@@ -1,0 +1,854 @@
+strategy-v2:
+  schema-version: '2.0'
+  engine:
+    enabled: true
+    active-strategy-ids:
+    - SNIPER_FOK_A
+    - ANTI_CHOP_FOK_A
+    - MDI_FOK_A
+    - FLIP_FOK_A
+    - RP_FOK_B
+    tick-ms: 1000
+    decision-mode: single_market_single_position
+    decimal-scale: 8
+    require-complete-up-down-price: true
+    require-mid-sum-sane: true
+    min-mid-sum: '0.985'
+    max-mid-sum: '1.015'
+    default-profile: deep_research_paper
+    safety:
+      kill-switch-respected: true
+      live-requires-explicit-allowlist: true
+      block-live-maker-without-reconciliation: true
+      block-unknown-order-type: true
+      block-missing-fee-model: true
+      block-missing-book-for-book-rules: true
+  defaults:
+    deep_research_paper:
+      data:
+        max-price-age-ms: 1200
+        max-book-age-ms: 1200
+        warmup-seconds: 20
+        min-samples-per-window: 3
+      sizing:
+        paper-size-usd: '1.00'
+        live-size-usd: '5.00'
+        max-order-usd: '1.00'
+        min-order-usd: '1.00'
+        price-tick: '0.01'
+        round-shares-scale: 4
+      fees:
+        maker-fee-rate: '0'
+        taker-fee-rate: '0.072'
+        estimate-live-fees-when-missing: true
+      execution:
+        default-entry-order-type: FOK
+        default-exit-order-type: FAK
+        default-entry-liquidity-role: taker
+        post-only: false
+        allow-partial-fill: false
+      simulation:
+        fill-model: taker_book_walk
+        fee-model: configured
+        taker-fee-rate: '0.072'
+        maker-fee-rate: '0'
+  strategies:
+  - strategy-id: SNIPER_FOK_A
+    enabled: true
+    profile: deep_research_paper
+    description: Extreme alignment sniper FOK
+    hypothesis: Trade rarely, only when mid-edge, short momentum, book pressure, and slippage-adjusted cost all agree.
+    tags:
+    - deep-research
+    - sniper
+    - alignment
+    - fok
+    - paper
+    allowed-execution-modes:
+    - PAPER
+    candidate-selection:
+      type: score
+      candidates:
+      - Up
+      - Down
+      choose: highest_score
+      min-score: '0.050'
+      score:
+        Up:
+          expression: (candidate.mid_edge - candidate.taker_buy.slippage - ((candidate.taker_buy.fee_usd / max(candidate.taker_buy.shares, 1)) * 2)) * 2.2 + candidate.mid_move_5s * 1.8 + candidate.mid_move_10s * 1.2 + candidate.bid_move_3s * 1.3 + candidate.depth_imbalance_0_03 * 0.08 + candidate.microprice_edge * 1.1 - candidate.spread * 1.4 - candidate.volatility_10s * 0.8
+        Down:
+          expression: (candidate.mid_edge - candidate.taker_buy.slippage - ((candidate.taker_buy.fee_usd / max(candidate.taker_buy.shares, 1)) * 2)) * 2.2 + candidate.mid_move_5s * 1.8 + candidate.mid_move_10s * 1.2 + candidate.bid_move_3s * 1.3 + candidate.depth_imbalance_0_03 * 0.08 + candidate.microprice_edge * 1.1 - candidate.spread * 1.4 - candidate.volatility_10s * 0.8
+    entry:
+      enabled: true
+      rule-id: sniper-fok-a-entry
+      when:
+        all:
+        - feature: market.accepting_orders
+          op: ==
+          value: true
+        - feature: market.seconds_to_expiry
+          op: between
+          values:
+          - '30'
+          - '180'
+        - feature: candidate.mid
+          op: between
+          values:
+          - '0.60'
+          - '0.88'
+        - feature: candidate.price_age_ms
+          op: <=
+          value: '800'
+        - feature: candidate.book_age_ms
+          op: <=
+          value: '800'
+        - feature: candidate.spread
+          op: <=
+          value: '0.012'
+        - feature: candidate.taker_buy.fillable
+          op: ==
+          value: true
+        - feature: candidate.taker_buy.slippage
+          op: <=
+          value: '0.005'
+        - feature: candidate.mid_edge
+          op: '>='
+          value: '0.050'
+        - feature: candidate.mid_move_5s
+          op: '>='
+          value: '0.015'
+        - feature: candidate.mid_move_10s
+          op: '>='
+          value: '0.025'
+        - feature: candidate.bid_move_3s
+          op: '>='
+          value: '0.006'
+        - feature: candidate.microprice_edge
+          op: '>='
+          value: '0.005'
+        - feature: candidate.depth_imbalance_0_03
+          op: '>='
+          value: '0.100'
+        - feature: candidate.volatility_10s
+          op: <=
+          value: '0.030'
+        - feature: candidate.mid_edge - candidate.taker_buy.slippage - ((candidate.taker_buy.fee_usd / max(candidate.taker_buy.shares, 1)) * 2)
+          op: '>='
+          value: '0.022'
+      action:
+        side: BUY
+        liquidity-role: taker
+        order-type: FOK
+        post-only: false
+        price:
+          source: best_ask
+          tick-size: '0.01'
+          rounding: none
+          min-price: '0.15'
+          max-price: '0.95'
+        size:
+          type: fixed_usd
+          paper-usd: '1.00'
+          min-usd: '1.00'
+          max-usd: '1.00'
+        fill-constraints:
+          allow-partial-fill: false
+          min-fill-ratio: '1.0'
+          max-slippage: '0.005'
+        reason-template: SNIPER_FOK_A {{candidate.outcome}}
+    exit:
+      enabled: true
+      rule-id: sniper-fok-a-exit
+      default-action: HOLD
+      rules:
+      - name: final-flush
+        action: SELL
+        order-type: FAK
+        liquidity-role: taker
+        when:
+          feature: market.seconds_to_expiry
+          op: <=
+          value: '10'
+      - name: alignment-breaks
+        action: SELL
+        order-type: FAK
+        liquidity-role: taker
+        when:
+          any:
+          - feature: candidate.mid_move_5s
+            op: <=
+            value: '-0.008'
+          - feature: candidate.depth_imbalance_0_03
+            op: <=
+            value: '-0.060'
+    simulation:
+      fill-model: taker_book_walk
+      fee-model: configured
+      taker-fee-rate: '0.072'
+      maker-fee-rate: '0'
+    diagnostics:
+      record-rejections: true
+      record-feature-snapshot-on-entry: true
+      record-candidate-scores: true
+  - strategy-id: ANTI_CHOP_FOK_A
+    enabled: true
+    profile: deep_research_paper
+    description: Regime-filtered momentum FOK
+    hypothesis: Use momentum only when directional movement clearly exceeds the recent noise regime.
+    tags:
+    - deep-research
+    - momentum
+    - anti-chop
+    - fok
+    - paper
+    allowed-execution-modes:
+    - PAPER
+    - LIVE_TINY
+    candidate-selection:
+      type: score
+      candidates:
+      - Up
+      - Down
+      choose: highest_score
+      min-score: '0.028'
+      score:
+        Up:
+          expression: (candidate.mid_edge - candidate.taker_buy.slippage - ((candidate.taker_buy.fee_usd / max(candidate.taker_buy.shares, 1)) * 2)) * 1.7 + (candidate.mid_move_10s - candidate.volatility_10s) * 1.2 + (candidate.bid_move_5s - opposite.bid_move_5s) * 1.0 + candidate.depth_imbalance_0_03 * 0.06 + candidate.microprice_edge * 0.8 - candidate.spread * 1.0
+        Down:
+          expression: (candidate.mid_edge - candidate.taker_buy.slippage - ((candidate.taker_buy.fee_usd / max(candidate.taker_buy.shares, 1)) * 2)) * 1.7 + (candidate.mid_move_10s - candidate.volatility_10s) * 1.2 + (candidate.bid_move_5s - opposite.bid_move_5s) * 1.0 + candidate.depth_imbalance_0_03 * 0.06 + candidate.microprice_edge * 0.8 - candidate.spread * 1.0
+    entry:
+      enabled: true
+      rule-id: anti-chop-fok-a-entry
+      when:
+        all:
+        - feature: market.accepting_orders
+          op: ==
+          value: true
+        - feature: market.mid_sum
+          op: between
+          values:
+          - '0.985'
+          - '1.015'
+        - feature: market.seconds_to_expiry
+          op: between
+          values:
+          - '45'
+          - '240'
+        - feature: candidate.mid
+          op: between
+          values:
+          - '0.42'
+          - '0.82'
+        - feature: candidate.price_age_ms
+          op: <=
+          value: '1200'
+        - feature: candidate.book_age_ms
+          op: <=
+          value: '1200'
+        - feature: candidate.spread
+          op: <=
+          value: '0.020'
+        - feature: candidate.taker_buy.fillable
+          op: ==
+          value: true
+        - feature: candidate.taker_buy.slippage
+          op: <=
+          value: '0.008'
+        - feature: candidate.mid_move_5s
+          op: '>='
+          value: '0.008'
+        - feature: candidate.mid_move_10s
+          op: '>='
+          value: '0.014'
+        - feature: candidate.bid_move_3s
+          op: '>='
+          value: '0.003'
+        - feature: candidate.depth_imbalance_0_03
+          op: '>='
+          value: '0.040'
+        - feature: candidate.microprice_edge
+          op: '>='
+          value: '0.002'
+        - feature: candidate.volatility_10s
+          op: <=
+          value: '0.045'
+        - feature: candidate.mid_move_10s - candidate.volatility_10s
+          op: '>='
+          value: '-0.004'
+        - feature: candidate.bid_move_5s - opposite.bid_move_5s
+          op: '>='
+          value: '0.004'
+        - feature: candidate.mid_edge - candidate.taker_buy.slippage - ((candidate.taker_buy.fee_usd / max(candidate.taker_buy.shares, 1)) * 2)
+          op: '>='
+          value: '0.013'
+      action:
+        side: BUY
+        liquidity-role: taker
+        order-type: FOK
+        post-only: false
+        price:
+          source: best_ask
+          tick-size: '0.01'
+          rounding: none
+          min-price: '0.08'
+          max-price: '0.90'
+        size:
+          type: fixed_usd
+          paper-usd: '1.00'
+          min-usd: '1.00'
+          max-usd: '1.00'
+        fill-constraints:
+          allow-partial-fill: false
+          min-fill-ratio: '1.0'
+          max-slippage: '0.008'
+        reason-template: ANTI_CHOP_FOK_A {{candidate.outcome}}
+    exit:
+      enabled: true
+      rule-id: anti-chop-fok-a-exit
+      default-action: HOLD
+      rules:
+      - name: trend-collapses
+        action: SELL
+        order-type: FAK
+        liquidity-role: taker
+        when:
+          any:
+          - feature: candidate.mid_move_10s - candidate.volatility_10s
+            op: <=
+            value: '-0.010'
+          - feature: candidate.bid_move_5s - opposite.bid_move_5s
+            op: <=
+            value: '-0.004'
+      - name: final-flush
+        action: SELL
+        order-type: FAK
+        liquidity-role: taker
+        when:
+          feature: market.seconds_to_expiry
+          op: <=
+          value: '18'
+    simulation:
+      fill-model: taker_book_walk
+      fee-model: configured
+      taker-fee-rate: '0.072'
+      maker-fee-rate: '0'
+    diagnostics:
+      record-rejections: true
+      record-feature-snapshot-on-entry: true
+      record-candidate-scores: true
+  - strategy-id: MDI_FOK_A
+    enabled: true
+    profile: deep_research_paper
+    description: Microprice/depth leader FOK
+    hypothesis: Enter when order-book pressure leads before a large visible midpoint move.
+    tags:
+    - deep-research
+    - microprice
+    - imbalance
+    - fok
+    - paper
+    allowed-execution-modes:
+    - PAPER
+    candidate-selection:
+      type: score
+      candidates:
+      - Up
+      - Down
+      choose: highest_score
+      min-score: '0.022'
+      score:
+        Up:
+          expression: (candidate.microprice_edge * 1.6) + (candidate.depth_imbalance_0_03 * 0.10) + (candidate.bid_move_3s * 0.9) + (candidate.mid_move_5s * 0.6) - (candidate.spread * 1.2) - (candidate.volatility_10s * 0.7)
+        Down:
+          expression: (candidate.microprice_edge * 1.6) + (candidate.depth_imbalance_0_03 * 0.10) + (candidate.bid_move_3s * 0.9) + (candidate.mid_move_5s * 0.6) - (candidate.spread * 1.2) - (candidate.volatility_10s * 0.7)
+    entry:
+      enabled: true
+      rule-id: mdi-fok-a-entry
+      when:
+        all:
+        - feature: market.accepting_orders
+          op: ==
+          value: true
+        - feature: market.seconds_to_expiry
+          op: between
+          values:
+          - '50'
+          - '240'
+        - feature: candidate.mid
+          op: between
+          values:
+          - '0.30'
+          - '0.72'
+        - feature: candidate.price_age_ms
+          op: <=
+          value: '1000'
+        - feature: candidate.book_age_ms
+          op: <=
+          value: '1000'
+        - feature: candidate.spread
+          op: <=
+          value: '0.015'
+        - feature: candidate.taker_buy.fillable
+          op: ==
+          value: true
+        - feature: candidate.taker_buy.slippage
+          op: <=
+          value: '0.008'
+        - feature: candidate.microprice_edge
+          op: '>='
+          value: '0.006'
+        - feature: candidate.depth_imbalance_0_03
+          op: '>='
+          value: '0.180'
+        - feature: candidate.bid_depth_within_0_03
+          op: '>='
+          value: '10.0'
+        - feature: candidate.bid_move_3s
+          op: '>='
+          value: '0.001'
+        - feature: candidate.volatility_10s
+          op: <=
+          value: '0.035'
+      action:
+        side: BUY
+        liquidity-role: taker
+        order-type: FOK
+        post-only: false
+        price:
+          source: best_ask
+          tick-size: '0.01'
+          rounding: none
+          min-price: '0.05'
+          max-price: '0.80'
+        size:
+          type: fixed_usd
+          paper-usd: '1.00'
+          min-usd: '1.00'
+          max-usd: '1.00'
+        fill-constraints:
+          allow-partial-fill: false
+          min-fill-ratio: '1.0'
+          max-slippage: '0.008'
+        reason-template: MDI_FOK_A {{candidate.outcome}}
+    exit:
+      enabled: true
+      rule-id: mdi-fok-a-exit
+      default-action: HOLD
+      rules:
+      - name: book-pressure-vanishes
+        action: SELL
+        order-type: FAK
+        liquidity-role: taker
+        when:
+          any:
+          - feature: candidate.microprice_edge
+            op: <=
+            value: '0.000'
+          - feature: candidate.depth_imbalance_0_03
+            op: <=
+            value: '0.000'
+      - name: final-flush
+        action: SELL
+        order-type: FAK
+        liquidity-role: taker
+        when:
+          feature: market.seconds_to_expiry
+          op: <=
+          value: '18'
+    simulation:
+      fill-model: taker_book_walk
+      fee-model: configured
+      taker-fee-rate: '0.072'
+      maker-fee-rate: '0'
+    diagnostics:
+      record-rejections: true
+      record-feature-snapshot-on-entry: true
+      record-candidate-scores: true
+  - strategy-id: FLIP_FOK_A
+    enabled: true
+    profile: deep_research_paper
+    description: Flip catcher FOK
+    hypothesis: Buy the side leaving the 50/50 zone while the opposite side weakens.
+    tags:
+    - deep-research
+    - flip
+    - reversal
+    - fok
+    - paper
+    allowed-execution-modes: ["PAPER", "LIVE_TINY"]
+    candidate-selection:
+      type: score
+      candidates:
+      - Up
+      - Down
+      choose: highest_score
+      min-score: '0.025'
+      score:
+        Up:
+          expression: (candidate.mid_move_5s - opposite.mid_move_5s) * 1.7 + candidate.bid_move_3s * 1.1 + candidate.microprice_edge * 0.8 + candidate.depth_imbalance_0_03 * 0.05 - candidate.spread * 1.0 - candidate.volatility_10s * 0.6
+        Down:
+          expression: (candidate.mid_move_5s - opposite.mid_move_5s) * 1.7 + candidate.bid_move_3s * 1.1 + candidate.microprice_edge * 0.8 + candidate.depth_imbalance_0_03 * 0.05 - candidate.spread * 1.0 - candidate.volatility_10s * 0.6
+    entry:
+      enabled: true
+      rule-id: flip-fok-a-entry
+      when:
+        all:
+        - feature: market.accepting_orders
+          op: ==
+          value: true
+        - feature: market.seconds_to_expiry
+          op: between
+          values:
+          - '45'
+          - '220'
+        - feature: candidate.mid
+          op: between
+          values:
+          - '0.46'
+          - '0.62'
+        - feature: candidate.spread
+          op: <=
+          value: '0.020'
+        - feature: candidate.price_age_ms
+          op: <=
+          value: '1200'
+        - feature: candidate.book_age_ms
+          op: <=
+          value: '1200'
+        - feature: candidate.taker_buy.fillable
+          op: ==
+          value: true
+        - feature: candidate.taker_buy.slippage
+          op: <=
+          value: '0.009'
+        - feature: candidate.mid_move_5s
+          op: '>='
+          value: '0.010'
+        - feature: candidate.bid_move_3s
+          op: '>='
+          value: '0.005'
+        - feature: opposite.mid_move_5s
+          op: <=
+          value: '-0.006'
+        - feature: opposite.bid_move_5s
+          op: <=
+          value: '-0.004'
+        - feature: candidate.microprice_edge
+          op: '>='
+          value: '0.003'
+        - feature: candidate.depth_imbalance_0_03
+          op: '>='
+          value: '0.050'
+        - feature: candidate.volatility_10s
+          op: <=
+          value: '0.050'
+      action:
+        side: BUY
+        liquidity-role: taker
+        order-type: FOK
+        post-only: false
+        price:
+          source: best_ask
+          tick-size: '0.01'
+          rounding: none
+          min-price: '0.08'
+          max-price: '0.80'
+        size:
+          type: fixed_usd
+          paper-usd: '1.00'
+          min-usd: '1.00'
+          max-usd: '1.00'
+        fill-constraints:
+          allow-partial-fill: false
+          min-fill-ratio: '1.0'
+          max-slippage: '0.009'
+        reason-template: FLIP_FOK_A {{candidate.outcome}}
+    exit:
+      enabled: true
+      rule-id: flip-fok-a-exit
+      default-action: HOLD
+      rules:
+      - name: flip-fades
+        action: SELL
+        order-type: FAK
+        liquidity-role: taker
+        when:
+          any:
+          - feature: candidate.mid_move_5s
+            op: <=
+            value: '-0.008'
+          - feature: opposite.mid_move_5s
+            op: '>='
+            value: '0.004'
+      - name: final-flush
+        action: SELL
+        order-type: FAK
+        liquidity-role: taker
+        when:
+          feature: market.seconds_to_expiry
+          op: <=
+          value: '18'
+    simulation:
+      fill-model: taker_book_walk
+      fee-model: configured
+      taker-fee-rate: '0.072'
+      maker-fee-rate: '0'
+    diagnostics:
+      record-rejections: true
+      record-feature-snapshot-on-entry: true
+      record-candidate-scores: true
+  - strategy-id: RP_FOK_B
+    enabled: true
+    profile: deep_research_paper
+    description: Earlier-window resolution pressure FOK
+    hypothesis: Enter resolution pressure earlier, accepting slightly more noise for more trades.
+    tags:
+    - deep-research
+    - resolution
+    - fok
+    - paper
+    allowed-execution-modes:
+    - PAPER
+    - LIVE_TINY
+    candidate-selection:
+      type: score
+      candidates:
+      - Up
+      - Down
+      choose: highest_score
+      min-score: '0.030'
+      score:
+        Up:
+          expression: (candidate.mid_edge - candidate.taker_buy.slippage - ((candidate.taker_buy.fee_usd / max(candidate.taker_buy.shares, 1)) * 2)) * 1.7 + candidate.mid_move_5s * 1.4 + candidate.bid_move_3s * 1.2 + candidate.depth_imbalance_0_03 * 0.06 + candidate.microprice_edge * 0.8 - candidate.spread * 1.1 - (market.seconds_to_expiry * 0.00003)
+        Down:
+          expression: (candidate.mid_edge - candidate.taker_buy.slippage - ((candidate.taker_buy.fee_usd / max(candidate.taker_buy.shares, 1)) * 2)) * 1.7 + candidate.mid_move_5s * 1.4 + candidate.bid_move_3s * 1.2 + candidate.depth_imbalance_0_03 * 0.06 + candidate.microprice_edge * 0.8 - candidate.spread * 1.1 - (market.seconds_to_expiry * 0.00003)
+    entry:
+      enabled: true
+      rule-id: rp-fok-b-entry
+      when:
+        all:
+        - feature: market.accepting_orders
+          op: ==
+          value: true
+        - feature: market.seconds_to_expiry
+          op: between
+          values:
+          - '45'
+          - '150'
+        - feature: candidate.price_age_ms
+          op: <=
+          value: '1000'
+        - feature: candidate.book_age_ms
+          op: <=
+          value: '1000'
+        - feature: candidate.mid
+          op: between
+          values:
+          - '0.54'
+          - '0.88'
+        - feature: candidate.spread
+          op: <=
+          value: '0.018'
+        - feature: candidate.taker_buy.fillable
+          op: ==
+          value: true
+        - feature: candidate.taker_buy.slippage
+          op: <=
+          value: '0.007'
+        - feature: candidate.mid_edge
+          op: '>='
+          value: '0.040'
+        - feature: candidate.mid_move_5s
+          op: '>='
+          value: '0.012'
+        - feature: candidate.bid_move_3s
+          op: '>='
+          value: '0.006'
+        - feature: candidate.depth_imbalance_0_03
+          op: '>='
+          value: '0.060'
+        - feature: candidate.mid_edge - candidate.taker_buy.slippage - ((candidate.taker_buy.fee_usd / max(candidate.taker_buy.shares, 1)) * 2)
+          op: '>='
+          value: '0.016'
+      action:
+        side: BUY
+        liquidity-role: taker
+        order-type: FOK
+        post-only: false
+        price:
+          source: best_ask
+          tick-size: '0.01'
+          rounding: none
+          min-price: '0.12'
+          max-price: '0.92'
+        size:
+          type: fixed_usd
+          paper-usd: '1.00'
+          min-usd: '1.00'
+          max-usd: '1.00'
+        fill-constraints:
+          allow-partial-fill: false
+          min-fill-ratio: '1.0'
+          max-slippage: '0.007'
+        reason-template: RP_FOK_B {{candidate.outcome}}
+    exit:
+      enabled: true
+      rule-id: rp-fok-b-exit
+      default-action: HOLD
+      rules:
+      - name: final-flush
+        action: SELL
+        order-type: FAK
+        liquidity-role: taker
+        when:
+          feature: market.seconds_to_expiry
+          op: <=
+          value: '10'
+      - name: pressure-break
+        action: SELL
+        order-type: FAK
+        liquidity-role: taker
+        when:
+          any:
+          - feature: candidate.mid_move_5s
+            op: <=
+            value: '-0.010'
+          - feature: candidate.depth_imbalance_0_03
+            op: <=
+            value: '-0.090'
+    simulation:
+      fill-model: taker_book_walk
+      fee-model: configured
+      taker-fee-rate: '0.072'
+      maker-fee-rate: '0'
+    diagnostics:
+      record-rejections: true
+      record-feature-snapshot-on-entry: true
+      record-candidate-scores: true
+  - strategy-id: MK_GTC_B
+    enabled: false
+    profile: deep_research_paper
+    description: Passive maker fee-edge GTC
+    hypothesis: Rest at bid only when the book is stable enough that spread capture and zero maker fee may outweigh missed fills.
+    tags:
+    - deep-research
+    - maker
+    - passive
+    - fee-edge
+    - paper
+    - disabled
+    allowed-execution-modes:
+    - PAPER
+    candidate-selection:
+      type: score
+      candidates:
+      - Up
+      - Down
+      choose: highest_score
+      min-score: '0.012'
+      score:
+        Up:
+          expression: (candidate.microprice_edge * 1.0) + (candidate.depth_imbalance_0_03 * 0.05) - (candidate.volatility_10s * 0.8) - (candidate.spread * 0.5)
+        Down:
+          expression: (candidate.microprice_edge * 1.0) + (candidate.depth_imbalance_0_03 * 0.05) - (candidate.volatility_10s * 0.8) - (candidate.spread * 0.5)
+    entry:
+      enabled: true
+      rule-id: mk-gtc-b-entry
+      when:
+        all:
+        - feature: market.accepting_orders
+          op: ==
+          value: true
+        - feature: market.seconds_to_expiry
+          op: between
+          values:
+          - '70'
+          - '240'
+        - feature: candidate.mid
+          op: between
+          values:
+          - '0.35'
+          - '0.68'
+        - feature: candidate.spread
+          op: between
+          values:
+          - '0.010'
+          - '0.030'
+        - feature: candidate.price_age_ms
+          op: <=
+          value: '1000'
+        - feature: candidate.book_age_ms
+          op: <=
+          value: '1000'
+        - feature: candidate.microprice_edge
+          op: '>='
+          value: '0.002'
+        - feature: candidate.depth_imbalance_0_03
+          op: '>='
+          value: '0.030'
+        - feature: candidate.mid_move_5s
+          op: between
+          values:
+          - '-0.005'
+          - '0.015'
+        - feature: candidate.volatility_10s
+          op: <=
+          value: '0.025'
+      action:
+        side: BUY
+        liquidity-role: maker
+        order-type: GTC
+        post-only: true
+        price:
+          source: best_bid
+          tick-size: '0.01'
+          rounding: none
+          min-price: '0.05'
+          max-price: '0.80'
+          do-not-cross-spread: true
+        size:
+          type: fixed_usd
+          paper-usd: '1.00'
+          min-usd: '1.00'
+          max-usd: '1.00'
+        maker-lifecycle:
+          cancel-after-seconds: 6
+          replace-if-best-bid-moves-ticks: 1
+          max-reposts: 1
+          require-reconciliation: true
+        reason-template: MK_GTC_B {{candidate.outcome}}
+    exit:
+      enabled: true
+      rule-id: mk-gtc-b-exit
+      default-action: HOLD
+      rules:
+      - name: maker-position-breaks
+        action: SELL
+        order-type: FAK
+        liquidity-role: taker
+        when:
+          any:
+          - feature: candidate.microprice_edge
+            op: <=
+            value: '-0.001'
+          - feature: candidate.depth_imbalance_0_03
+            op: <=
+            value: '-0.040'
+          - feature: market.seconds_to_expiry
+            op: <=
+            value: '18'
+    simulation:
+      fill-model: maker_queue_pessimistic
+      fee-model: configured
+      taker-fee-rate: '0.072'
+      maker-fee-rate: '0'
+    diagnostics:
+      record-rejections: true
+      record-feature-snapshot-on-entry: true
+      record-candidate-scores: true
+    entry-order-management:
+      max-pending-seconds: 6
+      cancel-if-signal-invalid: true
+      cancel-if-book-stale: true
+      cancel-if-price-moves-away: true
+      allow-reprice: false

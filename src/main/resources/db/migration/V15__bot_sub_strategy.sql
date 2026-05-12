@@ -1,0 +1,2 @@
+ALTER TABLE IF EXISTS bot_configs
+    ADD COLUMN IF NOT EXISTS sub_strategy_id VARCHAR(255);

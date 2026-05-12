@@ -27,7 +27,7 @@ public class BotConfigService {
         }
         MarketFamily family = MarketFamily.fromCodes("BTC", marketSelectionProperties.intervalOrDefault());
         String strategyId = strategyProperties.activeOrDefault();
-        BotConfigEntity defaultBot = BotConfigEntity.create(DEFAULT_BOT_NAME, family, strategyId, true);
+        BotConfigEntity defaultBot = BotConfigEntity.create(DEFAULT_BOT_NAME, family, strategyId, null, true);
         repository.save(defaultBot);
         log.info("Seeded default bot config: name={} family={} strategy={}", defaultBot.getName(), family, strategyId);
     }
@@ -38,8 +38,9 @@ public class BotConfigService {
     }
 
     @Transactional(readOnly = true)
-    public List<BotConfigEntity> list(BotStatus status, Boolean enabled, MarketFamily marketFamily, String strategyId) {
+    public List<BotConfigEntity> list(BotStatus status, Boolean enabled, MarketFamily marketFamily, String strategyId, String subStrategyId) {
         String normalizedStrategyId = strategyId == null ? null : strategyId.trim().toLowerCase(Locale.ROOT);
+        String normalizedSubStrategyId = subStrategyId == null ? null : subStrategyId.trim().toLowerCase(Locale.ROOT);
         return repository.findAllByOrderByIdAsc().stream()
                 .filter(bot -> status == null || bot.getStatus() == status)
                 .filter(bot -> enabled == null || bot.isEnabled() == enabled)
@@ -47,6 +48,9 @@ public class BotConfigService {
                 .filter(bot -> normalizedStrategyId == null
                         || normalizedStrategyId.isBlank()
                         || strategyIdMatches(bot, normalizedStrategyId))
+                .filter(bot -> normalizedSubStrategyId == null
+                        || normalizedSubStrategyId.isBlank()
+                        || subStrategyIdMatches(bot, normalizedSubStrategyId))
                 .toList();
     }
 
@@ -55,30 +59,43 @@ public class BotConfigService {
                 && bot.getStrategyId().toLowerCase(Locale.ROOT).equals(normalizedStrategyId);
     }
 
+    private boolean subStrategyIdMatches(BotConfigEntity bot, String normalizedSubStrategyId) {
+        return bot.getSubStrategyId() != null
+                && bot.getSubStrategyId().toLowerCase(Locale.ROOT).equals(normalizedSubStrategyId);
+    }
+
     @Transactional
-    public BotConfigEntity create(String name, MarketFamily family, String strategyId, boolean enabled) {
+    public BotConfigEntity create(String name, MarketFamily family, String strategyId, String subStrategyId, boolean enabled) {
         String normalizedName = name == null ? null : name.trim();
         return repository.findByName(normalizedName)
                 .map(existing -> {
-                    existing.switchTo(family, strategyId, enabled);
+                    existing.switchTo(family, strategyId, subStrategyId, enabled);
                     log.info(
-                            "Updated existing bot config during create: id={} name={} family={} strategy={} enabled={}",
+                            "Updated existing bot config during create: id={} name={} family={} strategy={} subStrategy={} enabled={}",
                             existing.getId(),
                             existing.getName(),
                             existing.getMarketFamily(),
                             existing.getStrategyId(),
+                            existing.getSubStrategyId(),
                             existing.isEnabled()
                     );
                     return repository.save(existing);
                 })
-                .orElseGet(() -> repository.save(BotConfigEntity.create(normalizedName, family, strategyId, enabled)));
+                .orElseGet(() -> repository.save(BotConfigEntity.create(normalizedName, family, strategyId, subStrategyId, enabled)));
     }
 
     @Transactional
-    public BotConfigEntity switchConfig(Long id, MarketFamily family, String strategyId, Boolean enabled) {
+    public BotConfigEntity switchConfig(Long id, MarketFamily family, String strategyId, String subStrategyId, Boolean enabled) {
         BotConfigEntity bot = getRequired(id);
-        bot.switchTo(family, strategyId, enabled);
+        bot.switchTo(family, strategyId, subStrategyId, enabled);
         return repository.save(bot);
+    }
+
+    @Transactional
+    public List<BotConfigEntity> pauseAll() {
+        List<BotConfigEntity> bots = repository.findAllByOrderByIdAsc();
+        bots.forEach(BotConfigEntity::pause);
+        return repository.saveAll(bots);
     }
 
     @Transactional

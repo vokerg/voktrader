@@ -76,6 +76,7 @@ public class BotRuntime {
                 botId(),
                 config.getMarketFamily(),
                 config.getStrategyId(),
+                config.getSubStrategyId(),
                 trackedMarketState,
                 currentLatestPriceState(),
                 currentOrderBookState()
@@ -91,14 +92,14 @@ public class BotRuntime {
     }
 
     public void start(String reason) {
-        log.info("{}Starting bot runtime id={} name={} family={} strategy={} reason={}{}",
-                LogColors.MARKET, botId(), config.getName(), config.getMarketFamily(), config.getStrategyId(), reason, LogColors.RESET);
+        log.info("{}Starting bot runtime id={} name={} family={} strategy={} subStrategy={} reason={}{}",
+                LogColors.MARKET, botId(), config.getName(), config.getMarketFamily(), config.getStrategyId(), config.getSubStrategyId(), reason, LogColors.RESET);
         eventLogger.market(
                 "BOT_RUNTIME_STARTED",
                 botId(),
                 null,
                 reason,
-                TelemetryData.data("name", config.getName(), "family", config.getMarketFamily(), "strategyId", config.getStrategyId()),
+                TelemetryData.data("name", config.getName(), "family", config.getMarketFamily(), "strategyId", config.getStrategyId(), "subStrategyId", config.getSubStrategyId()),
                 true
         );
         rollToNextMarket(reason);

@@ -26,13 +26,13 @@ public class BotApiService {
         this.runtimeManager = runtimeManager;
     }
 
-    public List<BotConfigResponse> list(String status, Boolean enabled, String marketFamily, String asset, String interval, String strategyId) {
+    public List<BotConfigResponse> list(String status, Boolean enabled, String marketFamily, String asset, String interval, String strategyId, String subStrategyId) {
         BotStatus parsedStatus = parseStatus(status);
         MarketFamily parsedFamily = marketFamily == null && asset == null && interval == null
                 ? null
                 : MarketFamily.fromNameOrCodes(marketFamily, asset, interval);
         Set<Long> activeRuntimeIds = activeRuntimeIds();
-        return configService.list(parsedStatus, enabled, parsedFamily, strategyId).stream()
+        return configService.list(parsedStatus, enabled, parsedFamily, strategyId, subStrategyId).stream()
                 .map(bot -> BotConfigResponse.from(bot, activeRuntimeIds.contains(bot.getId())))
                 .toList();
     }
@@ -46,24 +46,32 @@ public class BotApiService {
                 .orElseThrow(() -> new IllegalArgumentException("Unknown bot id: " + id));
     }
 
-    public BotConfigResponse create(String name, String marketFamily, String asset, String interval, String strategyId, Boolean enabled) {
+    public BotConfigResponse create(String name, String marketFamily, String asset, String interval, String strategyId, String subStrategyId, Boolean enabled) {
         MarketFamily family = MarketFamily.fromNameOrCodes(marketFamily, asset, interval);
         boolean actualEnabled = enabled == null || enabled;
         String resolvedName = name == null || name.isBlank()
-                ? family.name().toLowerCase(Locale.ROOT) + "-" + strategyId
+                ? family.name().toLowerCase(Locale.ROOT) + "-" + strategyId + (subStrategyId == null || subStrategyId.isBlank() ? "" : "-" + subStrategyId)
                 : name.trim();
-        BotConfigEntity created = configService.create(resolvedName, family, strategyId, actualEnabled);
+        BotConfigEntity created = configService.create(resolvedName, family, strategyId, subStrategyId, actualEnabled);
         runtimeManager.restart(created.getId(), "created via api");
         return BotConfigResponse.from(created, actualEnabled);
     }
 
-    public BotConfigResponse update(Long id, String marketFamily, String asset, String interval, String strategyId, Boolean enabled) {
+    public BotConfigResponse update(Long id, String marketFamily, String asset, String interval, String strategyId, String subStrategyId, Boolean enabled) {
         MarketFamily family = marketFamily == null && asset == null && interval == null
                 ? null
                 : MarketFamily.fromNameOrCodes(marketFamily, asset, interval);
-        BotConfigEntity updated = configService.switchConfig(id, family, strategyId, enabled);
+        BotConfigEntity updated = configService.switchConfig(id, family, strategyId, subStrategyId, enabled);
         runtimeManager.restart(id, "updated via api");
         return BotConfigResponse.from(updated, updated.isEnabled());
+    }
+
+    public List<BotConfigResponse> killAll() {
+        List<BotConfigEntity> updated = configService.pauseAll();
+        runtimeManager.stopAll("kill-all via api");
+        return updated.stream()
+                .map(bot -> BotConfigResponse.from(bot, false))
+                .toList();
     }
 
     public BotConfigResponse pause(Long id) {
@@ -80,7 +88,7 @@ public class BotApiService {
 
     public BotConfigResponse roll(Long id) {
         runtimeManager.restart(id, "manual roll via api");
-        return list(null, null, null, null, null, null).stream()
+        return list(null, null, null, null, null, null, null).stream()
                 .filter(bot -> bot.id().equals(id))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown bot id: " + id));
