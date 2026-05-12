@@ -1,4 +1,8 @@
+import os
+
 from fastapi.testclient import TestClient
+
+os.environ["EXECUTOR_DRY_RUN"] = "true"
 
 from voktrader_executor.main import app
 

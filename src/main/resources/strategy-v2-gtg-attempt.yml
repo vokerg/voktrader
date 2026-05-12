@@ -1,6 +1,7 @@
 strategy-v2:
   schema-version: "2.0"
-  set-id: gtg-attempt
+  set-id: "gtg-attempt"
+
   engine:
     enabled: true
     active-strategy-ids:
@@ -20,6 +21,7 @@ strategy-v2:
       block-unknown-order-type: true
       block-missing-fee-model: true
       block-missing-book-for-book-rules: true
+
   defaults:
     deep_research_paper:
       data:
@@ -49,245 +51,246 @@ strategy-v2:
         fee-model: configured
         taker-fee-rate: "0.072"
         maker-fee-rate: "0"
+
   strategies:
-  - strategy-id: MK_GTD_EDGE_LIVE_TINY_A
-    enabled: true
-    profile: deep_research_paper
-    description: Live-tiny passive maker GTD edge capture, 5-share minimum order.
-    hypothesis: >
-      Post a small post-only maker bid only when spread is wide enough,
-      book pressure is supportive, volatility is low, and the order can be
-      cancelled quickly if the signal deteriorates. Entry is passive; exit is
-      aggressive taker/FAK using net PnL thresholds.
-    tags:
-      - maker
-      - gtd
-      - passive
-      - live-tiny
-      - five-shares
-      - post-only
-      - not-live-proven
-
-    allowed-execution-modes:
-      - PAPER
-      - TESTING
-      - LIVE_SHADOW
-      - LIVE_TINY
-
-    candidate-selection:
-      type: score
-      candidates:
-        - Up
-        - Down
-      choose: highest_score
-      min-score: "0.020"
-      score:
-        Up:
-          expression: >
-            candidate.mid_edge * 1.0
-            + candidate.microprice_edge * 1.5
-            + candidate.depth_imbalance_0_03 * 0.060
-            + candidate.spread * 0.70
-            + candidate.bid_move_3s * 0.70
-            - candidate.volatility_10s * 1.30
-        Down:
-          expression: >
-            candidate.mid_edge * 1.0
-            + candidate.microprice_edge * 1.5
-            + candidate.depth_imbalance_0_03 * 0.060
-            + candidate.spread * 0.70
-            + candidate.bid_move_3s * 0.70
-            - candidate.volatility_10s * 1.30
-
-    entry:
+    - strategy-id: MK_GTD_EDGE_LIVE_TINY_A
       enabled: true
-      rule-id: mk-gtd-edge-live-tiny-a-entry
-      when:
-        all:
-          - feature: market.accepting_orders
-            op: ==
-            value: true
+      profile: deep_research_paper
+      description: Live-tiny passive maker GTD edge capture, 5-share minimum order.
+      hypothesis: >
+        Post a small post-only maker bid when spread is at least one tick,
+        book pressure is supportive, volatility is low, and the order can be
+        cancelled quickly if the signal deteriorates. Entry is passive; exit is
+        aggressive taker/FAK using net PnL thresholds.
+      tags:
+        - maker
+        - gtd
+        - passive
+        - live-tiny
+        - five-shares
+        - post-only
+        - not-live-proven
 
-          - feature: market.mid_sum
-            op: between
-            values:
-              - "0.985"
-              - "1.015"
+      allowed-execution-modes:
+        - PAPER
+        - TESTING
+        - LIVE_SHADOW
+        - LIVE_TINY
 
-          - feature: market.seconds_to_expiry
-            op: between
-            values:
-              - "75"
-              - "220"
+      candidate-selection:
+        type: score
+        candidates:
+          - Up
+          - Down
+        choose: highest_score
+        min-score: "0.018"
+        score:
+          Up:
+            expression: >
+              candidate.mid_edge * 1.0
+              + candidate.microprice_edge * 1.5
+              + candidate.depth_imbalance_0_03 * 0.060
+              + candidate.spread * 0.70
+              + candidate.bid_move_3s * 0.70
+              - candidate.volatility_10s * 1.30
+          Down:
+            expression: >
+              candidate.mid_edge * 1.0
+              + candidate.microprice_edge * 1.5
+              + candidate.depth_imbalance_0_03 * 0.060
+              + candidate.spread * 0.70
+              + candidate.bid_move_3s * 0.70
+              - candidate.volatility_10s * 1.30
 
-          - feature: candidate.price_age_ms
-            op: <=
-            value: "900"
+      entry:
+        enabled: true
+        rule-id: mk-gtd-edge-live-tiny-a-entry
+        when:
+          all:
+            - feature: market.accepting_orders
+              op: "=="
+              value: true
 
-          - feature: candidate.book_age_ms
-            op: <=
-            value: "900"
+            - feature: market.mid_sum
+              op: between
+              values:
+                - "0.985"
+                - "1.015"
 
-          - feature: candidate.spread
-            op: between
-            values:
-              - "0.015"
-              - "0.045"
+            - feature: market.seconds_to_expiry
+              op: between
+              values:
+                - "60"
+                - "240"
 
-          - feature: candidate.mid
-            op: between
-            values:
-              - "0.36"
-              - "0.66"
+            - feature: candidate.price_age_ms
+              op: "<="
+              value: "900"
 
-          - feature: candidate.bid
-            op: between
-            values:
-              - "0.30"
-              - "0.60"
+            - feature: candidate.book_age_ms
+              op: "<="
+              value: "900"
 
-          - feature: candidate.microprice_edge
-            op: ">="
-            value: "0.003"
+            - feature: candidate.spread
+              op: between
+              values:
+                - "0.010"
+                - "0.045"
 
-          - feature: candidate.depth_imbalance_0_03
-            op: ">="
-            value: "0.070"
+            - feature: candidate.mid
+              op: between
+              values:
+                - "0.36"
+                - "0.66"
 
-          - feature: candidate.bid_depth_within_0_03
-            op: ">="
-            value: "5.0"
+            - feature: candidate.bid
+              op: between
+              values:
+                - "0.30"
+                - "0.60"
 
-          - feature: candidate.mid_move_5s
-            op: between
-            values:
-              - "-0.003"
-              - "0.014"
+            - feature: candidate.microprice_edge
+              op: ">="
+              value: "0.003"
 
-          - feature: candidate.bid_move_3s
-            op: ">="
-            value: "-0.001"
+            - feature: candidate.depth_imbalance_0_03
+              op: ">="
+              value: "0.070"
 
-          - feature: candidate.volatility_10s
-            op: <=
-            value: "0.025"
+            - feature: candidate.bid_depth_within_0_03
+              op: ">="
+              value: "5.0"
 
-          - feature: opposite.bid_move_5s
-            op: <=
-            value: "0.004"
+            - feature: candidate.mid_move_5s
+              op: between
+              values:
+                - "-0.003"
+                - "0.014"
 
-      action:
-        side: BUY
-        liquidity-role: maker
-        order-type: GTD
-        post-only: true
-        price:
-          source: best_bid
-          offset-ticks: 0
-          tick-size: "0.01"
-          rounding: floor_to_tick
-          min-price: "0.05"
-          max-price: "0.60"
-          do-not-cross-spread: true
+            - feature: candidate.bid_move_3s
+              op: ">="
+              value: "-0.001"
 
-        size:
-          type: fixed_shares
-          shares: "5.00"
-          max-usd: "3.00"
+            - feature: candidate.volatility_10s
+              op: "<="
+              value: "0.025"
 
-        maker-lifecycle:
-          cancel-after-seconds: 5
-          replace-if-best-bid-moves-ticks: 1
-          max-reposts: 1
-          require-reconciliation: true
+            - feature: opposite.bid_move_5s
+              op: "<="
+              value: "0.004"
 
-        reason-template: >
-          MK_GTD_EDGE_LIVE_TINY_A maker bid {{candidate.outcome}}
-          bid={{candidate.bid}} ask={{candidate.ask}}
-          spread={{candidate.spread}}
-          micro={{candidate.microprice_edge}}
-          imbalance={{candidate.depth_imbalance_0_03}}
-          seconds={{market.seconds_to_expiry}}
+        action:
+          side: BUY
+          liquidity-role: maker
+          order-type: GTD
+          post-only: true
+          price:
+            source: best_bid
+            offset-ticks: 0
+            tick-size: "0.01"
+            rounding: floor_to_tick
+            min-price: "0.05"
+            max-price: "0.60"
+            do-not-cross-spread: true
 
-    exit:
-      enabled: true
-      rule-id: mk-gtd-edge-live-tiny-a-exit
-      default-action: HOLD
-      rules:
-        - name: net-take-profit
-          action: SELL
-          order-type: FAK
-          liquidity-role: taker
-          when:
-            all:
-              - feature: trade.hold_seconds
-                op: ">="
-                value: "4"
-              - feature: trade.estimated_net_pnl_usd
-                op: ">="
-                value: "0.060"
+          size:
+            type: fixed_shares
+            shares: "5.00"
+            max-usd: "3.00"
 
-        - name: book-pressure-flips
-          action: SELL
-          order-type: FAK
-          liquidity-role: taker
-          when:
-            any:
-              - feature: candidate.microprice_edge
-                op: <=
-                value: "-0.002"
-              - feature: candidate.depth_imbalance_0_03
-                op: <=
-                value: "-0.050"
-              - feature: candidate.bid_move_5s
-                op: <=
-                value: "-0.012"
+          maker-lifecycle:
+            cancel-after-seconds: 5
+            replace-if-best-bid-moves-ticks: 1
+            max-reposts: 1
+            require-reconciliation: true
 
-        - name: net-stop-loss
-          action: SELL
-          order-type: FAK
-          liquidity-role: taker
-          when:
-            all:
-              - feature: trade.hold_seconds
-                op: ">="
-                value: "8"
-              - feature: trade.estimated_net_pnl_usd
-                op: <=
-                value: "-0.080"
+          reason-template: >
+            MK_GTD_EDGE_LIVE_TINY_A maker bid {{candidate.outcome}}
+            bid={{candidate.bid}} ask={{candidate.ask}}
+            spread={{candidate.spread}}
+            micro={{candidate.microprice_edge}}
+            imbalance={{candidate.depth_imbalance_0_03}}
+            seconds={{market.seconds_to_expiry}}
 
-        - name: final-flush-before-expiry
-          action: SELL
-          order-type: FAK
-          liquidity-role: taker
-          when:
-            feature: market.seconds_to_expiry
-            op: <=
-            value: "18"
+      exit:
+        enabled: true
+        rule-id: mk-gtd-edge-live-tiny-a-exit
+        default-action: HOLD
+        rules:
+          - name: net-take-profit
+            action: SELL
+            order-type: FAK
+            liquidity-role: taker
+            when:
+              all:
+                - feature: trade.hold_seconds
+                  op: ">="
+                  value: "4"
+                - feature: trade.estimated_net_pnl_usd
+                  op: ">="
+                  value: "0.050"
 
-    entry-order-management:
-      max-pending-seconds: 5
-      cancel-if-signal-invalid: true
-      cancel-if-book-stale: true
-      cancel-if-price-moves-away: true
-      allow-reprice: false
+          - name: book-pressure-flips
+            action: SELL
+            order-type: FAK
+            liquidity-role: taker
+            when:
+              any:
+                - feature: candidate.microprice_edge
+                  op: "<="
+                  value: "-0.002"
+                - feature: candidate.depth_imbalance_0_03
+                  op: "<="
+                  value: "-0.050"
+                - feature: candidate.bid_move_5s
+                  op: "<="
+                  value: "-0.012"
 
-    exit-order-management:
-      max-pending-seconds: 4
-      retry-on-reject: false
-      max-retries: 0
+          - name: net-stop-loss
+            action: SELL
+            order-type: FAK
+            liquidity-role: taker
+            when:
+              all:
+                - feature: trade.hold_seconds
+                  op: ">="
+                  value: "8"
+                - feature: trade.estimated_net_pnl_usd
+                  op: "<="
+                  value: "-0.080"
 
-    partial-fill-management:
-      cancel-remaining-on-partial-after-seconds: 3
-      allow-exit-partial-position: true
+          - name: final-flush-before-expiry
+            action: SELL
+            order-type: FAK
+            liquidity-role: taker
+            when:
+              feature: market.seconds_to_expiry
+              op: "<="
+              value: "18"
 
-    simulation:
-      fill-model: maker_queue_pessimistic
-      fee-model: configured
-      taker-fee-rate: "0.072"
-      maker-fee-rate: "0"
+      entry-order-management:
+        max-pending-seconds: 5
+        cancel-if-signal-invalid: true
+        cancel-if-book-stale: true
+        cancel-if-price-moves-away: true
+        allow-reprice: false
 
-    diagnostics:
-      record-rejections: true
-      record-feature-snapshot-on-entry: true
-      record-candidate-scores: true
+      exit-order-management:
+        max-pending-seconds: 4
+        retry-on-reject: false
+        max-retries: 0
+
+      partial-fill-management:
+        cancel-remaining-on-partial-after-seconds: 3
+        allow-exit-partial-position: true
+
+      simulation:
+        fill-model: maker_queue_pessimistic
+        fee-model: configured
+        taker-fee-rate: "0.072"
+        maker-fee-rate: "0"
+
+      diagnostics:
+        record-rejections: true
+        record-feature-snapshot-on-entry: true
+        record-candidate-scores: true

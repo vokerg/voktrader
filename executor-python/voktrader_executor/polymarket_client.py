@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
@@ -230,13 +231,21 @@ class PolymarketExecutor:
         if size is None or size <= 0:
             raise ValueError("Limit orders require positive shares or amountUsd convertible to shares")
 
-        args = OrderArgs(
-            token_id=command.tokenId,
-            side=side,
-            price=float(command.limitPrice),
-            size=float(size),
-        )
+        kwargs: dict[str, Any] = {
+            "token_id": command.tokenId,
+            "side": side,
+            "price": float(command.limitPrice),
+            "size": float(size),
+        }
+        if command.timeInForce.upper() == "GTD":
+            kwargs["expiration"] = self._gtd_expiration()
+
+        args = OrderArgs(**kwargs)
         return client.create_and_post_order(args, order_type=order_type, post_only=command.postOnly)
+
+    def _gtd_expiration(self) -> int:
+        # Polymarket requires GTD expiration to be in the future with an extra one-minute security buffer.
+        return int(time.time()) + 60 + max(1, int(self.settings.gtd_expiration_seconds))
 
     def _normalize_response(self, command: OrderCommand, raw_response: Any) -> OrderResponse:
         data = raw_response if isinstance(raw_response, dict) else {}

@@ -1,4 +1,5 @@
 from decimal import Decimal
+import time
 
 from voktrader_executor.config import Settings
 from voktrader_executor.models import OrderCommand
@@ -218,6 +219,43 @@ def test_limit_order_rejects_when_size_cannot_be_derived():
         assert str(exc) == "Limit orders require positive shares or amountUsd convertible to shares"
     else:
         raise AssertionError("Expected missing size to be rejected")
+
+
+class FakeLimitClient:
+    def __init__(self):
+        self.args = None
+        self.order_type = None
+        self.post_only = None
+
+    def create_and_post_order(self, args, order_type, post_only=False):
+        self.args = args
+        self.order_type = order_type
+        self.post_only = post_only
+        return {"success": True, "status": "SUBMITTED", "orderID": "order-1"}
+
+
+def test_gtd_limit_order_sets_future_expiration():
+    command = OrderCommand(
+        idempotencyKey="maker-test",
+        strategyId="maker-resolution-carry",
+        marketId="2127144",
+        tokenId="token",
+        side="BUY",
+        shares=Decimal("5"),
+        amountUsd=Decimal("2.50"),
+        limitPrice=Decimal("0.50"),
+        timeInForce="GTD",
+        postOnly=True,
+        dryRun=False,
+    )
+    executor = PolymarketExecutor(Settings(GTD_EXPIRATION_SECONDS=30))
+    client = FakeLimitClient()
+
+    before = int(time.time())
+    executor._submit_limit_order(client, command)
+
+    assert client.args.expiration >= before + 90
+    assert client.post_only is True
 
 
 class FakeOrderManagementClient:
