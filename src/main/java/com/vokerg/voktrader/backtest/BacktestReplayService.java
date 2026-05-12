@@ -13,7 +13,6 @@ import com.vokerg.voktrader.marketdata.PriceSnapshotEntity;
 import com.vokerg.voktrader.marketdata.PriceSnapshotRepository;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.polymarket.dto.PriceLevelDto;
-import com.vokerg.voktrader.strategy.StrategyRegistry;
 import com.vokerg.voktrader.strategy.TradingStrategy;
 import com.vokerg.voktrader.strategy.v2.StrategyV2Engine;
 import com.vokerg.voktrader.strategy.v2.StrategyV2FeatureSampleContext;
@@ -53,7 +52,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class BacktestReplayService {
-    private final StrategyRegistry strategyRegistry;
+    private final BacktestStrategyResolver strategyResolver;
     private final PriceSnapshotRepository priceSnapshotRepository;
     private final MarketDepthSnapshotRepository depthSnapshotRepository;
     private final MarketRepository marketRepository;
@@ -71,7 +70,7 @@ public class BacktestReplayService {
         Instant wallClockStartedAt = Instant.now();
         long wallClockStartedNs = System.nanoTime();
         String runId = "bt-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-        TradingStrategy strategy = strategyRegistry.strategy(request.strategyId());
+        TradingStrategy strategy = strategyResolver.resolve(request.strategyId());
         List<Long> numericMarketIds = request.marketIds().stream().map(this::parseMarketId).toList();
         StrategyV2Properties override = strategyOverride(request, strategy);
 
@@ -310,6 +309,7 @@ public class BacktestReplayService {
                     botId,
                     null,
                     strategy.id(),
+                    null,
                     trackedMarketState,
                     latestPriceState,
                     orderBookState
