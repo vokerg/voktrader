@@ -7,6 +7,7 @@ import com.vokerg.voktrader.bot.BotRuntime;
 import com.vokerg.voktrader.bot.BotRuntimeManager;
 import com.vokerg.voktrader.bot.BotStatus;
 import com.vokerg.voktrader.bot.MarketFamily;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
+@ConditionalOnProperty(prefix = "voktrader.bots", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class BotApiService {
     private final BotConfigService configService;
     private final BotRuntimeManager runtimeManager;

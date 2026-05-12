@@ -353,14 +353,15 @@ class BacktestRunner:
         log(f"App log: {log_file}")
         output = open(log_file, "w", encoding="utf-8", errors="replace")
         if self.is_windows:
-            command = (
-                f"Set-Location -LiteralPath '{self.repo_win}'; "
-                f"& .\\mvnw.cmd spring-boot:run "
-                f"-Dspring-boot.run.profiles={self.app_profile} "
-                f"-Dspring-boot.run.arguments=--server.port={self.port}"
-            )
             self.proc = subprocess.Popen(
-                ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                [
+                    "cmd.exe",
+                    "/c",
+                    str(self.repo / "mvnw.cmd"),
+                    "spring-boot:run",
+                    f"-Dspring-boot.run.profiles={self.app_profile}",
+                    f"-Dspring-boot.run.arguments=--server.port={self.port}",
+                ],
                 cwd=str(self.repo),
                 stdout=output,
                 stderr=subprocess.STDOUT,

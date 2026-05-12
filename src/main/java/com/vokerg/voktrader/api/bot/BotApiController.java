@@ -3,6 +3,7 @@ package com.vokerg.voktrader.api.bot;
 import com.vokerg.voktrader.api.bot.dto.BotConfigResponse;
 import com.vokerg.voktrader.api.bot.dto.BotCreateRequest;
 import com.vokerg.voktrader.api.bot.dto.BotUpdateRequest;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +17,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/bots")
+@ConditionalOnProperty(prefix = "voktrader.bots", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class BotApiController {
     private final BotApiService botApiService;
 
