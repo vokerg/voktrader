@@ -10,14 +10,19 @@ import com.vokerg.voktrader.executor.ExecutorFillResponse;
 import com.vokerg.voktrader.executor.ExecutorFillsResponse;
 import com.vokerg.voktrader.executor.ExecutorOrderResponse;
 import com.vokerg.voktrader.executor.ExecutorOrderStatusResponse;
+import com.vokerg.voktrader.time.TimeMachine;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderReconciliationService {
@@ -25,6 +30,7 @@ public class OrderReconciliationService {
     private final TradeOrderRepository tradeOrderRepository;
     private final TradeFillRepository tradeFillRepository;
     private final LiveExecutionService liveExecutionService;
+    private final OrderLayerProperties properties;
 
     @Transactional
     public OrderLifecycleResult reconcileOrder(TradeOrderEntity order) {
@@ -36,6 +42,9 @@ public class OrderReconciliationService {
                 order.getRemoteOrderId(),
                 order.getMarketId(),
                 order.getTokenId(),
+                order.getSide(),
+                order.getRequestedPrice(),
+                order.getRequestedShares(),
                 order.getSubmittedAt()
         );
 
@@ -46,6 +55,7 @@ public class OrderReconciliationService {
         TradeOrderStatus status = resolveStatus(remoteStatus, fills, order);
         applyOrderState(order, status, remoteStatus, fills);
         reconcileTradeAfterOrderState(trade, order);
+        logReconciliation(order, remoteStatus, fills, status);
         order.markReconciled();
         tradeOrderRepository.save(order);
         if (trade != null) {
@@ -65,7 +75,7 @@ public class OrderReconciliationService {
                 TradeOrderStatus.CANCEL_REQUESTED,
                 TradeOrderStatus.UNKNOWN
         );
-        List<TradeOrderEntity> orders = tradeOrderRepository.findByStatusIn(activeStatuses);
+        List<TradeOrderEntity> orders = tradeOrderRepository.findReconcilableRemoteOrders(activeStatuses);
         orders.forEach(this::reconcileOrder);
         return orders.size();
     }
@@ -141,10 +151,32 @@ public class OrderReconciliationService {
                     ? TradeOrderStatus.FILLED
                     : TradeOrderStatus.PARTIALLY_FILLED;
         }
+        if (isExpiredUnfilledGtd(order, remoteStatus, fills)) {
+            return TradeOrderStatus.EXPIRED;
+        }
         if (fills.success()) {
             return TradeOrderStatus.UNKNOWN;
         }
         return TradeOrderStatus.UNKNOWN;
+    }
+
+    private boolean isExpiredUnfilledGtd(
+            TradeOrderEntity order,
+            ExecutorOrderStatusResponse remoteStatus,
+            ExecutorFillsResponse fills
+    ) {
+        if (order.getOrderType() != TradeOrderType.GTD || !fills.success() || !fills.fills().isEmpty()) {
+            return false;
+        }
+        if (remoteStatus.success() && remoteStatus.lifecycleStatus() != TradeOrderStatus.UNKNOWN) {
+            return false;
+        }
+        Instant submittedAt = order.getSubmittedAt();
+        if (submittedAt == null) {
+            return false;
+        }
+        Instant staleAfter = submittedAt.plus(Duration.ofMinutes(properties.getMaxReconcileAgeMinutes()));
+        return !TimeMachine.now().isBefore(staleAfter);
     }
 
     private void applyOrderState(
@@ -159,6 +191,14 @@ public class OrderReconciliationService {
         BigDecimal avgPrice = totals.avgPrice();
         if (filledShares.compareTo(BigDecimal.ZERO) == 0 && remoteStatus.filledSize() != null) {
             filledShares = remoteStatus.filledSize();
+            avgPrice = remoteStatus.avgFillPrice() != null ? remoteStatus.avgFillPrice() : remoteStatus.price();
+            if (avgPrice != null) {
+                filledAmountUsd = avgPrice.multiply(filledShares);
+            }
+        } else if (filledShares.compareTo(BigDecimal.ZERO) == 0
+                && status == TradeOrderStatus.FILLED
+                && remoteStatus.originalSize() != null) {
+            filledShares = remoteStatus.originalSize();
             avgPrice = remoteStatus.avgFillPrice() != null ? remoteStatus.avgFillPrice() : remoteStatus.price();
             if (avgPrice != null) {
                 filledAmountUsd = avgPrice.multiply(filledShares);
@@ -200,10 +240,12 @@ public class OrderReconciliationService {
             trade.markOpen(order.getAvgFillPrice(), order.getFilledShares(), order.getFilledAmountUsd(), order.getRealizedFeeUsd(), order.getCompletedAt());
         } else if (order.getStatus() == TradeOrderStatus.PARTIALLY_FILLED) {
             trade.markPartiallyOpen(order.getAvgFillPrice(), order.getFilledShares(), order.getFilledAmountUsd(), order.getRealizedFeeUsd(), order.getCompletedAt());
-        } else if (order.getStatus() == TradeOrderStatus.CANCELLED || order.getStatus() == TradeOrderStatus.EXPIRED) {
+        } else if (order.getStatus() == TradeOrderStatus.CANCELLED) {
             if (zeroIfNull(order.getFilledShares()).compareTo(BigDecimal.ZERO) == 0) {
                 trade.markCancelled();
             }
+        } else if (order.getStatus() == TradeOrderStatus.EXPIRED) {
+            trade.markEntryPending();
         } else if (order.getStatus() == TradeOrderStatus.REJECTED || order.getStatus() == TradeOrderStatus.FAILED) {
             trade.markFailed(order.getFailureReason());
         } else if (order.getStatus() == TradeOrderStatus.RESTING || order.getStatus() == TradeOrderStatus.SUBMITTED) {
@@ -219,6 +261,36 @@ public class OrderReconciliationService {
         } else if (order.getStatus() == TradeOrderStatus.RESTING || order.getStatus() == TradeOrderStatus.SUBMITTED) {
             trade.markExitPending();
         }
+    }
+
+    private void logReconciliation(
+            TradeOrderEntity order,
+            ExecutorOrderStatusResponse remoteStatus,
+            ExecutorFillsResponse fills,
+            TradeOrderStatus resolvedStatus
+    ) {
+        log.info(
+                "Order reconciliation result orderId={} tradeId={} remoteOrderId={} phase={} localStatus={} resolvedStatus={} remoteSuccess={} remoteStatus={} remoteError={} remoteFilledSize={} remoteOriginalSize={} remoteRemainingSize={} remoteAvgPrice={} fillsSuccess={} fillsError={} fillsCount={} filledShares={} avgFillPrice={} remainingShares={}",
+                order.getId(),
+                order.getTradeId(),
+                order.getRemoteOrderId(),
+                order.getPhase(),
+                order.getStatus(),
+                resolvedStatus,
+                remoteStatus.success(),
+                remoteStatus.status(),
+                remoteStatus.error() == null ? null : remoteStatus.error().message(),
+                remoteStatus.filledSize(),
+                remoteStatus.originalSize(),
+                remoteStatus.remainingSize(),
+                remoteStatus.avgFillPrice(),
+                fills.success(),
+                fills.error() == null ? null : fills.error().message(),
+                fills.fills().size(),
+                order.getFilledShares(),
+                order.getAvgFillPrice(),
+                order.getRemainingShares()
+        );
     }
 
     private FillTotals aggregate(TradeOrderEntity order) {

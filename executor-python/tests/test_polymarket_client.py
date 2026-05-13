@@ -259,6 +259,9 @@ def test_gtd_limit_order_sets_future_expiration():
 
 
 class FakeOrderManagementClient:
+    def __init__(self):
+        self.trade_params = None
+
     def cancel_order(self, order_id):
         return {"success": True, "orderID": order_id, "status": "CANCELLED"}
 
@@ -278,22 +281,32 @@ class FakeOrderManagementClient:
     def get_open_orders(self, **_):
         return {"orders": [{"orderID": "order-1", "status": "LIVE", "asset_id": "token-id"}]}
 
-    def get_trades(self, **_):
-        return {
-            "trades": [
-                {
-                    "id": "fill-1",
-                    "orderID": "order-1",
-                    "asset_id": "token-id",
-                    "side": "BUY",
-                    "price": "0.51",
-                    "size": "2",
-                    "fee": "0.01",
-                    "role": "MAKER",
-                    "created_at": "2026-05-09T12:00:00Z",
-                }
-            ]
-        }
+    def get_trades(self, params=None):
+        self.trade_params = params
+        return [
+            {
+                "id": "fill-1",
+                "maker_orders": [{"order_id": "order-1"}],
+                "asset_id": "token-id",
+                "side": "BUY",
+                "price": "0.51",
+                "size": "2",
+                "fee": "0.01",
+                "role": "MAKER",
+                "created_at": "2026-05-09T12:00:00Z",
+            },
+            {
+                "id": "fill-2",
+                "maker_order_id": "other-order",
+                "asset_id": "token-id",
+                "side": "BUY",
+                "price": "0.52",
+                "size": "1",
+                "fee": "0",
+                "role": "TAKER",
+                "created_at": "2026-05-09T12:00:01Z",
+            },
+        ]
 
 
 def live_executor_with_fake_client():
@@ -341,3 +354,48 @@ def test_list_fills_mapping():
     assert response.fills[0].remoteOrderId == "order-1"
     assert response.fills[0].role == "MAKER"
     assert response.fills[0].fee == Decimal("0.01")
+
+
+def test_list_fills_uses_trade_params_for_py_clob_client():
+    executor = live_executor_with_fake_client()
+
+    response = executor.list_fills(
+        order_id="order-1",
+        market_id="market-id",
+        token_id="token-id",
+        since="2026-05-12T20:46:34.810028000Z",
+    )
+
+    assert response.success is True
+    assert len(response.fills) == 1
+    assert executor._client.trade_params.market is None
+    assert executor._client.trade_params.asset_id == "token-id"
+    assert executor._client.trade_params.after == 1778618794
+
+
+def test_list_fills_falls_back_to_exact_order_profile_when_order_id_differs():
+    response = live_executor_with_fake_client().list_fills(
+        order_id="missing-order-id",
+        token_id="token-id",
+        side="BUY",
+        price="0.51",
+        shares="2",
+    )
+
+    assert response.success is True
+    assert len(response.fills) == 1
+    assert response.fills[0].fillId == "fill-1"
+    assert response.fills[0].side == "BUY"
+
+
+def test_list_fills_profile_fallback_rejects_wrong_side():
+    response = live_executor_with_fake_client().list_fills(
+        order_id="missing-order-id",
+        token_id="token-id",
+        side="SELL",
+        price="0.51",
+        shares="2",
+    )
+
+    assert response.success is True
+    assert response.fills == []

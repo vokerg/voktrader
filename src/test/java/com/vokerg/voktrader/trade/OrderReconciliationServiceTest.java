@@ -11,10 +11,12 @@ import com.vokerg.voktrader.executor.ExecutorFillsResponse;
 import com.vokerg.voktrader.executor.ExecutorOrderStatusResponse;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
+import com.vokerg.voktrader.time.TimeMachine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +25,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class OrderReconciliationServiceTest {
@@ -30,12 +33,14 @@ class OrderReconciliationServiceTest {
     private final TradeOrderRepository tradeOrderRepository = mock(TradeOrderRepository.class);
     private final TradeFillRepository tradeFillRepository = mock(TradeFillRepository.class);
     private final LiveExecutionService liveExecutionService = mock(LiveExecutionService.class);
+    private final OrderLayerProperties properties = new OrderLayerProperties();
     private final List<TradeFillEntity> savedFills = new ArrayList<>();
     private final OrderReconciliationService service = new OrderReconciliationService(
             tradeRepository,
             tradeOrderRepository,
             tradeFillRepository,
-            liveExecutionService
+            liveExecutionService,
+            properties
     );
 
     @BeforeEach
@@ -61,7 +66,7 @@ class OrderReconciliationServiceTest {
         TradeOrderEntity order = order(trade, TradeSide.BUY);
         when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
         when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("OPEN"));
-        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
 
         service.reconcileOrder(order);
 
@@ -75,7 +80,7 @@ class OrderReconciliationServiceTest {
         TradeOrderEntity order = order(trade, TradeSide.BUY);
         when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
         when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("PARTIALLY_FILLED"));
-        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(fill("fill-1", "2", "0.50", "0.01")), "{}", null));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(fill("fill-1", "2", "0.50", "0.01")), "{}", null));
 
         service.reconcileOrder(order);
 
@@ -92,7 +97,7 @@ class OrderReconciliationServiceTest {
         TradeOrderEntity order = order(trade, TradeSide.BUY);
         when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
         when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("PARTIALLY_FILLED"));
-        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(fill("fill-1", "2", "0.50", "0.01")), "{}", null));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(fill("fill-1", "2", "0.50", "0.01")), "{}", null));
 
         service.reconcileOrder(order);
         service.reconcileOrder(order);
@@ -107,7 +112,7 @@ class OrderReconciliationServiceTest {
         TradeOrderEntity order = order(trade, TradeSide.BUY);
         when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
         when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("FILLED"));
-        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(fill("fill-1", "2", "0.50", "0.01")), "{}", null));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(fill("fill-1", "2", "0.50", "0.01")), "{}", null));
 
         service.reconcileOrder(order);
 
@@ -117,12 +122,107 @@ class OrderReconciliationServiceTest {
     }
 
     @Test
+    void unknownRemoteEntryOrderCanReconcileToFilledAndOpenTrade() {
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        order.markUnknown("{}");
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(new ExecutorOrderStatusResponse(
+                true,
+                "remote-1",
+                "FILLED",
+                "market-id",
+                "token-id",
+                TradeSide.BUY,
+                new BigDecimal("0.57"),
+                new BigDecimal("5"),
+                new BigDecimal("5"),
+                BigDecimal.ZERO,
+                new BigDecimal("0.57"),
+                null,
+                Instant.parse("2026-05-12T20:46:36Z"),
+                null,
+                "{}",
+                null
+        ));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(
+                true,
+                List.of(fill("fill-1", "5", "0.57", "0")),
+                "{}",
+                null
+        ));
+
+        service.reconcileOrder(order);
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.FILLED);
+        assertThat(order.getFilledShares()).isEqualByComparingTo("5");
+        assertThat(order.getAvgFillPrice()).isEqualByComparingTo("0.57");
+        assertThat(order.getRemainingShares()).isEqualByComparingTo("0");
+        assertThat(order.getFillRole()).isEqualTo(LiquidityRole.MAKER);
+        assertThat(order.getLastReconciledAt()).isNotNull();
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(trade.getEntryFilledShares()).isEqualByComparingTo("5");
+        assertThat(trade.getEntryAvgPrice()).isEqualByComparingTo("0.57");
+        assertThat(trade.getEntryFilledUsd()).isEqualByComparingTo("2.85");
+        assertThat(trade.getEntryFeeUsd()).isEqualByComparingTo("0");
+        assertThat(trade.getEntryCompletedAt()).isNotNull();
+    }
+
+    @Test
+    void reconcileOpenOrdersOnlyPollsOrdersWithRemoteOrderId() {
+        TradeOrderEntity remoteOrder = order(trade(), TradeSide.BUY);
+        when(tradeOrderRepository.findReconcilableRemoteOrders(any())).thenReturn(List.of(remoteOrder));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("OPEN"));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
+
+        int reconciled = service.reconcileOpenOrders();
+
+        assertThat(reconciled).isEqualTo(1);
+        verify(tradeOrderRepository).findReconcilableRemoteOrders(any());
+    }
+
+    @Test
+    void filledRemoteStatusUsesOriginalSizeWhenFillRowsAreUnavailable() {
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(new ExecutorOrderStatusResponse(
+                true,
+                "remote-1",
+                "FILLED",
+                "market-id",
+                "token-id",
+                TradeSide.BUY,
+                new BigDecimal("0.57"),
+                new BigDecimal("5"),
+                null,
+                BigDecimal.ZERO,
+                null,
+                null,
+                null,
+                null,
+                "{}",
+                null
+        ));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
+
+        service.reconcileOrder(order);
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.FILLED);
+        assertThat(order.getFilledShares()).isEqualByComparingTo("5");
+        assertThat(order.getAvgFillPrice()).isEqualByComparingTo("0.57");
+        assertThat(order.getRemainingShares()).isEqualByComparingTo("0");
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(trade.getEntryFilledUsd()).isEqualByComparingTo("2.85");
+    }
+
+    @Test
     void cancelledEntryWithNoFillCancelsTrade() {
         TradeEntity trade = trade();
         TradeOrderEntity order = order(trade, TradeSide.BUY);
         when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
         when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("CANCELLED"));
-        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
 
         service.reconcileOrder(order);
 
@@ -136,11 +236,37 @@ class OrderReconciliationServiceTest {
         TradeOrderEntity order = order(trade, TradeSide.BUY);
         when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
         when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("SOMETHING_NEW"));
-        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
 
         service.reconcileOrder(order);
 
         assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.UNKNOWN);
+    }
+
+    @Test
+    void staleUnfilledGtdWithUnavailableRemoteStatusExpiresEntryTrade() {
+        Instant now = Instant.parse("2026-05-13T12:00:00Z");
+        TradeEntity[] tradeHolder = new TradeEntity[1];
+        TradeOrderEntity[] orderHolder = new TradeOrderEntity[1];
+        TimeMachine.runAt(now.minus(Duration.ofMinutes(121)), () -> {
+            TradeIntent intent = TradeIntent.buy(null, market(), price(), new BigDecimal("1.00"), TradeOrderType.GTD, true, new BigDecimal("0.50"), "strategy", "rule", "entry");
+            tradeHolder[0] = TradeEntity.fromIntent(intent, ExecutionMode.LIVE_TINY);
+            orderHolder[0] = TradeOrderEntity.fromIntent(1L, intent, ExecutionMode.LIVE_TINY, TradeVenue.POLYMARKET, "local-1");
+            orderHolder[0].markSubmitting("local-1", "{}");
+            orderHolder[0].markSubmitted("remote-1", "{}");
+        });
+        TradeEntity trade = tradeHolder[0];
+        TradeOrderEntity order = orderHolder[0];
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(
+                ExecutorOrderStatusResponse.failure("remote-1", "EXCHANGE_REJECTION", "not found")
+        );
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(), "[]", null));
+
+        TimeMachine.runAt(now, () -> service.reconcileOrder(order));
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.EXPIRED);
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.ENTRY_PENDING);
     }
 
     @Test
@@ -166,7 +292,7 @@ class OrderReconciliationServiceTest {
                 "{}",
                 null
         ));
-        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
 
         service.reconcileOrder(order);
 
@@ -181,7 +307,7 @@ class OrderReconciliationServiceTest {
         TradeOrderEntity order = order(trade, TradeSide.BUY);
         when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
         when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("PARTIALLY_FILLED"));
-        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(fill("fill-1", "1", "0.50", null)), "{}", null));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(fill("fill-1", "1", "0.50", null)), "{}", null));
 
         service.reconcileOrder(order);
 

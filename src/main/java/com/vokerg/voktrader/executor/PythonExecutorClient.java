@@ -115,7 +115,7 @@ public class PythonExecutorClient {
         try {
             return authedClient()
                     .get()
-                    .uri(optionalFilters("/v1/orders/open", marketId, tokenId, null, null))
+                    .uri(optionalFilters("/v1/orders/open", marketId, tokenId, null, null, null, null, null))
                     .retrieve()
                     .bodyToMono(ExecutorOpenOrdersResponse.class)
                     .timeout(properties.getTimeout())
@@ -133,7 +133,15 @@ public class PythonExecutorClient {
         }
     }
 
-    public ExecutorFillsResponse listFills(String remoteOrderId, String marketId, String tokenId, Instant since) {
+    public ExecutorFillsResponse listFills(
+            String remoteOrderId,
+            String marketId,
+            String tokenId,
+            com.vokerg.voktrader.trade.TradeSide side,
+            java.math.BigDecimal price,
+            java.math.BigDecimal shares,
+            Instant since
+    ) {
         if (!properties.isEnabled()) {
             return ExecutorFillsResponse.failure("UNSUPPORTED_OPERATION", disabledMessage());
         }
@@ -141,7 +149,7 @@ public class PythonExecutorClient {
         try {
             return authedClient()
                     .get()
-                    .uri(optionalFilters("/v1/fills", marketId, tokenId, remoteOrderId, since))
+                    .uri(optionalFilters("/v1/fills", marketId, tokenId, remoteOrderId, side, price, shares, since))
                     .retrieve()
                     .bodyToMono(ExecutorFillsResponse.class)
                     .timeout(properties.getTimeout())
@@ -166,7 +174,16 @@ public class PythonExecutorClient {
                 .build();
     }
 
-    private Function<UriBuilder, URI> optionalFilters(String path, String marketId, String tokenId, String remoteOrderId, Instant since) {
+    private Function<UriBuilder, URI> optionalFilters(
+            String path,
+            String marketId,
+            String tokenId,
+            String remoteOrderId,
+            com.vokerg.voktrader.trade.TradeSide side,
+            java.math.BigDecimal price,
+            java.math.BigDecimal shares,
+            Instant since
+    ) {
         return builder -> {
             UriBuilder uriBuilder = builder.path(path);
             if (marketId != null && !marketId.isBlank()) {
@@ -177,6 +194,15 @@ public class PythonExecutorClient {
             }
             if (remoteOrderId != null && !remoteOrderId.isBlank()) {
                 uriBuilder.queryParam("order_id", remoteOrderId);
+            }
+            if (side != null) {
+                uriBuilder.queryParam("side", side.name());
+            }
+            if (price != null) {
+                uriBuilder.queryParam("price", price);
+            }
+            if (shares != null) {
+                uriBuilder.queryParam("shares", shares);
             }
             if (since != null) {
                 uriBuilder.queryParam("since", since.toString());

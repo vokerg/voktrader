@@ -243,17 +243,17 @@ class LiveExecutionServiceTest {
         when(pythonExecutorClient.cancelOrder("remote-1")).thenReturn(cancel);
         when(pythonExecutorClient.getOrderStatus("remote-1")).thenReturn(status);
         when(pythonExecutorClient.listOpenOrders("market-id", "token-id")).thenReturn(openOrders);
-        when(pythonExecutorClient.listFills("remote-1", "market-id", "token-id", since)).thenReturn(fills);
+        when(pythonExecutorClient.listFills("remote-1", "market-id", "token-id", TradeSide.BUY, new BigDecimal("0.50"), new BigDecimal("5"), since)).thenReturn(fills);
 
         assertThat(service.cancelRemoteOrder("remote-1")).isSameAs(cancel);
         assertThat(service.fetchRemoteOrderStatus("remote-1")).isSameAs(status);
         assertThat(service.fetchOpenRemoteOrders("market-id", "token-id")).isSameAs(openOrders);
-        assertThat(service.fetchRemoteFills("remote-1", "market-id", "token-id", since)).isSameAs(fills);
+        assertThat(service.fetchRemoteFills("remote-1", "market-id", "token-id", TradeSide.BUY, new BigDecimal("0.50"), new BigDecimal("5"), since)).isSameAs(fills);
 
         verify(pythonExecutorClient).cancelOrder("remote-1");
         verify(pythonExecutorClient).getOrderStatus("remote-1");
         verify(pythonExecutorClient).listOpenOrders("market-id", "token-id");
-        verify(pythonExecutorClient).listFills("remote-1", "market-id", "token-id", since);
+        verify(pythonExecutorClient).listFills("remote-1", "market-id", "token-id", TradeSide.BUY, new BigDecimal("0.50"), new BigDecimal("5"), since);
     }
 
     private ExecutorOrderResponse response(BigDecimal avgPrice, BigDecimal shares, BigDecimal amountUsd, BigDecimal feeUsd) {

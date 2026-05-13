@@ -60,8 +60,16 @@ public class LiveExecutionService {
         return pythonExecutorClient.listOpenOrders(marketId, tokenId);
     }
 
-    public ExecutorFillsResponse fetchRemoteFills(String remoteOrderId, String marketId, String tokenId, Instant since) {
-        return pythonExecutorClient.listFills(remoteOrderId, marketId, tokenId, since);
+    public ExecutorFillsResponse fetchRemoteFills(
+            String remoteOrderId,
+            String marketId,
+            String tokenId,
+            TradeSide side,
+            BigDecimal price,
+            BigDecimal shares,
+            Instant since
+    ) {
+        return pythonExecutorClient.listFills(remoteOrderId, marketId, tokenId, side, price, shares, since);
     }
 
     private TradeExecutionResult executeBuy(TradeIntent intent, ExecutionMode mode) {

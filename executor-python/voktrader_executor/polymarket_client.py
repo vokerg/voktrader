@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from decimal import Decimal
+from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
@@ -18,6 +20,8 @@ from .models import (
     OrderStatusResponse,
     TradeSide,
 )
+
+logger = logging.getLogger("uvicorn.error")
 
 
 class PolymarketExecutor:
@@ -70,7 +74,14 @@ class PolymarketExecutor:
             order_id=order_id,
             id=order_id,
         )
-        return _normalize_order_status(raw_response, fallback_order_id=order_id)
+        response = _normalize_order_status(raw_response, fallback_order_id=order_id)
+        logger.info(
+            "EXECUTOR ORDER STATUS RAW: orderId=%s raw=%s normalized=%s",
+            order_id,
+            _json_for_log(raw_response),
+            response.model_dump_json(),
+        )
+        return response
 
     def list_open_orders(self, market_id: str | None = None, token_id: str | None = None) -> OpenOrdersResponse:
         if self.settings.executor_dry_run:
@@ -104,6 +115,9 @@ class PolymarketExecutor:
             order_id: str | None = None,
             market_id: str | None = None,
             token_id: str | None = None,
+            side: str | None = None,
+            price: str | None = None,
+            shares: str | None = None,
             since: str | None = None,
     ) -> FillsResponse:
         if self.settings.executor_dry_run:
@@ -116,6 +130,9 @@ class PolymarketExecutor:
                         "order_id": order_id,
                         "market_id": market_id,
                         "token_id": token_id,
+                        "side": side,
+                        "price": price,
+                        "shares": shares,
                         "since": since,
                         "fills": [],
                     },
@@ -124,22 +141,35 @@ class PolymarketExecutor:
             )
 
         client = self._get_client()
-        raw_response = _call_client_method(
-            client,
-            ("get_trades", "get_fills", "get_trade_history"),
-            order_id=order_id,
-            market=market_id,
-            market_id=market_id,
-            token_id=token_id,
-            asset_id=token_id,
-            since=since,
-        )
+        raw_response = _list_trade_history(client, order_id, market_id, token_id, since)
         items = _extract_list(raw_response, "fills", "trades", "data", "results")
-        return FillsResponse(
+        extracted_count = len(items)
+        if order_id is not None:
+            order_id_matches = [item for item in items if _matches_order_id(item, order_id)]
+            if order_id_matches:
+                items = order_id_matches
+            else:
+                items = [item for item in items if _matches_order_profile(item, token_id, side, price, shares)]
+        response = FillsResponse(
             success=True,
             fills=[_normalize_fill(item) for item in items],
             rawResponse=json.dumps(raw_response, default=str, sort_keys=True),
         )
+        logger.info(
+            "EXECUTOR FILLS RAW: orderId=%s marketId=%s tokenId=%s side=%s price=%s shares=%s since=%s extractedCount=%s matchedCount=%s raw=%s normalized=%s",
+            order_id,
+            market_id,
+            token_id,
+            side,
+            price,
+            shares,
+            since,
+            extracted_count,
+            len(items),
+            _json_for_log(raw_response),
+            response.model_dump_json(),
+        )
+        return response
 
     def _validate_guardrails(self, command: OrderCommand) -> None:
         if command.amountUsd is not None and command.amountUsd > Decimal(str(self.settings.max_order_amount_usd)):
@@ -374,8 +404,130 @@ def _call_client_method(client: Any, method_names: tuple[str, ...], **kwargs: An
     raise UnsupportedOperationError(f"Polymarket SDK client has none of: {', '.join(method_names)}")
 
 
+def _list_trade_history(
+        client: Any,
+        order_id: str | None,
+        market_id: str | None,
+        token_id: str | None,
+        since: str | None,
+) -> Any:
+    get_trades = getattr(client, "get_trades", None)
+    if get_trades is not None:
+        from py_clob_client_v2.clob_types import TradeParams
+
+        params = TradeParams(
+            asset_id=token_id,
+            after=_epoch_seconds_or_none(since),
+        )
+        logger.info(
+            "EXECUTOR FILLS SDK REQUEST: method=get_trades orderId=%s gammaMarketId=%s assetId=%s since=%s after=%s",
+            order_id,
+            market_id,
+            token_id,
+            since,
+            params.after,
+        )
+        return get_trades(params=params)
+
+    return _call_client_method(
+        client,
+        ("get_fills", "get_trade_history"),
+        order_id=order_id,
+        market=market_id,
+        market_id=market_id,
+        token_id=token_id,
+        asset_id=token_id,
+        since=since,
+    )
+
+
+def _json_for_log(value: Any) -> str:
+    return json.dumps(value, default=str, sort_keys=True)
+
+
+def _matches_order_id(item: Any, order_id: str) -> bool:
+    if not isinstance(item, dict):
+        return False
+    if _fill_order_id(item) == order_id:
+        return True
+    return False
+
+
+def _matches_order_profile(
+        item: Any,
+        token_id: str | None,
+        side: str | None,
+        price: str | None,
+        shares: str | None,
+) -> bool:
+    if not isinstance(item, dict):
+        return False
+    normalized = _normalize_fill(item)
+    if token_id is not None and normalized.tokenId != token_id:
+        return False
+    if side is not None and (normalized.side or "").upper() != side.upper():
+        return False
+    if price is not None and normalized.price != Decimal(str(price)):
+        return False
+    if shares is not None and normalized.shares != Decimal(str(shares)):
+        return False
+    return normalized.price is not None and normalized.shares is not None
+
+
+def _fill_order_id(item: dict[str, Any]) -> str | None:
+    order_id = _first_present(item, *FILL_ORDER_ID_KEYS)
+    if order_id is not None:
+        return str(order_id)
+    maker_orders = item.get("maker_orders") or item.get("makerOrders")
+    if isinstance(maker_orders, list):
+        for order in maker_orders:
+            if isinstance(order, dict):
+                nested_order_id = _first_present(order, *FILL_ORDER_ID_KEYS)
+                if nested_order_id is not None:
+                    return str(nested_order_id)
+    return None
+
+
+def _epoch_seconds_or_none(value: str | None) -> int | None:
+    if value is None or value == "":
+        return None
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    if "." in normalized:
+        prefix, suffix = normalized.split(".", 1)
+        fraction = suffix
+        timezone = ""
+        for marker in ("+", "-"):
+            if marker in suffix:
+                fraction, timezone = suffix.split(marker, 1)
+                timezone = marker + timezone
+                break
+        normalized = prefix + "." + fraction[:6] + timezone
+    try:
+        return int(datetime.fromisoformat(normalized).timestamp())
+    except ValueError:
+        return None
+
+
 class UnsupportedOperationError(RuntimeError):
     pass
+
+
+ORDER_ID_KEYS = (
+    "orderID",
+    "orderId",
+    "order_id",
+    "id",
+)
+
+FILL_ORDER_ID_KEYS = (
+    "orderID",
+    "orderId",
+    "order_id",
+    "maker_order_id",
+    "makerOrderId",
+    "taker_order_id",
+    "takerOrderId",
+)
 
 
 def _normalize_cancel_response(order_id: str, raw_response: Any) -> CancelOrderResponse:
@@ -419,9 +571,9 @@ def _normalize_fill(raw_response: Any) -> FillResponse:
     if role not in {"MAKER", "TAKER"}:
         role = "UNKNOWN"
     return FillResponse(
-        remoteOrderId=_string_or_none(_first_present(data, "orderID", "orderId", "order_id")),
-        tradeId=_string_or_none(_first_present(data, "tradeID", "tradeId", "trade_id", "transactionHash")),
-        fillId=_string_or_none(_first_present(data, "fillID", "fillId", "fill_id", "id")),
+        remoteOrderId=_fill_order_id(data),
+        tradeId=_string_or_none(_first_present(data, "tradeID", "tradeId", "trade_id", "transactionHash", "transaction_hash")),
+        fillId=_string_or_none(_first_present(data, "fillID", "fillId", "fill_id", "id", "transactionHash", "transaction_hash")),
         tokenId=_string_or_none(_first_present(data, "tokenId", "token_id", "asset_id")),
         marketId=_string_or_none(_first_present(data, "market", "marketId", "market_id")),
         side=_string_or_none(_first_present(data, "side")),
@@ -429,7 +581,7 @@ def _normalize_fill(raw_response: Any) -> FillResponse:
         shares=_decimal_or_none(_first_present(data, "size", "shares", "amount", "matchedSize")),
         fee=_decimal_or_none(_first_present(data, "fee", "feeUsd", "fee_usd")),
         role=role,
-        timestamp=_datetime_or_none(_first_present(data, "timestamp", "createdAt", "created_at", "filledAt", "filled_at")),
+        timestamp=_datetime_or_none(_first_present(data, "timestamp", "createdAt", "created_at", "filledAt", "filled_at", "match_time")),
         rawResponse=json.dumps(raw_response, default=str, sort_keys=True),
     )
 

@@ -27,6 +27,25 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Lo
 
     List<TradeOrderEntity> findByStatusIn(List<TradeOrderStatus> statuses);
 
+    List<TradeOrderEntity> findByStatusInAndRemoteOrderIdIsNotNull(List<TradeOrderStatus> statuses);
+
+    @Query("""
+            select o
+            from TradeOrderEntity o
+            join TradeEntity t on t.id = o.tradeId
+            where o.remoteOrderId is not null
+              and (
+                    o.status in :activeStatuses
+                    or (
+                        o.status = com.vokerg.voktrader.trade.TradeOrderStatus.EXPIRED
+                        and o.phase = com.vokerg.voktrader.trade.TradeOrderPhase.ENTRY
+                        and o.filledShares is null
+                        and t.status = com.vokerg.voktrader.trade.TradeStatus.CANCELLED
+                    )
+              )
+            """)
+    List<TradeOrderEntity> findReconcilableRemoteOrders(@Param("activeStatuses") List<TradeOrderStatus> activeStatuses);
+
     @Query("""
             select count(o) > 0
             from TradeOrderEntity o
