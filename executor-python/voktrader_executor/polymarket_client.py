@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from .config import Settings
+from .log_colors import event_label
 from .models import (
     CancelOrderResponse,
     ExecutorError,
@@ -50,12 +51,7 @@ class PolymarketExecutor:
             )
 
         client = self._get_client()
-        raw_response = _call_client_method(
-            client,
-            ("cancel_order", "cancel", "delete_order"),
-            order_id=order_id,
-            id=order_id,
-        )
+        raw_response = _cancel_order(client, order_id)
         return _normalize_cancel_response(order_id, raw_response)
 
     def get_order_status(self, order_id: str) -> OrderStatusResponse:
@@ -76,7 +72,8 @@ class PolymarketExecutor:
         )
         response = _normalize_order_status(raw_response, fallback_order_id=order_id)
         logger.info(
-            "EXECUTOR ORDER STATUS RAW: orderId=%s raw=%s normalized=%s",
+            "%s: orderId=%s raw=%s normalized=%s",
+            event_label("EXECUTOR ORDER STATUS RAW"),
             order_id,
             _json_for_log(raw_response),
             response.model_dump_json(),
@@ -156,7 +153,8 @@ class PolymarketExecutor:
             rawResponse=json.dumps(raw_response, default=str, sort_keys=True),
         )
         logger.info(
-            "EXECUTOR FILLS RAW: orderId=%s marketId=%s tokenId=%s side=%s price=%s shares=%s since=%s extractedCount=%s matchedCount=%s raw=%s normalized=%s",
+            "%s: orderId=%s marketId=%s tokenId=%s side=%s price=%s shares=%s since=%s extractedCount=%s matchedCount=%s raw=%s normalized=%s",
+            event_label("EXECUTOR FILLS RAW"),
             order_id,
             market_id,
             token_id,
@@ -404,6 +402,20 @@ def _call_client_method(client: Any, method_names: tuple[str, ...], **kwargs: An
     raise UnsupportedOperationError(f"Polymarket SDK client has none of: {', '.join(method_names)}")
 
 
+def _cancel_order(client: Any, order_id: str) -> Any:
+    cancel_order = getattr(client, "cancel_order", None)
+    if cancel_order is not None:
+        from py_clob_client_v2.clob_types import OrderPayload
+
+        return cancel_order(OrderPayload(orderID=order_id))
+    return _call_client_method(
+        client,
+        ("cancel", "delete_order"),
+        order_id=order_id,
+        id=order_id,
+    )
+
+
 def _list_trade_history(
         client: Any,
         order_id: str | None,
@@ -420,7 +432,8 @@ def _list_trade_history(
             after=_epoch_seconds_or_none(since),
         )
         logger.info(
-            "EXECUTOR FILLS SDK REQUEST: method=get_trades orderId=%s gammaMarketId=%s assetId=%s since=%s after=%s",
+            "%s: method=get_trades orderId=%s gammaMarketId=%s assetId=%s since=%s after=%s",
+            event_label("EXECUTOR FILLS SDK REQUEST"),
             order_id,
             market_id,
             token_id,

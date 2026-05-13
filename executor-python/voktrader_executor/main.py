@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from .config import Settings
 from .idempotency import IdempotencyStore
+from .log_colors import event_label
 from .models import (
     CancelOrderResponse,
     ExecutorCapabilities,
@@ -49,7 +50,8 @@ executor = PolymarketExecutor(settings)
 @app.on_event("startup")
 def log_startup_config() -> None:
     logger.info(
-        "EXECUTOR CONFIG: dryRun=%s host=%s maxOrderAmountUsd=%s requireFok=%s",
+        "%s: dryRun=%s host=%s maxOrderAmountUsd=%s requireFok=%s",
+        event_label("EXECUTOR CONFIG"),
         settings.executor_dry_run,
         settings.polymarket_host,
         settings.max_order_amount_usd,
@@ -243,23 +245,23 @@ def list_open_orders(
     summary="Fetch exchange order status",
 )
 def get_order(order_id: str, _: None = Depends(require_auth)) -> OrderStatusResponse:
-    logger.info("EXECUTOR ORDER STATUS REQUEST: orderId=%s", order_id)
+    logger.info("%s: orderId=%s", event_label("EXECUTOR ORDER STATUS REQUEST"), order_id)
     try:
         response = executor.get_order_status(order_id)
-        logger.info("EXECUTOR ORDER STATUS RESPONSE: orderId=%s body=%s", order_id, response.model_dump_json())
+        logger.info("%s: orderId=%s body=%s", event_label("EXECUTOR ORDER STATUS RESPONSE"), order_id, response.model_dump_json())
         return response
     except UnsupportedOperationError as exc:
-        logger.warning("EXECUTOR ORDER STATUS UNSUPPORTED: orderId=%s error=%s", order_id, exc)
+        logger.warning("%s: orderId=%s error=%s", event_label("EXECUTOR ORDER STATUS UNSUPPORTED"), order_id, exc)
         response = OrderStatusResponse(
             success=False,
             remoteOrderId=order_id,
             status="UNKNOWN",
             error=ExecutorError(type="UNSUPPORTED_OPERATION", message=str(exc)),
         )
-        logger.info("EXECUTOR ORDER STATUS RESPONSE: orderId=%s body=%s", order_id, response.model_dump_json())
+        logger.info("%s: orderId=%s body=%s", event_label("EXECUTOR ORDER STATUS RESPONSE"), order_id, response.model_dump_json())
         return response
     except PolyApiException as exc:
-        logger.warning("EXECUTOR ORDER STATUS EXCHANGE ERROR: orderId=%s status=%s error=%s", order_id, exc.status_code, exc.error_msg)
+        logger.warning("%s: orderId=%s status=%s error=%s", event_label("EXECUTOR ORDER STATUS EXCHANGE ERROR"), order_id, exc.status_code, exc.error_msg)
         response = OrderStatusResponse(
             success=False,
             remoteOrderId=order_id,
@@ -267,17 +269,17 @@ def get_order(order_id: str, _: None = Depends(require_auth)) -> OrderStatusResp
             rawResponse=json.dumps({"statusCode": exc.status_code, "error": exc.error_msg}, default=str, sort_keys=True),
             error=ExecutorError(type="EXCHANGE_REJECTION", message=str(exc.error_msg)),
         )
-        logger.info("EXECUTOR ORDER STATUS RESPONSE: orderId=%s body=%s", order_id, response.model_dump_json())
+        logger.info("%s: orderId=%s body=%s", event_label("EXECUTOR ORDER STATUS RESPONSE"), order_id, response.model_dump_json())
         return response
     except Exception as exc:  # noqa: BLE001
-        logger.warning("EXECUTOR ORDER STATUS FAILED: orderId=%s", order_id, exc_info=exc)
+        logger.warning("%s: orderId=%s", event_label("EXECUTOR ORDER STATUS FAILED"), order_id, exc_info=exc)
         response = OrderStatusResponse(
             success=False,
             remoteOrderId=order_id,
             status="UNKNOWN",
             error=ExecutorError(type="NETWORK_FAILURE", message=str(exc)),
         )
-        logger.info("EXECUTOR ORDER STATUS RESPONSE: orderId=%s body=%s", order_id, response.model_dump_json())
+        logger.info("%s: orderId=%s body=%s", event_label("EXECUTOR ORDER STATUS RESPONSE"), order_id, response.model_dump_json())
         return response
 
 
@@ -298,7 +300,8 @@ def list_fills(
         _: None = Depends(require_auth),
 ) -> FillsResponse:
     logger.info(
-        "EXECUTOR FILLS REQUEST: orderId=%s marketId=%s tokenId=%s side=%s price=%s shares=%s since=%s",
+        "%s: orderId=%s marketId=%s tokenId=%s side=%s price=%s shares=%s since=%s",
+        event_label("EXECUTOR FILLS REQUEST"),
         order_id,
         market_id,
         token_id,
@@ -309,26 +312,26 @@ def list_fills(
     )
     try:
         response = executor.list_fills(order_id=order_id, market_id=market_id, token_id=token_id, side=side, price=price, shares=shares, since=since)
-        logger.info("EXECUTOR FILLS RESPONSE: orderId=%s body=%s", order_id, response.model_dump_json())
+        logger.info("%s: orderId=%s body=%s", event_label("EXECUTOR FILLS RESPONSE"), order_id, response.model_dump_json())
         return response
     except UnsupportedOperationError as exc:
-        logger.warning("EXECUTOR FILLS UNSUPPORTED: error=%s", exc)
+        logger.warning("%s: error=%s", event_label("EXECUTOR FILLS UNSUPPORTED"), exc)
         response = FillsResponse(success=False, error=ExecutorError(type="UNSUPPORTED_OPERATION", message=str(exc)))
-        logger.info("EXECUTOR FILLS RESPONSE: orderId=%s body=%s", order_id, response.model_dump_json())
+        logger.info("%s: orderId=%s body=%s", event_label("EXECUTOR FILLS RESPONSE"), order_id, response.model_dump_json())
         return response
     except PolyApiException as exc:
-        logger.warning("EXECUTOR FILLS EXCHANGE ERROR: status=%s error=%s", exc.status_code, exc.error_msg)
+        logger.warning("%s: status=%s error=%s", event_label("EXECUTOR FILLS EXCHANGE ERROR"), exc.status_code, exc.error_msg)
         response = FillsResponse(
             success=False,
             rawResponse=json.dumps({"statusCode": exc.status_code, "error": exc.error_msg}, default=str, sort_keys=True),
             error=ExecutorError(type="EXCHANGE_REJECTION", message=str(exc.error_msg)),
         )
-        logger.info("EXECUTOR FILLS RESPONSE: orderId=%s body=%s", order_id, response.model_dump_json())
+        logger.info("%s: orderId=%s body=%s", event_label("EXECUTOR FILLS RESPONSE"), order_id, response.model_dump_json())
         return response
     except Exception as exc:  # noqa: BLE001
-        logger.warning("EXECUTOR FILLS FAILED", exc_info=exc)
+        logger.warning("%s", event_label("EXECUTOR FILLS FAILED"), exc_info=exc)
         response = FillsResponse(success=False, error=ExecutorError(type="NETWORK_FAILURE", message=str(exc)))
-        logger.info("EXECUTOR FILLS RESPONSE: orderId=%s body=%s", order_id, response.model_dump_json())
+        logger.info("%s: orderId=%s body=%s", event_label("EXECUTOR FILLS RESPONSE"), order_id, response.model_dump_json())
         return response
 
 

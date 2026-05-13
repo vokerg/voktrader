@@ -261,9 +261,11 @@ def test_gtd_limit_order_sets_future_expiration():
 class FakeOrderManagementClient:
     def __init__(self):
         self.trade_params = None
+        self.cancel_payload = None
 
-    def cancel_order(self, order_id):
-        return {"success": True, "orderID": order_id, "status": "CANCELLED"}
+    def cancel_order(self, payload):
+        self.cancel_payload = payload
+        return {"success": True, "orderID": payload.orderID, "status": "CANCELLED"}
 
     def get_order(self, order_id):
         return {
@@ -316,12 +318,15 @@ def live_executor_with_fake_client():
 
 
 def test_cancel_order_success_mapping():
-    response = live_executor_with_fake_client().cancel_order("order-1")
+    executor = live_executor_with_fake_client()
+
+    response = executor.cancel_order("order-1")
 
     assert response.success is True
     assert response.remoteOrderId == "order-1"
     assert response.status == "CANCELLED"
     assert response.error is None
+    assert executor._client.cancel_payload.orderID == "order-1"
 
 
 def test_get_order_status_mapping():
