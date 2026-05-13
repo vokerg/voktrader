@@ -311,9 +311,26 @@ class FakeOrderManagementClient:
         ]
 
 
+class FakeAmbiguousCancelClient(FakeOrderManagementClient):
+    def cancel_order(self, payload):
+        self.cancel_payload = payload
+        return {"success": False, "orderID": payload.orderID, "status": "FAILED", "error": "ambiguous cancel"}
+
+    def get_order(self, order_id):
+        data = super().get_order(order_id)
+        data["status"] = "CANCELED"
+        return data
+
+
 def live_executor_with_fake_client():
     executor = PolymarketExecutor(Settings(EXECUTOR_DRY_RUN=False))
     executor._client = FakeOrderManagementClient()
+    return executor
+
+
+def live_executor_with_client(client):
+    executor = PolymarketExecutor(Settings(EXECUTOR_DRY_RUN=False))
+    executor._client = client
     return executor
 
 
@@ -327,6 +344,19 @@ def test_cancel_order_success_mapping():
     assert response.status == "CANCELLED"
     assert response.error is None
     assert executor._client.cancel_payload.orderID == "order-1"
+
+
+def test_cancel_order_treats_failed_response_as_success_when_remote_is_cancelled():
+    client = FakeAmbiguousCancelClient()
+    executor = live_executor_with_client(client)
+
+    response = executor.cancel_order("order-1")
+
+    assert response.success is True
+    assert response.remoteOrderId == "order-1"
+    assert response.status == "CANCELLED"
+    assert response.error is None
+    assert client.cancel_payload.orderID == "order-1"
 
 
 def test_get_order_status_mapping():

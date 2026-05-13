@@ -69,8 +69,8 @@ public class StrategyV2FeatureResolver {
     ) {
         Map<String, Object> features = new HashMap<>();
         putMarket(features, market, marketView, now);
-        putOutcome(features, "candidate", candidate, opposite, orderUsd);
-        putOutcome(features, "opposite", opposite, candidate, orderUsd);
+        putOutcome(features, "candidate", candidate, opposite, orderUsd, runtimeState);
+        putOutcome(features, "opposite", opposite, candidate, orderUsd, runtimeState);
         putAlias(features, "up", marketView.outcome("Up").orElse(null), marketView.outcome("Down").orElse(null));
         putAlias(features, "down", marketView.outcome("Down").orElse(null), marketView.outcome("Up").orElse(null));
         putRuntimeState(features, runtimeState, marketView, now);
@@ -102,7 +102,9 @@ public class StrategyV2FeatureResolver {
         BigDecimal feeForPnl = state.feeKnown()
                 ? nullToZero(state.realizedFeeUsd())
                 : fallbackFee;
+        BigDecimal grossPnl = unrealizedPnl(state, markPrice, BigDecimal.ZERO);
         BigDecimal pnl = unrealizedPnl(state, markPrice, feeForPnl);
+        features.put("position.unrealized_gross_pnl_usd", grossPnl);
         features.put("position.unrealized_pnl_usd", pnl);
         features.put("position.unrealized_pnl_pct", unrealizedPnlPct(state, pnl));
         features.put("position.entry_age_seconds", entryAgeSeconds(state, now));
@@ -123,6 +125,7 @@ public class StrategyV2FeatureResolver {
     }
 
     private void putTradeAliases(Map<String, Object> features) {
+        alias(features, "trade.estimated_gross_pnl_usd", "position.unrealized_gross_pnl_usd");
         alias(features, "trade.estimated_net_pnl_usd", "position.unrealized_pnl_usd");
         alias(features, "trade.estimated_net_pnl_pct", "position.unrealized_pnl_pct");
         alias(features, "trade.hold_seconds", "position.entry_age_seconds");
@@ -199,7 +202,14 @@ public class StrategyV2FeatureResolver {
         features.put("market.mid_sum", upMid == null || downMid == null ? null : upMid.add(downMid));
     }
 
-    private void putOutcome(Map<String, Object> features, String prefix, StrategyOutcomeView view, StrategyOutcomeView other, BigDecimal orderUsd) {
+    private void putOutcome(
+            Map<String, Object> features,
+            String prefix,
+            StrategyOutcomeView view,
+            StrategyOutcomeView other,
+            BigDecimal orderUsd,
+            StrategyRuntimeState runtimeState
+    ) {
         if (view == null) {
             return;
         }
@@ -231,6 +241,7 @@ public class StrategyV2FeatureResolver {
         features.put(prefix + ".microprice_edge", value(features.get(prefix + ".microprice")).subtract(nullToZero(view.mid())));
         features.put(prefix + ".mid_edge", other == null ? null : view.mid().subtract(other.mid()));
         putTaker(features, prefix, view, orderUsd);
+        putTakerSell(features, prefix, view, runtimeState);
         features.put(prefix + ".maker_buy.price", features.get(prefix + ".bid"));
         view.estimateMakerBuyFee(orderUsd).map(FeeEstimate::feeUsd).ifPresent(fee -> features.put(prefix + ".maker_buy.fee_usd", fee));
     }
@@ -271,6 +282,34 @@ public class StrategyV2FeatureResolver {
             view.estimateTakerFee(estimate).map(FeeEstimate::feeUsd).ifPresent(fee -> {
                 features.put(prefix + ".taker_buy.fee_usd", fee);
                 features.put(prefix + ".taker_buy.total_cost_usd", estimate.notionalUsd().add(fee));
+            });
+        });
+    }
+
+    private void putTakerSell(
+            Map<String, Object> features,
+            String prefix,
+            StrategyOutcomeView view,
+            StrategyRuntimeState runtimeState
+    ) {
+        if (runtimeState == null
+                || runtimeState.filledShares() == null
+                || runtimeState.tokenId() == null
+                || !runtimeState.tokenId().equals(view.tokenId())) {
+            return;
+        }
+        Optional<FillEstimate> sell = view.estimateTakerSell(runtimeState.filledShares());
+        sell.ifPresent(estimate -> {
+            features.put(prefix + ".taker_sell.fillable", estimate.complete());
+            features.put(prefix + ".taker_sell.avg_price", estimate.averagePrice());
+            features.put(prefix + ".taker_sell.worst_price", estimate.worstPrice());
+            features.put(prefix + ".taker_sell.shares", estimate.filledShares());
+            features.put(prefix + ".taker_sell.proceeds_usd", estimate.notionalUsd());
+            BigDecimal bid = bid(view) == null ? estimate.averagePrice() : bid(view);
+            features.put(prefix + ".taker_sell.slippage", estimate.averagePrice() == null || bid == null ? null : bid.subtract(estimate.averagePrice()));
+            view.estimateTakerFee(estimate).map(FeeEstimate::feeUsd).ifPresent(fee -> {
+                features.put(prefix + ".taker_sell.fee_usd", fee);
+                features.put(prefix + ".taker_sell.net_proceeds_usd", estimate.notionalUsd().subtract(fee));
             });
         });
     }

@@ -40,6 +40,7 @@ size:
     shares: {status: implemented}
 maker_lifecycle:
   cancel-after-seconds: {status: config_only, notes: "Entry pending cancellation uses entry-order-management.max-pending-seconds, not maker-lifecycle."}
+  cooldown-after-no-fill-cancel-seconds: {status: implemented, notes: "Suppresses same bot/strategy/market/token/side entry after a successful no-fill maker cancel."}
   max-reposts: {status: config_only}
   replace-if-best-bid-moves-ticks: {status: config_only}
 reason_template:
@@ -47,4 +48,3 @@ reason_template:
   placeholder_syntax: "{{feature.name}}"
   available_namespaces: ["market", "candidate", "opposite", "up", "down", "trade"]
   missing_placeholder_behavior: "Unresolved placeholders remain as literal text."
-

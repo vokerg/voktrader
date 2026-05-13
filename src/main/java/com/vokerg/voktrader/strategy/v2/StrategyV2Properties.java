@@ -459,11 +459,14 @@ public class StrategyV2Properties {
 
     public static class MakerLifecycle {
         private int cancelAfterSeconds = 8;
+        private int cooldownAfterNoFillCancelSeconds = 0;
         private int replaceIfBestBidMovesTicks = 1;
         private int maxReposts = 1;
         private boolean requireReconciliation = true;
         public int getCancelAfterSeconds() { return cancelAfterSeconds; }
         public void setCancelAfterSeconds(int cancelAfterSeconds) { this.cancelAfterSeconds = cancelAfterSeconds; }
+        public int getCooldownAfterNoFillCancelSeconds() { return cooldownAfterNoFillCancelSeconds; }
+        public void setCooldownAfterNoFillCancelSeconds(int cooldownAfterNoFillCancelSeconds) { this.cooldownAfterNoFillCancelSeconds = cooldownAfterNoFillCancelSeconds; }
         public int getReplaceIfBestBidMovesTicks() { return replaceIfBestBidMovesTicks; }
         public void setReplaceIfBestBidMovesTicks(int replaceIfBestBidMovesTicks) { this.replaceIfBestBidMovesTicks = replaceIfBestBidMovesTicks; }
         public int getMaxReposts() { return maxReposts; }

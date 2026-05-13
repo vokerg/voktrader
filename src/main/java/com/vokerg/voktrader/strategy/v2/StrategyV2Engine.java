@@ -21,8 +21,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
@@ -42,6 +45,7 @@ public class StrategyV2Engine implements TradingStrategy {
     private final OrderGateway orderGateway;
     private final TradingProperties tradingProperties;
     private final StrategyV2SetCatalog configCatalog;
+    private final Map<CooldownKey, Instant> noFillCancelCooldownUntil = new ConcurrentHashMap<>();
 
     public StrategyV2Engine(
             StrategyV2Properties properties,
@@ -152,6 +156,9 @@ public class StrategyV2Engine implements TradingStrategy {
         List<StrategyV2FeatureContext> contexts = state == null
                 ? featureResolver.contexts(market, marketView, orderUsd)
                 : featureResolver.contexts(market, marketView, orderUsd, state);
+        contexts = contexts.stream()
+                .filter(context -> !entryNoFillCancelCooldownActive(strategy, market, context))
+                .toList();
         return entryEvaluator.evaluate(strategy, contexts, featureResolver, mode)
                     .map(result -> result.accepted() && "single_market_single_position".equals(effectiveProperties().getEngine().getDecisionMode()))
                     .orElse(false);
@@ -197,7 +204,10 @@ public class StrategyV2Engine implements TradingStrategy {
     }
 
     private void maybeCancelEntryPending(StrategyV2Properties.Strategy strategy, StrategyRuntimeState state) {
-        maybeCancelOrder(state.activeEntryOrder(), strategy.getEntryOrderManagement().getMaxPendingSeconds(), "entry pending too long");
+        OrderLifecycleResult result = maybeCancelOrder(state.activeEntryOrder(), strategy.getEntryOrderManagement().getMaxPendingSeconds(), "entry pending too long");
+        if (result != null && result.success() && noFillMakerEntryOrder(strategy, state)) {
+            registerNoFillCancelCooldown(strategy, state);
+        }
     }
 
     private void maybeCancelPartialRemainder(StrategyV2Properties.Strategy strategy, StrategyRuntimeState state) {
@@ -208,14 +218,14 @@ public class StrategyV2Engine implements TradingStrategy {
         maybeCancelOrder(state.activeExitOrder(), strategy.getExitOrderManagement().getMaxPendingSeconds(), "exit pending too long");
     }
 
-    private void maybeCancelOrder(OrderRuntimeState order, int maxPendingSeconds, String reason) {
+    private OrderLifecycleResult maybeCancelOrder(OrderRuntimeState order, int maxPendingSeconds, String reason) {
         if (order == null || maxPendingSeconds <= 0) {
-            return;
+            return null;
         }
         Long ageSeconds = order.ageSeconds(TimeMachine.now());
         String cancelIdentifier = order.cancelIdentifier();
         if (ageSeconds == null || ageSeconds <= maxPendingSeconds || cancelIdentifier == null || cancelIdentifier.isBlank()) {
-            return;
+            return null;
         }
         OrderLifecycleResult result = OrderGatewayContext.current().orElse(orderGateway).cancelOrder(cancelIdentifier, reason);
         if (!result.success()) {
@@ -223,6 +233,78 @@ public class StrategyV2Engine implements TradingStrategy {
         } else {
             log.info("Strategy V2 requested cancel for {} because {}", cancelIdentifier, reason);
         }
+        return result;
+    }
+
+    private boolean entryNoFillCancelCooldownActive(
+            StrategyV2Properties.Strategy strategy,
+            GammaMarketDto market,
+            StrategyV2FeatureContext context
+    ) {
+        if (strategy == null || market == null || context == null || context.candidate() == null) {
+            return false;
+        }
+        CooldownKey key = cooldownKey(strategy, market.id(), context.candidate().tokenId(), entrySide(strategy));
+        Instant until = noFillCancelCooldownUntil.get(key);
+        if (until == null) {
+            return false;
+        }
+        Instant now = TimeMachine.now();
+        if (!now.isBefore(until)) {
+            noFillCancelCooldownUntil.remove(key, until);
+            return false;
+        }
+        diagnosticsRecorder.rejected(
+                strategy,
+                context,
+                "entry suppressed by maker no-fill cancel cooldown",
+                Map.of("cooldownUntil", until, "tokenId", context.candidate().tokenId())
+        );
+        return true;
+    }
+
+    private boolean noFillMakerEntryOrder(StrategyV2Properties.Strategy strategy, StrategyRuntimeState state) {
+        OrderRuntimeState order = state == null ? null : state.activeEntryOrder();
+        if (strategy == null || order == null || order.phase() != com.vokerg.voktrader.trade.TradeOrderPhase.ENTRY) {
+            return false;
+        }
+        BigDecimal filledShares = order.filledShares();
+        if (filledShares != null && filledShares.compareTo(BigDecimal.ZERO) > 0) {
+            return false;
+        }
+        StrategyV2Properties.Action action = strategy.getEntry() == null ? null : strategy.getEntry().getAction();
+        if (action == null) {
+            return false;
+        }
+        return "maker".equalsIgnoreCase(action.getLiquidityRole()) || Boolean.TRUE.equals(action.getPostOnly());
+    }
+
+    private void registerNoFillCancelCooldown(StrategyV2Properties.Strategy strategy, StrategyRuntimeState state) {
+        StrategyV2Properties.Action action = strategy.getEntry() == null ? null : strategy.getEntry().getAction();
+        StrategyV2Properties.MakerLifecycle lifecycle = action == null ? null : action.getMakerLifecycle();
+        int cooldownSeconds = lifecycle == null ? 0 : lifecycle.getCooldownAfterNoFillCancelSeconds();
+        if (cooldownSeconds <= 0 || state == null || state.tokenId() == null) {
+            return;
+        }
+        CooldownKey key = cooldownKey(strategy, state.marketId(), state.tokenId(), entrySide(strategy));
+        Instant until = TimeMachine.now().plusSeconds(cooldownSeconds);
+        noFillCancelCooldownUntil.put(key, until);
+        log.info("Strategy V2 maker no-fill cancel cooldown set key={} until={}", key, until);
+    }
+
+    private CooldownKey cooldownKey(StrategyV2Properties.Strategy strategy, String marketId, String tokenId, String side) {
+        return new CooldownKey(
+                BotRuntimeContextHolder.currentBotId().orElse(null),
+                strategy == null ? null : strategy.getStrategyId(),
+                marketId,
+                tokenId,
+                side == null ? null : side.toUpperCase(Locale.ROOT)
+        );
+    }
+
+    private String entrySide(StrategyV2Properties.Strategy strategy) {
+        StrategyV2Properties.Action action = strategy == null || strategy.getEntry() == null ? null : strategy.getEntry().getAction();
+        return action == null || action.getSide() == null ? "BUY" : action.getSide();
     }
 
     private boolean modeAllowed(StrategyV2Properties.Strategy strategy, ExecutionMode mode) {
@@ -256,6 +338,9 @@ public class StrategyV2Engine implements TradingStrategy {
 
     private StrategyV2Properties effectiveProperties() {
         return StrategyV2OverrideContext.current().orElse(properties);
+    }
+
+    private record CooldownKey(Long botId, String strategyId, String marketId, String tokenId, String side) {
     }
 
 }

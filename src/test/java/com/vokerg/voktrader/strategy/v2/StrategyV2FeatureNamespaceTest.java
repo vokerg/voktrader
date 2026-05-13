@@ -8,10 +8,12 @@ class StrategyV2FeatureNamespaceTest {
     @Test
     void includesRuntimeAliasesAndRejectsUntrackedExcursions() {
         assertThat(StrategyV2FeatureNamespace.isKnown("trade.estimated_net_pnl_usd")).isTrue();
+        assertThat(StrategyV2FeatureNamespace.isKnown("trade.estimated_gross_pnl_usd")).isTrue();
         assertThat(StrategyV2FeatureNamespace.isKnown("trade.hold_seconds")).isTrue();
         assertThat(StrategyV2FeatureNamespace.isKnown("position.unrealized_pnl_usd")).isTrue();
+        assertThat(StrategyV2FeatureNamespace.isKnown("position.unrealized_gross_pnl_usd")).isTrue();
         assertThat(StrategyV2FeatureNamespace.isKnown("trade.max_adverse_excursion_usd")).isFalse();
-        assertThat(StrategyV2FeatureNamespace.isKnown("candidate.taker_sell.net_proceeds_usd")).isFalse();
+        assertThat(StrategyV2FeatureNamespace.isKnown("candidate.taker_sell.net_proceeds_usd")).isTrue();
     }
 
     @Test

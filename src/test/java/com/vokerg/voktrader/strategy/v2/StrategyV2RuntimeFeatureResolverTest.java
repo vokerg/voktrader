@@ -48,6 +48,8 @@ class StrategyV2RuntimeFeatureResolverTest {
         assertThat(context.features().get("position.fee_known")).isEqualTo(false);
         assertThat(context.features().get("position.realized_fee_usd")).isNull();
         assertThat((BigDecimal) context.features().get("position.unrealized_pnl_usd")).isEqualByComparingTo("0.6400000000");
+        assertThat((BigDecimal) context.features().get("position.unrealized_gross_pnl_usd")).isEqualByComparingTo("1.0000000000");
+        assertThat(context.features().get("trade.estimated_gross_pnl_usd")).isEqualTo(context.features().get("position.unrealized_gross_pnl_usd"));
         assertThat(context.features().get("trade.estimated_net_pnl_usd")).isEqualTo(context.features().get("position.unrealized_pnl_usd"));
         assertThat(context.features().get("trade.estimated_net_pnl_pct")).isEqualTo(context.features().get("position.unrealized_pnl_pct"));
         assertThat(context.features().get("trade.hold_seconds")).isEqualTo(context.features().get("position.entry_age_seconds"));
@@ -86,6 +88,7 @@ class StrategyV2RuntimeFeatureResolverTest {
         when(view.bestBidLevel()).thenReturn(Optional.empty());
         when(view.bestAskLevel()).thenReturn(Optional.empty());
         when(view.estimateTakerBuy(org.mockito.ArgumentMatchers.any())).thenReturn(Optional.empty());
+        when(view.estimateTakerSell(org.mockito.ArgumentMatchers.any())).thenReturn(Optional.empty());
         when(view.estimateMakerBuyFee(org.mockito.ArgumentMatchers.any())).thenReturn(Optional.empty());
         return view;
     }

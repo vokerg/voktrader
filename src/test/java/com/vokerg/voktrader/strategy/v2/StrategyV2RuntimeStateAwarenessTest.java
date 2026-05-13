@@ -28,6 +28,7 @@ import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -90,6 +91,33 @@ class StrategyV2RuntimeStateAwarenessTest {
 
         verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
         verify(orderGateway).cancelOrder(eq("entry-local"), any());
+    }
+
+    @Test
+    void noFillMakerCancelSuppressesSameTokenReEntryDuringCooldown() {
+        Instant now = Instant.parse("2026-05-13T18:00:00Z");
+        TimeMachine.runAt(now, () -> {
+            EngineFixture fixture = fixture(true, state(TradeStatus.ENTRY_PENDING, entryOrder(TradeOrderStatus.RESTING, 30), null));
+            fixture.strategy.getEntry().getAction().setLiquidityRole("maker");
+            fixture.strategy.getEntry().getAction().setPostOnly(true);
+            fixture.strategy.getEntry().getAction().getMakerLifecycle().setCooldownAfterNoFillCancelSeconds(20);
+            fixture.strategy.getEntryOrderManagement().setMaxPendingSeconds(1);
+            when(orderGateway.cancelOrder(eq("entry-local"), any())).thenReturn(new OrderLifecycleResult(
+                    true, 1L, 2L, "entry-local", "entry-remote", TradeStatus.ENTRY_PENDING, TradeOrderStatus.CANCEL_REQUESTED, "cancel accepted", null
+            ));
+
+            fixture.engine.tick();
+            when(tradeStateProvider.getState(any(StrategyInstanceKey.class), eq("market-id")))
+                    .thenReturn(StrategyRuntimeState.empty(StrategyInstanceKey.of(null, "strategy-test"), "market-id"));
+            TimeMachine.runAt(now.plusSeconds(10), fixture.engine::tick);
+
+            verify(entryEvaluator).evaluate(
+                    eq(fixture.strategy),
+                    argThat(List::isEmpty),
+                    eq(featureResolver),
+                    eq(ExecutionMode.PAPER)
+            );
+        });
     }
 
     @Test

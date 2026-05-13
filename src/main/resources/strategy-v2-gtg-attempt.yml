@@ -61,7 +61,9 @@ strategy-v2:
         Post a small post-only maker bid when spread is at least one tick,
         book pressure is supportive, volatility is low, and the order can be
         cancelled quickly if the signal deteriorates. Entry is passive; exit is
-        aggressive taker/FAK using net PnL thresholds.
+        aggressive taker/FAK using net PnL thresholds. Defensive pressure exits
+        require a short minimum hold and stronger adverse signals to avoid
+        flat-price churn after taker fees.
       tags:
         - maker
         - gtd
@@ -200,6 +202,7 @@ strategy-v2:
 
           maker-lifecycle:
             cancel-after-seconds: 5
+            cooldown-after-no-fill-cancel-seconds: 20
             replace-if-best-bid-moves-ticks: 1
             max-reposts: 1
             require-reconciliation: true
@@ -235,16 +238,20 @@ strategy-v2:
             order-type: FAK
             liquidity-role: taker
             when:
-              any:
-                - feature: candidate.microprice_edge
-                  op: "<="
-                  value: "-0.002"
-                - feature: candidate.depth_imbalance_0_03
-                  op: "<="
-                  value: "-0.050"
-                - feature: candidate.bid_move_5s
-                  op: "<="
-                  value: "-0.012"
+              all:
+                - feature: trade.hold_seconds
+                  op: ">="
+                  value: "3"
+                - any:
+                    - feature: candidate.microprice_edge
+                      op: "<="
+                      value: "-0.006"
+                    - feature: candidate.depth_imbalance_0_03
+                      op: "<="
+                      value: "-0.100"
+                    - feature: candidate.bid_move_5s
+                      op: "<="
+                      value: "-0.018"
 
           - name: net-stop-loss
             action: SELL

@@ -4,11 +4,16 @@ import com.vokerg.voktrader.telemetry.TelemetryData;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
+import com.vokerg.voktrader.trade.TradeEventEntity;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
+import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.ObjectMapper;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,14 +22,20 @@ import java.util.concurrent.ConcurrentHashMap;
 public class StrategyV2DiagnosticsRecorder {
     private final TradingEventLogger eventLogger;
     private final StrategyV2DiagnosticsProperties properties;
+    private final TradeEventRepository tradeEventRepository;
+    private final ObjectMapper objectMapper;
     private final Map<String, Instant> entryPulseAt = new ConcurrentHashMap<>();
 
     public StrategyV2DiagnosticsRecorder(
             TradingEventLogger eventLogger,
-            StrategyV2DiagnosticsProperties properties
+            StrategyV2DiagnosticsProperties properties,
+            TradeEventRepository tradeEventRepository,
+            ObjectMapper objectMapper
     ) {
         this.eventLogger = eventLogger;
         this.properties = properties;
+        this.tradeEventRepository = tradeEventRepository;
+        this.objectMapper = objectMapper;
     }
 
     public void rejected(StrategyV2Properties.Strategy strategy, StrategyV2FeatureContext context, String reason) {
@@ -94,6 +105,15 @@ public class StrategyV2DiagnosticsRecorder {
     }
 
     public void routed(StrategyV2Properties.Strategy strategy, StrategyV2FeatureContext context, TradeExecutionResult result) {
+        if (result != null && result.tradeId() != null) {
+            persistDecision(
+                    result.tradeId(),
+                    result.orderId(),
+                    "STRATEGY_V2_ENTRY_DECISION",
+                    "entry rule routed",
+                    entryPayload(strategy, context, result)
+            );
+        }
         eventLogger.routed(
                 "ENTRY_V2",
                 strategy.getStrategyId(),
@@ -151,6 +171,15 @@ public class StrategyV2DiagnosticsRecorder {
             StrategyV2FeatureContext context,
             TradeExecutionResult result
     ) {
+        if (result != null && result.tradeId() != null) {
+            persistDecision(
+                    result.tradeId(),
+                    result.orderId(),
+                    "STRATEGY_V2_EXIT_DECISION",
+                    "exit rule routed",
+                    exitPayload(strategy, rule, context, result)
+            );
+        }
         eventLogger.routed(
                 "EXIT_V2",
                 strategy.getStrategyId(),
@@ -170,6 +199,185 @@ public class StrategyV2DiagnosticsRecorder {
                 ),
                 result.accepted()
         );
+    }
+
+    private Map<String, Object> entryPayload(
+            StrategyV2Properties.Strategy strategy,
+            StrategyV2FeatureContext context,
+            TradeExecutionResult result
+    ) {
+        Map<String, Object> payload = basePayload(strategy, context, result, "ENTRY");
+        payload.put("entryRuleId", strategy.getEntry() == null ? null : strategy.getEntry().getRuleId());
+        payload.put("entryAction", strategy.getEntry() == null ? null : strategy.getEntry().getAction());
+        payload.put("candidateSelection", strategy.getCandidateSelection());
+        payload.put("matchedConditions", conditionValues(strategy.getEntry() == null ? null : strategy.getEntry().getWhen(), context));
+        payload.put("reasonCategory", "entry");
+        return payload;
+    }
+
+    private Map<String, Object> exitPayload(
+            StrategyV2Properties.Strategy strategy,
+            StrategyV2Properties.ExitRule rule,
+            StrategyV2FeatureContext context,
+            TradeExecutionResult result
+    ) {
+        Map<String, Object> payload = basePayload(strategy, context, result, "EXIT");
+        payload.put("exitRuleId", strategy.getExit() == null ? null : strategy.getExit().getRuleId());
+        payload.put("exitRuleName", rule == null ? null : rule.getName());
+        payload.put("exitAction", rule == null ? null : rule.getAction());
+        payload.put("exitOrderType", rule == null ? null : rule.getOrderType());
+        payload.put("exitLiquidityRole", rule == null ? null : rule.getLiquidityRole());
+        payload.put("matchedConditions", conditionValues(rule == null ? null : rule.getWhen(), context));
+        payload.put("reasonCategory", classifyExit(rule));
+        payload.put("estimatedGrossPnlUsd", feature(context, "position.unrealized_gross_pnl_usd"));
+        payload.put("estimatedNetPnlUsd", firstFeature(context, "position.unrealized_pnl_usd", "trade.estimated_net_pnl_usd"));
+        payload.put("estimatedNetPnlPct", firstFeature(context, "position.unrealized_pnl_pct", "trade.estimated_net_pnl_pct"));
+        payload.put("realizedFeeUsdAtDecision", firstFeature(context, "position.realized_fee_usd", "trade.realized_fee_usd"));
+        payload.put("exitFeeEstimateUsd", firstFeature(context, "candidate.taker_sell.fee_usd", "candidate.maker_sell.fee_usd"));
+        payload.put("feeOrSlippageNegative", feeOrSlippageNegative(context));
+        return payload;
+    }
+
+    private Map<String, Object> basePayload(
+            StrategyV2Properties.Strategy strategy,
+            StrategyV2FeatureContext context,
+            TradeExecutionResult result,
+            String phase
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("phase", phase);
+        payload.put("strategyId", strategy == null ? null : strategy.getStrategyId());
+        payload.put("mode", result == null ? null : result.mode());
+        payload.put("accepted", result == null ? null : result.accepted());
+        payload.put("tradeId", result == null ? null : result.tradeId());
+        payload.put("orderId", result == null ? null : result.orderId());
+        payload.put("localOrderId", result == null ? null : result.localOrderId());
+        payload.put("remoteOrderId", result == null ? null : result.remoteOrderId());
+        payload.put("tradeStatus", result == null || result.tradeStatus() == null ? null : result.tradeStatus().name());
+        payload.put("orderStatus", result == null || result.orderStatus() == null ? null : result.orderStatus().name());
+        payload.put("message", result == null ? null : result.message());
+        payload.put("error", result == null ? null : result.error());
+        payload.put("candidate", context == null || context.candidate() == null ? null : context.candidate().outcome());
+        payload.put("tokenId", context == null || context.candidate() == null ? null : context.candidate().tokenId());
+        payload.put("marketId", context == null || context.market() == null ? null : context.market().id());
+        payload.put("marketSlug", context == null || context.market() == null ? null : context.market().slug());
+        payload.put("features", context == null ? Map.of() : context.features());
+        payload.put("diagnosticSchema", "strategy-v2-decision-v1");
+        return payload;
+    }
+
+    private List<Map<String, Object>> conditionValues(StrategyV2Properties.Condition condition, StrategyV2FeatureContext context) {
+        if (condition == null) {
+            return List.of();
+        }
+        List<Map<String, Object>> values = new java.util.ArrayList<>();
+        collectConditionValues(condition, context, values, false);
+        return values;
+    }
+
+    private void collectConditionValues(
+            StrategyV2Properties.Condition condition,
+            StrategyV2FeatureContext context,
+            List<Map<String, Object>> values,
+            boolean negated
+    ) {
+        if (condition == null) {
+            return;
+        }
+        if (condition.getAll() != null) {
+            condition.getAll().forEach(child -> collectConditionValues(child, context, values, negated));
+            return;
+        }
+        if (condition.getAny() != null) {
+            condition.getAny().forEach(child -> collectConditionValues(child, context, values, negated));
+            return;
+        }
+        if (condition.getNot() != null) {
+            collectConditionValues(condition.getNot(), context, values, !negated);
+            return;
+        }
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("feature", condition.getFeature());
+        value.put("op", condition.getOp() == null ? "exists" : condition.getOp());
+        value.put("expected", condition.getValues() == null ? condition.getValue() : condition.getValues());
+        value.put("actual", feature(context, condition.getFeature()));
+        value.put("negated", negated);
+        values.add(value);
+    }
+
+    private Object feature(StrategyV2FeatureContext context, String feature) {
+        if (context == null || feature == null) {
+            return null;
+        }
+        return context.features().get(feature);
+    }
+
+    private Object firstFeature(StrategyV2FeatureContext context, String... features) {
+        for (String feature : features) {
+            Object value = feature(context, feature);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private String classifyExit(StrategyV2Properties.ExitRule rule) {
+        String text = ((rule == null ? "" : String.valueOf(rule.getName())) + " " + (rule == null ? "" : String.valueOf(rule.getAction()))).toLowerCase();
+        if (text.contains("manual")) return "manual";
+        if (text.contains("stop") || text.contains("loss")) return "stop";
+        if (text.contains("pressure") || text.contains("flip")) return "pressure_flip";
+        if (text.contains("flush") || text.contains("final")) return "final_flush";
+        if (text.contains("profit") || text.contains("take")) return "profit";
+        if (text.contains("reconcil")) return "reconciliation";
+        return "rule";
+    }
+
+    private boolean feeOrSlippageNegative(StrategyV2FeatureContext context) {
+        BigDecimal gross = decimal(feature(context, "position.unrealized_gross_pnl_usd"));
+        BigDecimal net = decimal(firstFeature(context, "position.unrealized_pnl_usd", "trade.estimated_net_pnl_usd"));
+        return gross != null && net != null && gross.compareTo(BigDecimal.ZERO) >= 0 && net.compareTo(BigDecimal.ZERO) < 0;
+    }
+
+    private BigDecimal decimal(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof BigDecimal decimal) {
+            return decimal;
+        }
+        if (value instanceof Number number) {
+            return new BigDecimal(number.toString());
+        }
+        try {
+            return new BigDecimal(value.toString());
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private void persistDecision(Long tradeId, Long orderId, String eventType, String message, Map<String, Object> payload) {
+        try {
+            tradeEventRepository.save(TradeEventEntity.of(tradeId, orderId, null, eventType, message, objectMapper.writeValueAsString(payload)));
+        } catch (RuntimeException e) {
+            Map<String, Object> failureDetails = new LinkedHashMap<>();
+            failureDetails.put("eventType", eventType);
+            failureDetails.put("tradeId", tradeId);
+            failureDetails.put("orderId", orderId);
+            eventLogger.execution(
+                    "STRATEGY_V2_DIAGNOSTIC_PERSIST_FAILED",
+                    "DIAGNOSTICS",
+                    String.valueOf(payload.get("strategyId")),
+                    null,
+                    null,
+                    String.valueOf(payload.get("marketId")),
+                    String.valueOf(payload.get("tokenId")),
+                    String.valueOf(payload.get("candidate")),
+                    e.getMessage(),
+                    failureDetails,
+                    true
+            );
+        }
     }
 
     public void stateBranch(

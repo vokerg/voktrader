@@ -52,7 +52,25 @@ class PolymarketExecutor:
 
         client = self._get_client()
         raw_response = _cancel_order(client, order_id)
-        return _normalize_cancel_response(order_id, raw_response)
+        response = _normalize_cancel_response(order_id, raw_response)
+        if not _cancel_confirmed(response):
+            remote_status = self.get_order_status(order_id)
+            if _remote_cancelled(remote_status.status):
+                return CancelOrderResponse(
+                    success=True,
+                    remoteOrderId=remote_status.remoteOrderId or response.remoteOrderId or order_id,
+                    status="CANCELLED",
+                    rawResponse=json.dumps(
+                        {
+                            "cancelResponse": raw_response,
+                            "statusResponse": json.loads(remote_status.rawResponse) if remote_status.rawResponse else None,
+                        },
+                        default=str,
+                        sort_keys=True,
+                    ),
+                    error=None,
+                )
+        return response
 
     def get_order_status(self, order_id: str) -> OrderStatusResponse:
         if self.settings.executor_dry_run:
@@ -597,6 +615,14 @@ def _normalize_fill(raw_response: Any) -> FillResponse:
         timestamp=_datetime_or_none(_first_present(data, "timestamp", "createdAt", "created_at", "filledAt", "filled_at", "match_time")),
         rawResponse=json.dumps(raw_response, default=str, sort_keys=True),
     )
+
+
+def _cancel_confirmed(response: CancelOrderResponse) -> bool:
+    return response.success and _remote_cancelled(response.status)
+
+
+def _remote_cancelled(status: str | None) -> bool:
+    return (status or "").upper() in {"CANCELLED", "CANCELED"}
 
 
 def _extract_list(raw_response: Any, *keys: str) -> list[Any]:

@@ -132,7 +132,18 @@
         "price": {"$ref": "#/$defs/price"},
         "size": {"$ref": "#/$defs/size"},
         "fill-constraints": {"type": "object", "description": "Config-only in current order builder; entry conditions must enforce fill constraints."},
-        "maker-lifecycle": {"type": "object", "description": "Config-only in order builder; pending cancellation is handled by entry-order-management."},
+        "maker-lifecycle": {
+          "type": "object",
+          "description": "Maker order lifecycle controls.",
+          "properties": {
+            "cancel-after-seconds": {"type": "integer"},
+            "cooldown-after-no-fill-cancel-seconds": {"type": "integer"},
+            "replace-if-best-bid-moves-ticks": {"type": "integer"},
+            "max-reposts": {"type": "integer"},
+            "require-reconciliation": {"type": "boolean"}
+          },
+          "additionalProperties": false
+        },
         "reason-template": {"type": "string"}
       },
       "required": ["side", "order-type", "price", "size"],
