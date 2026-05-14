@@ -152,7 +152,7 @@ public class StrategyEntrySupport {
                             market,
                             signal.candidate(),
                             signal.reason(),
-                            Map.of("paperSizeUsd", signal.paperSizeUsd())
+                            Map.of("orderSizeUsd", signal.orderSizeUsd())
                     );
                     routeBuy(strategyId, ruleId, market, signal);
                 }, () -> eventLogger.entryRejected(
@@ -227,7 +227,7 @@ public class StrategyEntrySupport {
                 tradeSupport.currentBotId(),
                 market,
                 signal.candidate(),
-                signal.paperSizeUsd(),
+                signal.orderSizeUsd(),
                 signal.orderType(),
                 signal.postOnly(),
                 signal.limitPrice() == null ? signal.candidate().ask() : signal.limitPrice(),
@@ -294,22 +294,22 @@ public class StrategyEntrySupport {
 
     public record EntrySignal(
             OutcomePrice candidate,
-            BigDecimal paperSizeUsd,
+            BigDecimal orderSizeUsd,
             TradeOrderType orderType,
             boolean postOnly,
             BigDecimal limitPrice,
             String reason
     ) {
-        public EntrySignal(OutcomePrice candidate, BigDecimal paperSizeUsd, String reason) {
-            this(candidate, paperSizeUsd, TradeOrderType.FOK, false, candidate == null ? null : candidate.ask(), reason);
+        public EntrySignal(OutcomePrice candidate, BigDecimal orderSizeUsd, String reason) {
+            this(candidate, orderSizeUsd, TradeOrderType.FOK, false, candidate == null ? null : candidate.ask(), reason);
         }
 
-        public EntrySignal(OutcomePrice candidate, BigDecimal paperSizeUsd, TradeOrderType orderType, BigDecimal limitPrice, String reason) {
-            this(candidate, paperSizeUsd, orderType, orderType.prefersMaker(), limitPrice, reason);
+        public EntrySignal(OutcomePrice candidate, BigDecimal orderSizeUsd, TradeOrderType orderType, BigDecimal limitPrice, String reason) {
+            this(candidate, orderSizeUsd, orderType, orderType.prefersMaker(), limitPrice, reason);
         }
 
-        public static EntrySignal makerBuy(OutcomePrice candidate, BigDecimal paperSizeUsd, String reason) {
-            return new EntrySignal(candidate, paperSizeUsd, TradeOrderType.GTC, true, candidate == null ? null : candidate.bid(), reason);
+        public static EntrySignal makerBuy(OutcomePrice candidate, BigDecimal orderSizeUsd, String reason) {
+            return new EntrySignal(candidate, orderSizeUsd, TradeOrderType.GTC, true, candidate == null ? null : candidate.bid(), reason);
         }
     }
 

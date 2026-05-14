@@ -79,7 +79,7 @@ class LiveExecutionServiceTest {
                 market(),
                 price("down", "Down", "0.59", "0.60"),
                 new BigDecimal("1.00"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "entry"
         ), ExecutionMode.LIVE);
@@ -101,7 +101,7 @@ class LiveExecutionServiceTest {
                 market(),
                 price("down", "Down", "0.57", "0.57999983"),
                 new BigDecimal("1.00"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "entry"
         ), ExecutionMode.LIVE);
@@ -113,7 +113,7 @@ class LiveExecutionServiceTest {
                 Instant.parse("2026-04-30T10:00:00Z")
         );
         when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "market-id",
                 "down",
                 TradeStatus.OPEN
@@ -129,7 +129,7 @@ class LiveExecutionServiceTest {
                 market(),
                 price("down", "Down", "0.53", "0.54"),
                 new BigDecimal("1.72"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "exit"
         ), ExecutionMode.LIVE);
@@ -230,7 +230,7 @@ class LiveExecutionServiceTest {
                 market(),
                 price("down", "Down", "0.59", "0.60"),
                 new BigDecimal("1.00"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "entry"
         ), ExecutionMode.LIVE);
@@ -254,7 +254,7 @@ class LiveExecutionServiceTest {
                 market(),
                 price("down", "Down", "0.59", "0.60"),
                 new BigDecimal("1.00"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "entry"
         ), ExecutionMode.LIVE);

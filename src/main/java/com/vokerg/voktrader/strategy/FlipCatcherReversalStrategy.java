@@ -185,7 +185,7 @@ public class FlipCatcherReversalStrategy implements TradingStrategy {
 
         return Optional.of(new StrategyEntrySupport.EntrySignal(
                 candidate,
-                config.paperSizeUsdOrDefault(),
+                config.orderSizeUsdOrDefault(),
                 "flip-catcher: midrange side accelerating while opposite weakens"
         ));
     }

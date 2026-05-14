@@ -35,7 +35,7 @@ class BacktestStrategyResolverTest {
     void strategyV2InnerIdIsRejectedWithClearMessage() {
         BacktestStrategyResolver resolver = resolver("strategy-v2");
 
-        assertThatThrownBy(() -> resolver.resolve("cfg_v2_liquidity_momentum_paper"))
+        assertThatThrownBy(() -> resolver.resolve("cfg_v2_liquidity_momentum"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("inner YAML strategy id")
                 .hasMessageContaining("Use strategyId='strategy-v2'");
@@ -51,7 +51,7 @@ class BacktestStrategyResolverTest {
         );
         StrategyV2Properties strategyV2Properties = new StrategyV2Properties();
         StrategyV2Properties.Strategy inner = new StrategyV2Properties.Strategy();
-        inner.setStrategyId("cfg_v2_liquidity_momentum_paper");
+        inner.setStrategyId("cfg_v2_liquidity_momentum");
         strategyV2Properties.setStrategies(List.of(inner));
         return new BacktestStrategyResolver(registry, strategyV2Properties);
     }

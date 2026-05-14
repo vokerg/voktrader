@@ -12,24 +12,24 @@ Top-level Spring/Java strategy IDs are registered in `StrategyRegistry`. These a
 - `resolution-pressure-fok`
 - `order-book-liquidity`
 - `maker-resolution-carry`
-- `cost-aware-momentum-paper`
+- `cost-aware-momentum`
 
-Strategy V2 inner YAML strategy IDs live inside a Strategy V2 config file such as `strategy-v2.paper.yml` or `strategy-v2.deep-research.yml`. Examples:
+Strategy V2 inner YAML strategy IDs live inside a Strategy V2 config file such as `strategy-v2.default.yml` or `strategy-v2.deep-research.yml`. Examples:
 
-- `cfg_v2_liquidity_momentum_paper`
+- `cfg_v2_liquidity_momentum`
 - `ANTI_CHOP_FOK_A`
 - `RP_FOK_B`
 
 Use `strategyId=strategy-v2` to run the Java Strategy V2 engine. A bot can optionally set `strategySetId` to choose a whole Strategy V2 YAML bundle:
 
-- `paper` loads `strategy-v2.paper.yml`
+- `default` loads `strategy-v2.default.yml`
 - `deep-research` loads `strategy-v2.deep-research.yml`
 
 If `strategySetId` is blank, Strategy V2 uses the app-level imported config. After the YAML bundle is selected, the engine uses that bundle's `strategy-v2.engine.active-strategy-ids`.
 
 `subStrategyId` is an advanced isolation/debug field. If set, it filters the selected YAML bundle down to one inner strategy. Leave it blank for normal portfolio-style operation.
 
-Important: `cfg_v2_liquidity_momentum_paper` is not a top-level `/api/backtests.strategyId`. It is a Strategy V2 inner ID.
+Important: `cfg_v2_liquidity_momentum` is not a top-level `/api/backtests.strategyId`. It is a Strategy V2 inner ID.
 
 ## Manual Backtest
 

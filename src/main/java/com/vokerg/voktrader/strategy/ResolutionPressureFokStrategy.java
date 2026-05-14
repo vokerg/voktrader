@@ -93,7 +93,7 @@ public class ResolutionPressureFokStrategy implements TradingStrategy {
                 "FOK/taker strategy for late binary markets where resolution risk is intentional rather than avoided.",
                 "Buys the already-pressured side when midpoint edge, recent momentum, opposite-side weakness, and executable ask depth all agree.",
                 "Uses StrategyMarketView and StrategyOutcomeView for top-of-book, seconds to expiry, full book age, near-ask depth, FOK taker buy estimates, and taker fee estimates.",
-                "Routes FOK only. The entry price is the estimated taker average from walking the ask book, so backtests and live intent use the same fill-quality assumption.",
+                "Routes FOK only. The entry price is the estimated taker average from walking the ask book, so backtests and runtime intent use the same fill-quality assumption.",
                 "Exit sells immediately when fee-aware profit is available. Once inside the configured resolution window, it waits for resolution instead of locking in noisy taker losses.",
                 "Best for testing the hypothesis that, in the last minute or so, paying taker fees can still work if the visible order book confirms pressure and there is no cheap opposite-side recovery.",
                 "Weak when the market graph is driven by the underlying asset faster than Polymarket books update. It can still lose the full stake on resolution, by design.",
@@ -222,7 +222,7 @@ public class ResolutionPressureFokStrategy implements TradingStrategy {
 
         return Optional.of(new StrategyEntrySupport.EntrySignal(
                 executablePrice,
-                config.paperSizeUsdOrDefault(),
+                config.orderSizeUsdOrDefault(),
                 "resolution pressure FOK: late pressure, opposite weakness and executable taker depth"
         ));
     }
@@ -300,7 +300,7 @@ public class ResolutionPressureFokStrategy implements TradingStrategy {
             return null;
         }
 
-        FillEstimate takerFill = view.estimateTakerBuy(config.paperSizeUsdOrDefault()).orElse(null);
+        FillEstimate takerFill = view.estimateTakerBuy(config.orderSizeUsdOrDefault()).orElse(null);
 
         if (takerFill == null) {
             skip("missing taker fill estimate");

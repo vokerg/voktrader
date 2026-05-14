@@ -143,7 +143,7 @@ public class StrategyV2OrderActionBuilder {
             }
             return shares.multiply(price).setScale(SCALE, RoundingMode.HALF_UP);
         }
-        BigDecimal value = size.getPaperUsd() == null ? new BigDecimal("1.00") : size.getPaperUsd();
+        BigDecimal value = size.getUsd() == null ? new BigDecimal("1.00") : size.getUsd();
         if (size.getMaxUsd() != null && value.compareTo(size.getMaxUsd()) > 0) {
             value = size.getMaxUsd();
         }

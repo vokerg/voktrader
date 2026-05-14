@@ -16,24 +16,21 @@ strategy-v2:
     require-mid-sum-sane: true
     min-mid-sum: '0.985'
     max-mid-sum: '1.015'
-    default-profile: deep_research_paper
+    default-profile: deep_research
     safety:
       kill-switch-respected: true
-      live-requires-explicit-allowlist: true
-      block-live-maker-without-reconciliation: true
       block-unknown-order-type: true
       block-missing-fee-model: true
       block-missing-book-for-book-rules: true
   defaults:
-    deep_research_paper:
+    deep_research:
       data:
         max-price-age-ms: 1200
         max-book-age-ms: 1200
         warmup-seconds: 20
         min-samples-per-window: 3
       sizing:
-        paper-size-usd: '1.00'
-        live-size-usd: '5.00'
+        order-size-usd: '1.00'
         max-order-usd: '1.00'
         min-order-usd: '1.00'
         price-tick: '0.01'
@@ -41,7 +38,7 @@ strategy-v2:
       fees:
         maker-fee-rate: '0'
         taker-fee-rate: '0.072'
-        estimate-live-fees-when-missing: true
+        estimate-fees-when-missing: true
       execution:
         default-entry-order-type: FOK
         default-exit-order-type: FAK
@@ -56,15 +53,14 @@ strategy-v2:
   strategies:
   - strategy-id: SNIPER_FOK_A
     enabled: true
-    profile: deep_research_paper
+    profile: deep_research
     description: Extreme alignment sniper FOK
     hypothesis: Trade rarely, only when mid-edge, short momentum, book pressure, and slippage-adjusted cost all agree.
     tags:
     - deep-research
     - sniper
     - alignment
-    - fok
-    - paper
+    - fok
     candidate-selection:
       type: score
       candidates:
@@ -147,7 +143,7 @@ strategy-v2:
           max-price: '0.95'
         size:
           type: fixed_usd
-          paper-usd: '1.00'
+          usd: '1.00'
           min-usd: '1.00'
           max-usd: '1.00'
         fill-constraints:
@@ -191,15 +187,14 @@ strategy-v2:
       record-candidate-scores: true
   - strategy-id: ANTI_CHOP_FOK_A
     enabled: true
-    profile: deep_research_paper
+    profile: deep_research
     description: Regime-filtered momentum FOK
     hypothesis: Use momentum only when directional movement clearly exceeds the recent noise regime.
     tags:
     - deep-research
     - momentum
     - anti-chop
-    - fok
-    - paper
+    - fok
     candidate-selection:
       type: score
       candidates:
@@ -290,7 +285,7 @@ strategy-v2:
           max-price: '0.90'
         size:
           type: fixed_usd
-          paper-usd: '1.00'
+          usd: '1.00'
           min-usd: '1.00'
           max-usd: '1.00'
         fill-constraints:
@@ -334,15 +329,14 @@ strategy-v2:
       record-candidate-scores: true
   - strategy-id: MDI_FOK_A
     enabled: true
-    profile: deep_research_paper
+    profile: deep_research
     description: Microprice/depth leader FOK
     hypothesis: Enter when order-book pressure leads before a large visible midpoint move.
     tags:
     - deep-research
     - microprice
     - imbalance
-    - fok
-    - paper
+    - fok
     candidate-selection:
       type: score
       candidates:
@@ -416,7 +410,7 @@ strategy-v2:
           max-price: '0.80'
         size:
           type: fixed_usd
-          paper-usd: '1.00'
+          usd: '1.00'
           min-usd: '1.00'
           max-usd: '1.00'
         fill-constraints:
@@ -460,15 +454,14 @@ strategy-v2:
       record-candidate-scores: true
   - strategy-id: FLIP_FOK_A
     enabled: true
-    profile: deep_research_paper
+    profile: deep_research
     description: Flip catcher FOK
     hypothesis: Buy the side leaving the 50/50 zone while the opposite side weakens.
     tags:
     - deep-research
     - flip
     - reversal
-    - fok
-    - paper
+    - fok
     candidate-selection:
       type: score
       candidates:
@@ -548,7 +541,7 @@ strategy-v2:
           max-price: '0.80'
         size:
           type: fixed_usd
-          paper-usd: '1.00'
+          usd: '1.00'
           min-usd: '1.00'
           max-usd: '1.00'
         fill-constraints:
@@ -592,14 +585,13 @@ strategy-v2:
       record-candidate-scores: true
   - strategy-id: RP_FOK_B
     enabled: true
-    profile: deep_research_paper
+    profile: deep_research
     description: Earlier-window resolution pressure FOK
     hypothesis: Enter resolution pressure earlier, accepting slightly more noise for more trades.
     tags:
     - deep-research
     - resolution
-    - fok
-    - paper
+    - fok
     candidate-selection:
       type: score
       candidates:
@@ -673,7 +665,7 @@ strategy-v2:
           max-price: '0.92'
         size:
           type: fixed_usd
-          paper-usd: '1.00'
+          usd: '1.00'
           min-usd: '1.00'
           max-usd: '1.00'
         fill-constraints:
@@ -717,15 +709,14 @@ strategy-v2:
       record-candidate-scores: true
   - strategy-id: MK_GTC_B
     enabled: false
-    profile: deep_research_paper
+    profile: deep_research
     description: Passive maker fee-edge GTC
     hypothesis: Rest at bid only when the book is stable enough that spread capture and zero maker fee may outweigh missed fills.
     tags:
     - deep-research
     - maker
     - passive
-    - fee-edge
-    - paper
+    - fee-edge
     - disabled
     candidate-selection:
       type: score
@@ -796,7 +787,7 @@ strategy-v2:
           do-not-cross-spread: true
         size:
           type: fixed_usd
-          paper-usd: '1.00'
+          usd: '1.00'
           min-usd: '1.00'
           max-usd: '1.00'
         maker-lifecycle:

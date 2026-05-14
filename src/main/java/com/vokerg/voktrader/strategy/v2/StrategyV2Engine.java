@@ -89,7 +89,7 @@ public class StrategyV2Engine implements TradingStrategy {
                 "Selects a candidate, evaluates a small condition tree, and routes configured BUY entry actions.",
                 "Evaluates configured exit rules against runtime position state and routes SELL exits through the configured execution path.",
                 "Good for parameter sweeps and safer config-only experiments.",
-                "For paper runs it can use DB runtime state while keeping order-layer routing disabled.",
+                "Can use DB runtime state while keeping order-layer routing disabled.",
                 "Put configured strategy ids under strategy-v2.engine.active-strategy-ids or leave empty to run all enabled V2 strategies."
         );
     }
@@ -143,7 +143,7 @@ public class StrategyV2Engine implements TradingStrategy {
         } else {
             exitEvaluator.evaluate(strategy, market, marketView, state);
         }
-        BigDecimal orderUsd = strategy.getEntry().getAction().getSize().getPaperUsd();
+        BigDecimal orderUsd = strategy.getEntry().getAction().getSize().getUsd();
         List<StrategyV2FeatureContext> contexts = state == null
                 ? featureResolver.contexts(market, marketView, orderUsd)
                 : featureResolver.contexts(market, marketView, orderUsd, state);

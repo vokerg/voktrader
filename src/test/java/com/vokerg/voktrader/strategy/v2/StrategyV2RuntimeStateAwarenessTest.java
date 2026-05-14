@@ -46,7 +46,7 @@ class StrategyV2RuntimeStateAwarenessTest {
     private final TradeStateProvider tradeStateProvider = mock(TradeStateProvider.class);
     private final OrderGateway orderGateway = mock(OrderGateway.class);
     @Test
-    void flagDisabledStillUsesStateAwarePaperFlow() {
+    void flagDisabledStillUsesStateAwareFlow() {
         EngineFixture fixture = fixture(false, StrategyRuntimeState.empty(StrategyInstanceKey.of(null, "strategy-test"), "market-id"));
 
         fixture.engine.tick();
@@ -211,7 +211,7 @@ class StrategyV2RuntimeStateAwarenessTest {
         StrategyV2Properties.Action action = new StrategyV2Properties.Action();
         action.setOrderType(TradeOrderType.FOK.name());
         StrategyV2Properties.Size size = new StrategyV2Properties.Size();
-        size.setPaperUsd(new BigDecimal("1.00"));
+        size.setUsd(new BigDecimal("1.00"));
         action.setSize(size);
         entry.setAction(action);
         strategy.setEntry(entry);

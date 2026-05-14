@@ -73,14 +73,14 @@ class PaperExecutionServiceTest {
                 eq(ExecutionMode.PAPER),
                 eq(null),
                 eq(null),
-                eq("PAPER:default:market-id:up:cost-aware-momentum-paper:BUY")
+                eq("PAPER:default:market-id:up:cost-aware-momentum:BUY")
         )).thenReturn(blocked);
 
         TradeExecutionResult result = service.execute(TradeIntent.buy(
                 market(),
                 price("up", "Up", "0.59", "0.61"),
                 new BigDecimal("1.00"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "entry"
         ));
@@ -105,7 +105,7 @@ class PaperExecutionServiceTest {
                 market,
                 price("up", "Up", "0.49", "0.50"),
                 new BigDecimal("1.00"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "entry"
         ), ExecutionMode.PAPER);
@@ -118,7 +118,7 @@ class PaperExecutionServiceTest {
         );
 
         when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "market-id",
                 "up",
                 TradeStatus.OPEN
@@ -132,7 +132,7 @@ class PaperExecutionServiceTest {
                 market,
                 price("up", "Up", "0.60", "0.62"),
                 new BigDecimal("2.00000000"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "exit"
         ));
@@ -158,7 +158,7 @@ class PaperExecutionServiceTest {
     void sellRejectsWhenNoOpenTradeExists() {
         GammaMarketDto market = market();
         when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "market-id",
                 "up",
                 TradeStatus.OPEN
@@ -168,7 +168,7 @@ class PaperExecutionServiceTest {
                 market,
                 price("up", "Up", "0.60", "0.62"),
                 new BigDecimal("2.00000000"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "exit"
         ));

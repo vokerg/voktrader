@@ -17,7 +17,7 @@ public record StrategyProperties(
         ResolutionPressureFok resolutionPressureFok
 ) {
 
-    public static final String DEFAULT_ACTIVE = "cost-aware-momentum-paper";
+    public static final String DEFAULT_ACTIVE = "cost-aware-momentum";
 
     public String activeOrDefault() {
         if (active == null || active.isBlank()) {
@@ -78,7 +78,7 @@ public record StrategyProperties(
     public record SimpleDownCheapTightSpread(
             BigDecimal maxAsk,
             BigDecimal maxSpread,
-            BigDecimal paperSizeUsd
+            BigDecimal orderSizeUsd
     ) {
         public BigDecimal maxAskOrDefault() {
             return maxAsk == null ? new BigDecimal("0.25") : maxAsk;
@@ -88,8 +88,8 @@ public record StrategyProperties(
             return maxSpread == null ? new BigDecimal("0.03") : maxSpread;
         }
 
-        public BigDecimal paperSizeUsdOrDefault() {
-            return paperSizeUsd == null ? new BigDecimal("1.00") : paperSizeUsd;
+        public BigDecimal orderSizeUsdOrDefault() {
+            return orderSizeUsd == null ? new BigDecimal("1.00") : orderSizeUsd;
         }
     }
 
@@ -98,7 +98,7 @@ public record StrategyProperties(
             BigDecimal buyBelowAsk,
             BigDecimal buyAboveAsk,
             BigDecimal maxSpread,
-            BigDecimal paperSizeUsd,
+            BigDecimal orderSizeUsd,
             BigDecimal minProfitUsd
     ) {
         public String buyOutcomeOrDefault() {
@@ -120,8 +120,8 @@ public record StrategyProperties(
             return maxSpread == null ? new BigDecimal("0.03") : maxSpread;
         }
 
-        public BigDecimal paperSizeUsdOrDefault() {
-            return paperSizeUsd == null ? new BigDecimal("1.00") : paperSizeUsd;
+        public BigDecimal orderSizeUsdOrDefault() {
+            return orderSizeUsd == null ? new BigDecimal("1.00") : orderSizeUsd;
         }
 
         public BigDecimal minProfitUsdOrDefault() {
@@ -139,7 +139,7 @@ public record StrategyProperties(
             BigDecimal minMidMove10s,
             BigDecimal minBidMove10s,
             BigDecimal maxNegativeMove3s,
-            BigDecimal paperSizeUsd,
+            BigDecimal orderSizeUsd,
             BigDecimal minProfitUsd,
             BigDecimal minPriceMove,
             BigDecimal maxLossUsd,
@@ -186,8 +186,8 @@ public record StrategyProperties(
             return maxNegativeMove3s == null ? new BigDecimal("-0.015") : maxNegativeMove3s;
         }
 
-        public BigDecimal paperSizeUsdOrDefault() {
-            return paperSizeUsd == null ? new BigDecimal("1.00") : paperSizeUsd;
+        public BigDecimal orderSizeUsdOrDefault() {
+            return orderSizeUsd == null ? new BigDecimal("1.00") : orderSizeUsd;
         }
 
         public BigDecimal minProfitUsdOrDefault() {
@@ -239,7 +239,7 @@ public record StrategyProperties(
             BigDecimal maxOppositeMidMove5s,
             BigDecimal maxOppositeBidMove5s,
             BigDecimal maxNegativeMove3s,
-            BigDecimal paperSizeUsd,
+            BigDecimal orderSizeUsd,
             BigDecimal minProfitUsd,
             BigDecimal minPriceMove,
             BigDecimal maxLossUsd,
@@ -260,7 +260,7 @@ public record StrategyProperties(
         public BigDecimal maxOppositeMidMove5sOrDefault() { return maxOppositeMidMove5s == null ? new BigDecimal("-0.025") : maxOppositeMidMove5s; }
         public BigDecimal maxOppositeBidMove5sOrDefault() { return maxOppositeBidMove5s == null ? new BigDecimal("-0.015") : maxOppositeBidMove5s; }
         public BigDecimal maxNegativeMove3sOrDefault() { return maxNegativeMove3s == null ? new BigDecimal("-0.005") : maxNegativeMove3s; }
-        public BigDecimal paperSizeUsdOrDefault() { return paperSizeUsd == null ? new BigDecimal("1.00") : paperSizeUsd; }
+        public BigDecimal orderSizeUsdOrDefault() { return orderSizeUsd == null ? new BigDecimal("1.00") : orderSizeUsd; }
         public BigDecimal minProfitUsdOrDefault() { return minProfitUsd == null ? new BigDecimal("0.10") : minProfitUsd; }
         public BigDecimal minPriceMoveOrDefault() { return minPriceMove == null ? new BigDecimal("0.05") : minPriceMove; }
         public BigDecimal maxLossUsdOrDefault() { return maxLossUsd == null ? new BigDecimal("0.15") : maxLossUsd; }
@@ -286,7 +286,7 @@ public record StrategyProperties(
             BigDecimal minNearBidDepthShares,
             BigDecimal minNearDepthImbalance,
             BigDecimal nearTopRange,
-            BigDecimal paperSizeUsd,
+            BigDecimal orderSizeUsd,
             BigDecimal minProfitUsd,
             BigDecimal minPriceMove,
             BigDecimal maxLossUsd,
@@ -308,7 +308,7 @@ public record StrategyProperties(
         public BigDecimal minNearBidDepthSharesOrDefault() { return minNearBidDepthShares == null ? new BigDecimal("2.0") : minNearBidDepthShares; }
         public BigDecimal minNearDepthImbalanceOrDefault() { return minNearDepthImbalance == null ? new BigDecimal("-0.20") : minNearDepthImbalance; }
         public BigDecimal nearTopRangeOrDefault() { return nearTopRange == null ? new BigDecimal("0.03") : nearTopRange; }
-        public BigDecimal paperSizeUsdOrDefault() { return paperSizeUsd == null ? new BigDecimal("1.00") : paperSizeUsd; }
+        public BigDecimal orderSizeUsdOrDefault() { return orderSizeUsd == null ? new BigDecimal("1.00") : orderSizeUsd; }
         public BigDecimal minProfitUsdOrDefault() { return minProfitUsd == null ? new BigDecimal("0.08") : minProfitUsd; }
         public BigDecimal minPriceMoveOrDefault() { return minPriceMove == null ? new BigDecimal("0.04") : minPriceMove; }
         public BigDecimal maxLossUsdOrDefault() { return maxLossUsd == null ? new BigDecimal("0.12") : maxLossUsd; }
@@ -327,7 +327,7 @@ public record StrategyProperties(
             BigDecimal minMidMove5s,
             BigDecimal minNearBidDepthShares,
             BigDecimal nearTopRange,
-            BigDecimal paperSizeUsd,
+            BigDecimal orderSizeUsd,
             BigDecimal minProfitUsd,
             BigDecimal waitForResolutionBelowExitBid,
             Long waitForResolutionSeconds,
@@ -341,7 +341,7 @@ public record StrategyProperties(
         public BigDecimal minMidMove5sOrDefault() { return minMidMove5s == null ? new BigDecimal("0.010") : minMidMove5s; }
         public BigDecimal minNearBidDepthSharesOrDefault() { return minNearBidDepthShares == null ? new BigDecimal("2.0") : minNearBidDepthShares; }
         public BigDecimal nearTopRangeOrDefault() { return nearTopRange == null ? new BigDecimal("0.03") : nearTopRange; }
-        public BigDecimal paperSizeUsdOrDefault() { return paperSizeUsd == null ? new BigDecimal("1.00") : paperSizeUsd; }
+        public BigDecimal orderSizeUsdOrDefault() { return orderSizeUsd == null ? new BigDecimal("1.00") : orderSizeUsd; }
         public BigDecimal minProfitUsdOrDefault() { return minProfitUsd == null ? new BigDecimal("0.08") : minProfitUsd; }
         public BigDecimal waitForResolutionBelowExitBidOrDefault() { return waitForResolutionBelowExitBid == null ? new BigDecimal("0.35") : waitForResolutionBelowExitBid; }
         public long waitForResolutionSecondsOrDefault() { return waitForResolutionSeconds == null ? 20L : waitForResolutionSeconds; }
@@ -366,7 +366,7 @@ public record StrategyProperties(
             BigDecimal maxTakerFeeUsd,
             BigDecimal minNearAskDepthShares,
             BigDecimal nearTopRange,
-            BigDecimal paperSizeUsd,
+            BigDecimal orderSizeUsd,
             BigDecimal minProfitUsd,
             BigDecimal maxLossUsd,
             Long waitForResolutionSeconds,
@@ -389,7 +389,7 @@ public record StrategyProperties(
         public BigDecimal maxTakerFeeUsdOrDefault() { return maxTakerFeeUsd == null ? new BigDecimal("0.06") : maxTakerFeeUsd; }
         public BigDecimal minNearAskDepthSharesOrDefault() { return minNearAskDepthShares == null ? new BigDecimal("2.0") : minNearAskDepthShares; }
         public BigDecimal nearTopRangeOrDefault() { return nearTopRange == null ? new BigDecimal("0.03") : nearTopRange; }
-        public BigDecimal paperSizeUsdOrDefault() { return paperSizeUsd == null ? new BigDecimal("1.00") : paperSizeUsd; }
+        public BigDecimal orderSizeUsdOrDefault() { return orderSizeUsd == null ? new BigDecimal("1.00") : orderSizeUsd; }
         public BigDecimal minProfitUsdOrDefault() { return minProfitUsd == null ? new BigDecimal("0.06") : minProfitUsd; }
         public BigDecimal maxLossUsdOrDefault() { return maxLossUsd == null ? new BigDecimal("0.18") : maxLossUsd; }
         public long waitForResolutionSecondsOrDefault() { return waitForResolutionSeconds == null ? 18L : waitForResolutionSeconds; }

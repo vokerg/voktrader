@@ -50,7 +50,7 @@ class CostAwareMomentumStrategyTest {
     @BeforeEach
     void setUp() {
         StrategyProperties properties = new StrategyProperties(
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 1000L,
                 null,
                 null,
@@ -470,21 +470,21 @@ class CostAwareMomentumStrategyTest {
         );
     }
 
-    private TradeEntity openTrade(String tokenId, String outcome, String entryPrice, String paperShares) {
-        return openTrade(tokenId, outcome, entryPrice, paperShares, 5);
+    private TradeEntity openTrade(String tokenId, String outcome, String entryPrice, String filledShares) {
+        return openTrade(tokenId, outcome, entryPrice, filledShares, 5);
     }
 
     private TradeEntity openTradeWithEntryFee(
             String tokenId,
             String outcome,
             String entryPrice,
-            String paperShares,
+            String filledShares,
             String entryFee
     ) {
-        TradeEntity trade = openTrade(tokenId, outcome, entryPrice, paperShares);
+        TradeEntity trade = openTrade(tokenId, outcome, entryPrice, filledShares);
         trade.markOpen(
                 new BigDecimal(entryPrice),
-                new BigDecimal(paperShares),
+                new BigDecimal(filledShares),
                 new BigDecimal("1.00"),
                 new BigDecimal(entryFee),
                 clock.instant().minusSeconds(5)
@@ -496,7 +496,7 @@ class CostAwareMomentumStrategyTest {
             String tokenId,
             String outcome,
             String entryPrice,
-            String paperShares,
+            String filledShares,
             long secondsAgo
     ) {
         TradeEntity trade = TradeEntity.fromIntent(new TradeIntent(
@@ -528,7 +528,7 @@ class CostAwareMomentumStrategyTest {
         ), ExecutionMode.PAPER);
         trade.markOpen(
                 new BigDecimal(entryPrice),
-                new BigDecimal(paperShares),
+                new BigDecimal(filledShares),
                 new BigDecimal("1.00"),
                 BigDecimal.ZERO,
                 clock.instant().minusSeconds(secondsAgo)

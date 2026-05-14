@@ -122,7 +122,7 @@ public class StrategyV2ExitEvaluator {
     ) {
         BigDecimal orderUsd = strategy.getEntry() == null || strategy.getEntry().getAction() == null || strategy.getEntry().getAction().getSize() == null
                 ? BigDecimal.ONE
-                : strategy.getEntry().getAction().getSize().getPaperUsd();
+                : strategy.getEntry().getAction().getSize().getUsd();
         List<StrategyV2FeatureContext> contexts = featureResolver.contexts(market, marketView, orderUsd, runtimeState);
         return contexts.stream()
                 .filter(context -> context.candidate() != null && context.candidate().tokenId().equals(runtimeState.tokenId()))

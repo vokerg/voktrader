@@ -167,8 +167,7 @@
       "type": "object",
       "properties": {
         "type": {"enum": ["fixed_usd", "fixed_shares"]},
-        "paper-usd": {"type": ["number", "string"]},
-        "live-usd": {"type": ["number", "string"], "description": "Config-only in current order builder."},
+        "usd": {"type": ["number", "string"]},
         "max-usd": {"type": ["number", "string"]},
         "min-usd": {"type": ["number", "string"]},
         "shares": {"type": ["number", "string"]}

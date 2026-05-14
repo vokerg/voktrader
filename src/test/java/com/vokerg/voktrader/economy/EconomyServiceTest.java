@@ -55,7 +55,7 @@ class EconomyServiceTest {
                 market(),
                 price("up", "Up", "0.49", "0.50"),
                 new BigDecimal("1.00"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "test"
         ), com.vokerg.voktrader.trade.ExecutionMode.PAPER);

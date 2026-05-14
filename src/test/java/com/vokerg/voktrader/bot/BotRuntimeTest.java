@@ -25,7 +25,7 @@ class BotRuntimeTest {
         BotConfigEntity config = BotConfigEntity.create(
                 "test-bot",
                 MarketFamily.BTC_5M,
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 null,
                 null,
                 true
@@ -76,7 +76,7 @@ class BotRuntimeTest {
         BotConfigEntity config = BotConfigEntity.create(
                 "test-bot",
                 MarketFamily.BTC_5M,
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 null,
                 null,
                 true

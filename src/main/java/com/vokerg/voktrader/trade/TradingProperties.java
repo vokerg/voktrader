@@ -34,7 +34,7 @@ public class TradingProperties {
     private BigDecimal takerFeeRate = new BigDecimal("0.072");
     private boolean estimateLiveFeesWhenMissing = true;
     private Set<String> allowedStrategyIds = new LinkedHashSet<>(Set.of(
-            "cost-aware-momentum-paper",
+            "cost-aware-momentum",
             "flip-catcher-reversal"
     ));
 

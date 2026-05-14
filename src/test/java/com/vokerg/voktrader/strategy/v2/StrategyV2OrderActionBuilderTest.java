@@ -195,7 +195,7 @@ class StrategyV2OrderActionBuilderTest {
         action.setOrderType(orderType.name());
         action.setPostOnly(orderType.canRestOnBook());
         StrategyV2Properties.Size size = new StrategyV2Properties.Size();
-        size.setPaperUsd(new BigDecimal("1.00"));
+        size.setUsd(new BigDecimal("1.00"));
         action.setSize(size);
         entry.setAction(action);
         strategy.setEntry(entry);

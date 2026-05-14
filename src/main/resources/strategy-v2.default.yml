@@ -1,11 +1,11 @@
-# Production-shaped paper Strategy V2 config. This file is intentionally separate
-# from strategy-v2.example.yml so local paper runs do not inherit sample strategies.
+# Production-shaped Strategy V2 config. This file is intentionally separate
+# from strategy-v2.example.yml so local runs do not inherit sample strategies.
 strategy-v2:
   schema-version: "2.0"
-  set-id: "paper"
+  set-id: "default"
   engine:
     enabled: true
-    active-strategy-ids: ["cfg_v2_liquidity_momentum_paper"]
+    active-strategy-ids: ["cfg_v2_liquidity_momentum"]
     tick-ms: 1000
     decision-mode: "single_market_single_position"
     decimal-scale: 8
@@ -13,25 +13,22 @@ strategy-v2:
     require-mid-sum-sane: true
     min-mid-sum: "0.98"
     max-mid-sum: "1.02"
-    default-profile: "paper_data_collection"
+    default-profile: "data_collection"
     safety:
       kill-switch-respected: true
-      live-requires-explicit-allowlist: true
-      block-live-maker-without-reconciliation: true
       block-unknown-order-type: true
       block-missing-fee-model: true
       block-missing-book-for-book-rules: true
 
   defaults:
-    paper_data_collection:
+    data_collection:
       data:
         max-price-age-ms: 1500
         max-book-age-ms: 1500
         warmup-seconds: 20
         min-samples-per-window: 3
       sizing:
-        paper-size-usd: "1.00"
-        live-size-usd: "5.00"
+        order-size-usd: "1.00"
         max-order-usd: "1.00"
         min-order-usd: "1.00"
         price-tick: "0.01"
@@ -39,7 +36,7 @@ strategy-v2:
       fees:
         maker-fee-rate: "0"
         taker-fee-rate: "0.072"
-        estimate-live-fees-when-missing: true
+        estimate-fees-when-missing: true
       execution:
         default-entry-order-type: "FOK"
         default-exit-order-type: "FOK"
@@ -48,12 +45,12 @@ strategy-v2:
         allow-partial-fill: false
 
   strategies:
-    - strategy-id: "cfg_v2_liquidity_momentum_paper"
+    - strategy-id: "cfg_v2_liquidity_momentum"
       enabled: true
-      profile: "paper_data_collection"
-      description: "Strategy V2 liquidity and momentum confirmation for paper and tiny live validation."
+      profile: "data_collection"
+      description: "Strategy V2 liquidity and momentum confirmation for validation."
       hypothesis: "Enter when one side has a real edge, fresh book, acceptable taker fill quality, and supportive short-horizon momentum; exit on fee-aware profit, stop loss, momentum failure, or time decay."
-      tags: ["paper", "live", "v2", "liquidity", "momentum", "fee-aware"]
+      tags: ["v2", "liquidity", "momentum", "fee-aware"]
 
       candidate-selection:
         type: "score"
@@ -134,7 +131,7 @@ strategy-v2:
             max-price: "0.99"
           size:
             type: "fixed_usd"
-            paper-usd: "1.00"
+            usd: "1.00"
             max-usd: "1.00"
             min-usd: "1.00"
           fill-constraints:

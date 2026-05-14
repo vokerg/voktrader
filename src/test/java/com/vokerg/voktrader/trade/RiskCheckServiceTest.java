@@ -33,7 +33,7 @@ class RiskCheckServiceTest {
 
     @Test
     void maxTradesPerMarketIgnoresRejectedTrades() {
-        properties.setAllowedStrategyIds(java.util.Set.of("cost-aware-momentum-paper"));
+        properties.setAllowedStrategyIds(java.util.Set.of("cost-aware-momentum"));
         properties.setMaxOrderUsd(new BigDecimal("1.00"));
         properties.setMaxSpread(new BigDecimal("0.03"));
         properties.setMaxPriceAgeMs(1500);
@@ -44,7 +44,7 @@ class RiskCheckServiceTest {
                 market(),
                 price(),
                 new BigDecimal("1.00"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "entry"
         );
@@ -52,12 +52,12 @@ class RiskCheckServiceTest {
         when(tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(
                 eq("market-id"),
                 eq("up"),
-                eq("cost-aware-momentum-paper"),
+                eq("cost-aware-momentum"),
                 anyCollection()
         )).thenReturn(0L);
         when(tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(
                 eq("market-id"),
-                eq("cost-aware-momentum-paper"),
+                eq("cost-aware-momentum"),
                 anyCollection()
         )).thenReturn(0L);
         when(tradeOrderRepository.findByClientOrderId("key")).thenReturn(Optional.empty());
@@ -76,7 +76,7 @@ class RiskCheckServiceTest {
         ArgumentCaptor<Collection<TradeStatus>> statusCaptor = ArgumentCaptor.forClass(Collection.class);
         verify(tradeRepository).countByMarketIdAndStrategyIdAndStatusIn(
                 eq("market-id"),
-                eq("cost-aware-momentum-paper"),
+                eq("cost-aware-momentum"),
                 statusCaptor.capture()
         );
         Set<String> countedStatuses = statusCaptor.getValue()
@@ -100,7 +100,7 @@ class RiskCheckServiceTest {
 
     @Test
     void activeTradeBlocksMaxTradesPerMarketBeforeExecutionCreatesANewTrade() {
-        properties.setAllowedStrategyIds(java.util.Set.of("cost-aware-momentum-paper"));
+        properties.setAllowedStrategyIds(java.util.Set.of("cost-aware-momentum"));
         properties.setMaxOrderUsd(new BigDecimal("1.00"));
         properties.setMaxSpread(new BigDecimal("0.03"));
         properties.setMaxPriceAgeMs(1500);
@@ -111,7 +111,7 @@ class RiskCheckServiceTest {
                 market(),
                 price(),
                 new BigDecimal("1.00"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "entry"
         );
@@ -119,12 +119,12 @@ class RiskCheckServiceTest {
         when(tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(
                 eq("market-id"),
                 eq("up"),
-                eq("cost-aware-momentum-paper"),
+                eq("cost-aware-momentum"),
                 anyCollection()
         )).thenReturn(1L);
         when(tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(
                 eq("market-id"),
-                eq("cost-aware-momentum-paper"),
+                eq("cost-aware-momentum"),
                 anyCollection()
         )).thenReturn(1L);
         when(tradeOrderRepository.findByClientOrderId("key")).thenReturn(Optional.empty());
