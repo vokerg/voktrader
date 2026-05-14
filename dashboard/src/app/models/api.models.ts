@@ -82,6 +82,115 @@ export interface TradeSummaryResponse {
   updatedAt: string;
 }
 
+export interface TradeDetailResponse extends TradeSummaryResponse {
+  ruleId: string | null;
+  conditionId: string;
+  decisionReason: string;
+  marketEndAt: string | null;
+  secondsToExpiryAtDecision: number | null;
+  observedBid: number | null;
+  observedAsk: number | null;
+  observedSpread: number | null;
+  observedMidpoint: number | null;
+  priceUpdatedAt: string | null;
+  priceAgeMs: number | null;
+  intendedShares: number | null;
+  intendedEntryPrice: number | null;
+  intendedExitPrice: number | null;
+  maxSlippagePrice: number | null;
+  entryOrderType: string | null;
+  entryAvgPrice: number | null;
+  entryFilledShares: number | null;
+  entryFeeUsd: number | null;
+  entryCompletedAt: string | null;
+  exitAvgPrice: number | null;
+  exitFilledShares: number | null;
+  exitFeeUsd: number | null;
+  exitCompletedAt: string | null;
+  totalFeeUsd: number | null;
+  realizedPnlUsd: number | null;
+  resolvedPnlUsd: number | null;
+  winningOutcome: string | null;
+  resolvedAt: string | null;
+  backtestRunId: string | null;
+  createdAt: string;
+  fills: TradeFillResponse[];
+  orders: TradeOrderResponse[];
+  events: TradeEventResponse[];
+}
+
+export interface TradeFillResponse {
+  id: number;
+  tradeId: number;
+  orderId: number | null;
+  exchangeOrderId: string | null;
+  remoteFillId: string | null;
+  marketId: string;
+  tokenId: string;
+  venue: string;
+  side: string;
+  price: number;
+  shares: number;
+  amountUsd: number;
+  feeUsd: number | null;
+  feeKnown: boolean;
+  liquidityRole: string;
+  filledAt: string;
+  occurredAt: string;
+  receivedAt: string;
+  createdAt: string;
+}
+
+export interface TradeOrderResponse {
+  id: number;
+  botId: number;
+  tradeId: number;
+  localOrderId: string;
+  clientOrderId: string;
+  remoteOrderId: string | null;
+  exchangeOrderId: string | null;
+  strategyId: string;
+  marketId: string;
+  tokenId: string;
+  outcome: string;
+  side: string;
+  phase: string;
+  mode: string;
+  venue: string;
+  orderType: string;
+  status: string;
+  requestedPrice: number | null;
+  requestedShares: number | null;
+  requestedAmountUsd: number | null;
+  filledPrice: number | null;
+  filledShares: number | null;
+  filledAmountUsd: number | null;
+  avgFillPrice: number | null;
+  realizedFeeUsd: number | null;
+  errorMessage: string | null;
+  submittedAt: string | null;
+  acknowledgedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TradeEventResponse {
+  id: number;
+  tradeId: number;
+  tradeOrderId: number | null;
+  tradeFillId: number | null;
+  eventType: string;
+  message: string;
+  payloadJson: string | null;
+  createdAt: string;
+}
+
+export interface MarketDetailResponse extends MarketSummaryResponse {
+  recentPrices: any[];
+  recentOrderBooks: any[];
+}
+
 export interface RuntimeStatusResponse {
   activeProfiles: string[];
   datasourceUrl: string;

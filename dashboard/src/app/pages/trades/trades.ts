@@ -1,11 +1,12 @@
 import { Component, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { TradeSummaryResponse } from '../../models/api.models';
 
 @Component({
   selector: 'app-trades',
-  imports: [CommonModule],
+  imports: [CommonModule, RouterModule],
   template: `
     <div class="header">
       <h1>Trade History</h1>
@@ -26,7 +27,7 @@ import { TradeSummaryResponse } from '../../models/api.models';
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let trade of trades()">
+          <tr *ngFor="let trade of trades()" [routerLink]="['/trades', trade.id]" class="clickable-row">
             <td>{{ trade.decisionAt | date:'short' }}</td>
             <td>#{{ trade.botId }}</td>
             <td>
@@ -73,6 +74,9 @@ import { TradeSummaryResponse } from '../../models/api.models';
     }
 
     td { padding: 16px; border-bottom: 1px solid #f3f4f6; font-size: 14px; }
+
+    .clickable-row { cursor: pointer; transition: background-color 0.2s; }
+    .clickable-row:hover { background-color: #f9fafb; }
 
     .slug { font-weight: 600; }
     .question { font-size: 12px; color: #6b7280; }

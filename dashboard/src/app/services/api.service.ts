@@ -4,9 +4,11 @@ import { Observable } from 'rxjs';
 import { 
   BotConfigResponse, 
   DashboardOptionsResponse, 
+  MarketDetailResponse,
   MarketSummaryResponse, 
   RuntimeStatusResponse,
   StrategyCatalogResponse,
+  TradeDetailResponse,
   TradeSummaryResponse 
 } from '../models/api.models';
 
@@ -37,8 +39,16 @@ export class ApiService {
     return this.http.get<MarketSummaryResponse[]>(`${this.baseUrl}/markets`, { params });
   }
 
+  getMarket(id: string): Observable<MarketDetailResponse> {
+    return this.http.get<MarketDetailResponse>(`${this.baseUrl}/markets/${id}`);
+  }
+
   getTrades(params: any = {}): Observable<TradeSummaryResponse[]> {
     return this.http.get<TradeSummaryResponse[]>(`${this.baseUrl}/trades`, { params });
+  }
+
+  getTrade(id: number): Observable<TradeDetailResponse> {
+    return this.http.get<TradeDetailResponse>(`${this.baseUrl}/trades/${id}`);
   }
 
   pauseBot(id: number): Observable<BotConfigResponse> {

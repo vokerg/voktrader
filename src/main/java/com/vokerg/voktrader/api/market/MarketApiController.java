@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.api.market;
 
+import com.vokerg.voktrader.api.market.dto.MarketDetailResponse;
 import com.vokerg.voktrader.api.market.dto.MarketSummaryResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,7 +31,8 @@ public class MarketApiController {
     }
 
     @GetMapping("/{polymarketMarketId}")
-    public MarketSummaryResponse get(@PathVariable String polymarketMarketId) {
-        return marketQueryService.get(polymarketMarketId);
+    public MarketDetailResponse get(@PathVariable String polymarketMarketId) {
+        return marketQueryService.getDetail(polymarketMarketId);
     }
+}
 }

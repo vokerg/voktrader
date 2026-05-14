@@ -59,9 +59,16 @@ public record TradeDetailResponse(
         String backtestRunId,
         Instant createdAt,
         Instant updatedAt,
-        List<TradeFillResponse> fills
+        List<TradeFillResponse> fills,
+        List<TradeOrderResponse> orders,
+        List<TradeEventResponse> events
 ) {
-    public static TradeDetailResponse from(TradeEntity entity, List<TradeFillResponse> fills) {
+    public static TradeDetailResponse from(
+            TradeEntity entity,
+            List<TradeFillResponse> fills,
+            List<TradeOrderResponse> orders,
+            List<TradeEventResponse> events
+    ) {
         return new TradeDetailResponse(
                 entity.getId(),
                 entity.getBotId(),
@@ -111,7 +118,9 @@ public record TradeDetailResponse(
                 entity.getBacktestRunId(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
-                fills
+                fills,
+                orders,
+                events
         );
     }
 }

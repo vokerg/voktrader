@@ -1,11 +1,12 @@
 import { Component, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { MarketSummaryResponse } from '../../models/api.models';
 
 @Component({
   selector: 'app-markets',
-  imports: [CommonModule],
+  imports: [CommonModule, RouterModule],
   template: `
     <div class="header">
       <h1>Markets</h1>
@@ -23,7 +24,7 @@ import { MarketSummaryResponse } from '../../models/api.models';
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let market of markets()">
+          <tr *ngFor="let market of markets()" [routerLink]="['/markets', market.polymarketMarketId]" class="clickable-row">
             <td>
               <div class="question">{{ market.question }}</div>
               <div class="slug">{{ market.slug }}</div>
@@ -69,6 +70,9 @@ import { MarketSummaryResponse } from '../../models/api.models';
     }
 
     td { padding: 16px; border-bottom: 1px solid #f3f4f6; font-size: 14px; }
+
+    .clickable-row { cursor: pointer; transition: background-color 0.2s; }
+    .clickable-row:hover { background-color: #f9fafb; }
 
     .question { font-weight: 600; color: #111827; }
     .slug { font-size: 12px; color: #6b7280; }

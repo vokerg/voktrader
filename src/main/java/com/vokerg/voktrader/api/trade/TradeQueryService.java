@@ -1,12 +1,16 @@
 package com.vokerg.voktrader.api.trade;
 
 import com.vokerg.voktrader.api.trade.dto.TradeDetailResponse;
+import com.vokerg.voktrader.api.trade.dto.TradeEventResponse;
 import com.vokerg.voktrader.api.trade.dto.TradeFillResponse;
+import com.vokerg.voktrader.api.trade.dto.TradeOrderResponse;
 import com.vokerg.voktrader.api.trade.dto.TradeSummaryResponse;
 import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.trade.TradeStatus;
+import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
+import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -23,10 +27,19 @@ public class TradeQueryService {
 
     private final TradeRepository tradeRepository;
     private final TradeFillRepository tradeFillRepository;
+    private final TradeOrderRepository tradeOrderRepository;
+    private final TradeEventRepository tradeEventRepository;
 
-    public TradeQueryService(TradeRepository tradeRepository, TradeFillRepository tradeFillRepository) {
+    public TradeQueryService(
+            TradeRepository tradeRepository,
+            TradeFillRepository tradeFillRepository,
+            TradeOrderRepository tradeOrderRepository,
+            TradeEventRepository tradeEventRepository
+    ) {
         this.tradeRepository = tradeRepository;
         this.tradeFillRepository = tradeFillRepository;
+        this.tradeOrderRepository = tradeOrderRepository;
+        this.tradeEventRepository = tradeEventRepository;
     }
 
     public List<TradeSummaryResponse> list(Long botId, String strategyId, String marketId, String status, String mode, Integer limit) {
@@ -49,7 +62,13 @@ public class TradeQueryService {
         List<TradeFillResponse> fills = tradeFillRepository.findByTradeId(trade.getId()).stream()
                 .map(TradeFillResponse::from)
                 .toList();
-        return TradeDetailResponse.from(trade, fills);
+        List<TradeOrderResponse> orders = tradeOrderRepository.findByTradeId(trade.getId()).stream()
+                .map(TradeOrderResponse::from)
+                .toList();
+        List<TradeEventResponse> events = tradeEventRepository.findByTradeIdOrderByCreatedAtAsc(trade.getId()).stream()
+                .map(TradeEventResponse::from)
+                .toList();
+        return TradeDetailResponse.from(trade, fills, orders, events);
     }
 
     private int normalizeLimit(Integer limit) {

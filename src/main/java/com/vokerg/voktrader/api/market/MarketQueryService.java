@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.api.market;
 
+import com.vokerg.voktrader.api.market.dto.MarketDetailResponse;
 import com.vokerg.voktrader.api.market.dto.MarketOrderBookSnapshotResponse;
 import com.vokerg.voktrader.api.market.dto.MarketPriceSnapshotResponse;
 import com.vokerg.voktrader.api.market.dto.MarketSummaryResponse;
@@ -21,6 +22,7 @@ import java.util.Locale;
 public class MarketQueryService {
     private static final int DEFAULT_LIMIT = 50;
     private static final int MAX_LIMIT = 200;
+    private static final int RECENT_SNAPSHOTS_LIMIT = 20;
 
     private final MarketRepository marketRepository;
     private final PriceSnapshotRepository priceSnapshotRepository;
@@ -59,6 +61,30 @@ public class MarketQueryService {
         MarketEntity market = marketRepository.findByPolymarketMarketId(polymarketMarketId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown market id: " + polymarketMarketId));
         return toSummary(market);
+    }
+
+    public MarketDetailResponse getDetail(String polymarketMarketId) {
+        MarketEntity market = marketRepository.findByPolymarketMarketId(polymarketMarketId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown market id: " + polymarketMarketId));
+        
+        MarketPriceSnapshotResponse latestPrice = priceSnapshotRepository.findFirstByMarketOrderByCapturedAtDesc(market)
+                .map(MarketPriceSnapshotResponse::from)
+                .orElse(null);
+        MarketOrderBookSnapshotResponse latestOrderBook = marketDepthSnapshotRepository.findFirstByMarketOrderByCapturedAtDesc(market)
+                .map(MarketOrderBookSnapshotResponse::from)
+                .orElse(null);
+        
+        List<MarketPriceSnapshotResponse> recentPrices = priceSnapshotRepository.findByMarket(market, PageRequest.of(0, RECENT_SNAPSHOTS_LIMIT, Sort.by(Sort.Direction.DESC, "capturedAt")))
+                .stream()
+                .map(MarketPriceSnapshotResponse::from)
+                .toList();
+        
+        List<MarketOrderBookSnapshotResponse> recentOrderBooks = marketDepthSnapshotRepository.findByMarket(market, PageRequest.of(0, RECENT_SNAPSHOTS_LIMIT, Sort.by(Sort.Direction.DESC, "capturedAt")))
+                .stream()
+                .map(MarketOrderBookSnapshotResponse::from)
+                .toList();
+
+        return MarketDetailResponse.from(market, latestPrice, latestOrderBook, recentPrices, recentOrderBooks);
     }
 
     private MarketSummaryResponse toSummary(MarketEntity market) {
