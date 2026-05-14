@@ -14,32 +14,17 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-class ExecutionRouterTest {
-    private final TradingProperties properties = new TradingProperties();
-    private final PaperExecutionService paperExecutionService = mock(PaperExecutionService.class);
-    private final LiveShadowExecutionService liveShadowExecutionService = mock(LiveShadowExecutionService.class);
-    private final LiveExecutionService liveExecutionService = mock(LiveExecutionService.class);
+class ExitExecutionModeResolverTest {
+    private static final String LIVE_ORDER_ID = "0xec019dfad0d11eedca8c3c47071f4a279dcd74ef548fc7969721f1e7b7a268e7";
+
     private final TradeRepository tradeRepository = mock(TradeRepository.class);
     private final TradeOrderRepository tradeOrderRepository = mock(TradeOrderRepository.class);
-    private final ExitExecutionModeResolver exitExecutionModeResolver = new ExitExecutionModeResolver(
-            tradeRepository,
-            tradeOrderRepository
-    );
-    private final ExecutionRouter router = new ExecutionRouter(
-            properties,
-            paperExecutionService,
-            liveShadowExecutionService,
-            liveExecutionService,
-            exitExecutionModeResolver
-    );
+    private final ExitExecutionModeResolver resolver = new ExitExecutionModeResolver(tradeRepository, tradeOrderRepository);
 
     @Test
-    void paperModeSellForLiveBackedTradeIsForcedToLiveExecutor() {
-        properties.setMode(ExecutionMode.PAPER);
+    void exchangeOrderIdAloneMakesOpenTradeLiveBacked() {
         TradeIntent entryIntent = TradeIntent.buy(
                 67L,
                 market(),
@@ -53,12 +38,14 @@ class ExecutionRouterTest {
                 "mk-gtd-edge-live-tiny-a-entry",
                 "entry"
         );
-        TradeEntity liveTrade = TradeEntity.fromIntent(entryIntent, ExecutionMode.LIVE_TINY);
-        ReflectionTestUtils.setField(liveTrade, "id", 5308L);
-        liveTrade.markOpen(new BigDecimal("0.51"), new BigDecimal("5"), new BigDecimal("2.55"), BigDecimal.ZERO, Instant.parse("2026-05-13T18:26:46Z"));
-        TradeOrderEntity entryOrder = TradeOrderEntity.fromIntent(5308L, entryIntent, ExecutionMode.LIVE_TINY, TradeVenue.POLYMARKET, "entry-local");
-        entryOrder.markSubmitting("entry-local", "{}");
-        entryOrder.markFilled("0xec019dfad0d11eedca8c3c47071f4a279dcd74ef548fc7969721f1e7b7a268e7", new BigDecimal("0.51"), new BigDecimal("5"), new BigDecimal("2.55"));
+        TradeEntity trade = TradeEntity.fromIntent(entryIntent, ExecutionMode.PAPER);
+        ReflectionTestUtils.setField(trade, "id", 5308L);
+        trade.markOpen(new BigDecimal("0.51"), new BigDecimal("5"), new BigDecimal("2.55"), BigDecimal.ZERO, Instant.parse("2026-05-13T18:26:46Z"));
+
+        TradeOrderEntity entryOrder = TradeOrderEntity.fromIntent(5308L, entryIntent, ExecutionMode.PAPER, TradeVenue.PAPER_SIM, "entry-local");
+        ReflectionTestUtils.setField(entryOrder, "exchangeOrderId", LIVE_ORDER_ID);
+        ReflectionTestUtils.setField(entryOrder, "remoteOrderId", null);
+
         TradeIntent exitIntent = TradeIntent.sell(
                 67L,
                 market(),
@@ -70,14 +57,6 @@ class ExecutionRouterTest {
                 "book-pressure-flips",
                 "strategy-v2 exit strategy=MK_GTD_EDGE_LIVE_TINY_A rule=book-pressure-flips outcome=Down"
         );
-        TradeExecutionResult liveResult = TradeExecutionResult.accepted(
-                ExecutionMode.LIVE_TINY,
-                5308L,
-                6356L,
-                TradeStatus.CLOSED,
-                TradeOrderStatus.FILLED,
-                "live exit filled"
-        );
 
         when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
                 67L,
@@ -85,16 +64,14 @@ class ExecutionRouterTest {
                 "market-id",
                 "down",
                 TradeStatus.OPEN
-        )).thenReturn(Optional.of(liveTrade));
+        )).thenReturn(Optional.of(trade));
         when(tradeOrderRepository.findByTradeId(5308L)).thenReturn(List.of(entryOrder));
-        when(liveExecutionService.execute(exitIntent, ExecutionMode.LIVE_TINY)).thenReturn(liveResult);
 
-        TradeExecutionResult result = router.route(exitIntent);
+        ExitExecutionModeResolver.ExitExecutionContext context = resolver.resolve(exitIntent, ExecutionMode.PAPER);
 
-        assertThat(result).isSameAs(liveResult);
-        verify(liveExecutionService).execute(exitIntent, ExecutionMode.LIVE_TINY);
-        verifyNoInteractions(paperExecutionService);
-        verifyNoInteractions(liveShadowExecutionService);
+        assertThat(context.liveBacked()).isTrue();
+        assertThat(context.mode()).isEqualTo(ExecutionMode.LIVE_TINY);
+        assertThat(context.openTrade()).isSameAs(trade);
     }
 
     private GammaMarketDto market() {

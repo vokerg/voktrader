@@ -24,6 +24,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -179,6 +180,32 @@ class OrderReconciliationServiceTest {
 
         assertThat(reconciled).isEqualTo(1);
         verify(tradeOrderRepository).findReconcilableRemoteOrders(any());
+    }
+
+    @Test
+    void fillLookupUsesSafetyLookbackBeforeSubmittedAt() {
+        properties.setFillLookupLookbackSeconds(300);
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        order.markSubmitting("local-1", "{}");
+        order.markSubmitted("remote-1", "{}");
+        Instant submittedAt = order.getSubmittedAt();
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("OPEN"));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
+
+        service.reconcileOrder(order);
+
+        verify(liveExecutionService).fetchRemoteFills(
+                eq("remote-1"),
+                eq("market-id"),
+                eq("token-id"),
+                eq(TradeSide.BUY),
+                eq(new BigDecimal("0.50")),
+                any(),
+                eq(submittedAt.minusSeconds(300))
+        );
     }
 
     @Test

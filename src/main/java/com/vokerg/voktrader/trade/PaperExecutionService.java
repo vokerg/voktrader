@@ -295,7 +295,8 @@ public class PaperExecutionService {
                 .filter(order -> order.getPhase() == TradeOrderPhase.ENTRY)
                 .anyMatch(order -> isLiveMode(order.getMode())
                         || order.getVenue() == TradeVenue.POLYMARKET
-                        || hasText(order.getRemoteOrderId()));
+                        || hasText(order.getRemoteOrderId())
+                        || hasText(order.getExchangeOrderId()));
     }
 
     private boolean isLiveMode(ExecutionMode mode) {
@@ -306,7 +307,38 @@ public class PaperExecutionService {
         return value != null && !value.isBlank();
     }
 
-    private java.util.Optional<TradeEntity> findLatestTokenTrade(TradeIntent intent, TradeStatus status) { if (intent.botId() != null) { return tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(intent.botId(), intent.strategyId(), intent.marketId(), intent.tokenId(), status); } return tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(intent.strategyId(), intent.marketId(), intent.tokenId(), status); } private String idempotencyKey(TradeIntent intent, ExecutionMode mode, Long tradeId) { return mode + ":" + (intent.botId() == null ? "default" : intent.botId()) + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side() + ":" + tradeId; }
+    private java.util.Optional<TradeEntity> findLatestTokenTrade(TradeIntent intent, TradeStatus status) {
+        if (intent.botId() != null) {
+            return tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+                    intent.botId(),
+                    intent.strategyId(),
+                    intent.marketId(),
+                    intent.tokenId(),
+                    status
+            );
+        }
+        return tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+                intent.strategyId(),
+                intent.marketId(),
+                intent.tokenId(),
+                status
+        );
+    }
 
-    private String idempotencyKey(TradeIntent intent, ExecutionMode mode) { return mode + ":" + (intent.botId() == null ? "default" : intent.botId()) + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side(); }
+    private String idempotencyKey(TradeIntent intent, ExecutionMode mode, Long tradeId) {
+        return mode + ":" + (intent.botId() == null ? "default" : intent.botId())
+                + ":" + intent.marketId()
+                + ":" + intent.tokenId()
+                + ":" + intent.strategyId()
+                + ":" + intent.side()
+                + ":" + tradeId;
+    }
+
+    private String idempotencyKey(TradeIntent intent, ExecutionMode mode) {
+        return mode + ":" + (intent.botId() == null ? "default" : intent.botId())
+                + ":" + intent.marketId()
+                + ":" + intent.tokenId()
+                + ":" + intent.strategyId()
+                + ":" + intent.side();
+    }
 }

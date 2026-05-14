@@ -174,54 +174,54 @@ class PaperExecutionServiceTest {
         TradeIntent entryIntent = TradeIntent.buy(
                 67L,
                 market,
-                price("up", "Up", "0.54", "0.55"),
-                new BigDecimal("2.75"),
+                price("down", "Down", "0.50", "0.51"),
+                new BigDecimal("2.55"),
                 new BigDecimal("5"),
                 TradeOrderType.GTD,
                 true,
-                new BigDecimal("0.55"),
+                new BigDecimal("0.51"),
                 "MK_GTD_EDGE_LIVE_TINY_A",
                 "mk-gtd-edge-live-tiny-a-entry",
                 "entry"
         );
         TradeEntity liveTrade = TradeEntity.fromIntent(entryIntent, ExecutionMode.LIVE_TINY);
-        ReflectionTestUtils.setField(liveTrade, "id", 5306L);
+        ReflectionTestUtils.setField(liveTrade, "id", 5308L);
         liveTrade.markOpen(
-                new BigDecimal("0.55"),
+                new BigDecimal("0.51"),
                 new BigDecimal("5"),
-                new BigDecimal("2.75"),
+                new BigDecimal("2.55"),
                 BigDecimal.ZERO,
                 Instant.parse("2026-05-13T18:26:46Z")
         );
-        TradeOrderEntity entryOrder = TradeOrderEntity.fromIntent(5306L, entryIntent, ExecutionMode.LIVE_TINY, TradeVenue.POLYMARKET, "entry-local");
-        ReflectionTestUtils.setField(entryOrder, "id", 6352L);
+        TradeOrderEntity entryOrder = TradeOrderEntity.fromIntent(5308L, entryIntent, ExecutionMode.LIVE_TINY, TradeVenue.POLYMARKET, "entry-local");
+        ReflectionTestUtils.setField(entryOrder, "id", 6355L);
         entryOrder.markSubmitting("entry-local", "{}");
-        entryOrder.markFilled("0xbd672edc77c3e2616ca6a96e9f1f8363abc0bb2da286ce95d8991d798c313832", new BigDecimal("0.55"), new BigDecimal("5"), new BigDecimal("2.75"));
+        entryOrder.markFilled("0xec019dfad0d11eedca8c3c47071f4a279dcd74ef548fc7969721f1e7b7a268e7", new BigDecimal("0.51"), new BigDecimal("5"), new BigDecimal("2.55"));
 
         when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
                 67L,
                 "MK_GTD_EDGE_LIVE_TINY_A",
                 "market-id",
-                "up",
+                "down",
                 TradeStatus.OPEN
         )).thenReturn(Optional.of(liveTrade));
-        when(tradeOrderRepository.findByTradeId(5306L)).thenReturn(List.of(entryOrder));
+        when(tradeOrderRepository.findByTradeId(5308L)).thenReturn(List.of(entryOrder));
         when(eventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         TradeExecutionResult result = service.execute(TradeIntent.sell(
                 67L,
                 market,
-                price("up", "Up", "0.52", "0.53"),
+                price("down", "Down", "0.40", "0.41"),
                 new BigDecimal("5"),
                 TradeOrderType.FAK,
-                new BigDecimal("0.52"),
+                new BigDecimal("0.40"),
                 "MK_GTD_EDGE_LIVE_TINY_A",
                 "book-pressure-flips",
-                "strategy-v2 exit strategy=MK_GTD_EDGE_LIVE_TINY_A rule=book-pressure-flips outcome=Up"
+                "strategy-v2 exit strategy=MK_GTD_EDGE_LIVE_TINY_A rule=book-pressure-flips outcome=Down"
         ));
 
         assertThat(result.accepted()).isFalse();
-        assertThat(result.tradeId()).isEqualTo(5306L);
+        assertThat(result.tradeId()).isEqualTo(5308L);
         assertThat(result.tradeStatus()).isEqualTo(TradeStatus.OPEN);
         assertThat(result.message()).isEqualTo("paper exit blocked for live-backed trade");
         assertThat(liveTrade.getStatus()).isEqualTo(TradeStatus.OPEN);
@@ -237,6 +237,72 @@ class PaperExecutionServiceTest {
                 .extracting(TradeEventEntity::getEventType)
                 .containsExactly("PAPER_EXIT_BLOCKED_LIVE_TRADE")
                 .doesNotContain("EXIT_ORDER_CREATED", "EXIT_FILLED", "CLOSED");
+    }
+
+    @Test
+    void sellRejectsExchangeOrderIdBackedTradeBeforeSimulatedClose() {
+        GammaMarketDto market = market();
+        TradeIntent entryIntent = TradeIntent.buy(
+                67L,
+                market,
+                price("down", "Down", "0.50", "0.51"),
+                new BigDecimal("2.55"),
+                new BigDecimal("5"),
+                TradeOrderType.GTD,
+                true,
+                new BigDecimal("0.51"),
+                "MK_GTD_EDGE_LIVE_TINY_A",
+                "mk-gtd-edge-live-tiny-a-entry",
+                "entry"
+        );
+        TradeEntity trade = TradeEntity.fromIntent(entryIntent, ExecutionMode.PAPER);
+        ReflectionTestUtils.setField(trade, "id", 5308L);
+        trade.markOpen(
+                new BigDecimal("0.51"),
+                new BigDecimal("5"),
+                new BigDecimal("2.55"),
+                BigDecimal.ZERO,
+                Instant.parse("2026-05-13T18:26:46Z")
+        );
+        TradeOrderEntity entryOrder = TradeOrderEntity.fromIntent(5308L, entryIntent, ExecutionMode.PAPER, TradeVenue.PAPER_SIM, "entry-local");
+        ReflectionTestUtils.setField(entryOrder, "id", 6355L);
+        ReflectionTestUtils.setField(entryOrder, "exchangeOrderId", "0xec019dfad0d11eedca8c3c47071f4a279dcd74ef548fc7969721f1e7b7a268e7");
+        ReflectionTestUtils.setField(entryOrder, "remoteOrderId", null);
+
+        when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+                67L,
+                "MK_GTD_EDGE_LIVE_TINY_A",
+                "market-id",
+                "down",
+                TradeStatus.OPEN
+        )).thenReturn(Optional.of(trade));
+        when(tradeOrderRepository.findByTradeId(5308L)).thenReturn(List.of(entryOrder));
+        when(eventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TradeExecutionResult result = service.execute(TradeIntent.sell(
+                67L,
+                market,
+                price("down", "Down", "0.40", "0.41"),
+                new BigDecimal("5"),
+                TradeOrderType.FAK,
+                new BigDecimal("0.40"),
+                "MK_GTD_EDGE_LIVE_TINY_A",
+                "book-pressure-flips",
+                "strategy-v2 exit strategy=MK_GTD_EDGE_LIVE_TINY_A rule=book-pressure-flips outcome=Down"
+        ));
+
+        assertThat(result.accepted()).isFalse();
+        assertThat(result.message()).isEqualTo("paper exit blocked for live-backed trade");
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(trade.getExitFilledUsd()).isNull();
+
+        verify(tradeOrderRepository, org.mockito.Mockito.never()).save(any());
+        verify(tradeFillRepository, org.mockito.Mockito.never()).save(any());
+        verify(tradeRepository, org.mockito.Mockito.never()).save(any());
+
+        ArgumentCaptor<TradeEventEntity> eventCaptor = ArgumentCaptor.forClass(TradeEventEntity.class);
+        verify(eventRepository).save(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().getEventType()).isEqualTo("PAPER_EXIT_BLOCKED_LIVE_TRADE");
     }
 
     private GammaMarketDto market() {

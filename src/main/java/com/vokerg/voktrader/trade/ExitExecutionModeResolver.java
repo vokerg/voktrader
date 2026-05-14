@@ -50,7 +50,8 @@ public class ExitExecutionModeResolver {
         return entryOrders(trade).stream()
                 .anyMatch(order -> isLiveMode(order.getMode())
                         || order.getVenue() == TradeVenue.POLYMARKET
-                        || hasText(order.getRemoteOrderId()));
+                        || hasText(order.getRemoteOrderId())
+                        || hasText(order.getExchangeOrderId()));
     }
 
     private ExecutionMode liveModeFor(TradeEntity trade) {

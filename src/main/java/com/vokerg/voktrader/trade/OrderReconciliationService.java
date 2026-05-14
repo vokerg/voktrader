@@ -45,7 +45,7 @@ public class OrderReconciliationService {
                 order.getSide(),
                 order.getRequestedPrice(),
                 order.getRequestedShares(),
-                order.getSubmittedAt()
+                fillLookupSince(order)
         );
 
         if (fills.success()) {
@@ -177,6 +177,15 @@ public class OrderReconciliationService {
         }
         Instant staleAfter = submittedAt.plus(Duration.ofMinutes(properties.getMaxReconcileAgeMinutes()));
         return !TimeMachine.now().isBefore(staleAfter);
+    }
+
+    private Instant fillLookupSince(TradeOrderEntity order) {
+        Instant submittedAt = order.getSubmittedAt();
+        if (submittedAt == null) {
+            return null;
+        }
+        long lookbackSeconds = Math.max(0, properties.getFillLookupLookbackSeconds());
+        return submittedAt.minusSeconds(lookbackSeconds);
     }
 
     private void applyOrderState(

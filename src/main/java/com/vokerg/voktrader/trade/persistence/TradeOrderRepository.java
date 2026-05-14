@@ -70,4 +70,24 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Lo
             @Param("statuses") List<TradeOrderStatus> statuses,
             @Param("createdAt") Instant createdAt
     );
+
+    @Query("""
+            select distinct entry.tradeId
+            from TradeOrderEntity entry
+            where entry.phase = com.vokerg.voktrader.trade.TradeOrderPhase.ENTRY
+              and (
+                    entry.mode in (com.vokerg.voktrader.trade.ExecutionMode.LIVE_TINY, com.vokerg.voktrader.trade.ExecutionMode.LIVE)
+                    or entry.venue = com.vokerg.voktrader.trade.TradeVenue.POLYMARKET
+                    or entry.remoteOrderId is not null
+                    or entry.exchangeOrderId is not null
+              )
+              and exists (
+                    select 1
+                    from TradeOrderEntity exit
+                    where exit.tradeId = entry.tradeId
+                      and exit.phase = com.vokerg.voktrader.trade.TradeOrderPhase.EXIT
+                      and exit.venue = com.vokerg.voktrader.trade.TradeVenue.PAPER_SIM
+              )
+            """)
+    List<Long> findTradeIdsWithLiveEntryAndPaperExit();
 }
