@@ -31,6 +31,7 @@ public class OrderReconciliationService {
     private final TradeFillRepository tradeFillRepository;
     private final LiveExecutionService liveExecutionService;
     private final OrderLayerProperties properties;
+    private final OrderCancellationEventEmitter cancellationEventEmitter;
 
     @Transactional
     public OrderLifecycleResult reconcileOrder(TradeOrderEntity order) {
@@ -52,9 +53,11 @@ public class OrderReconciliationService {
             saveNewFills(order, fills);
         }
 
+        TradeOrderStatus previousStatus = order.getStatus();
         TradeOrderStatus status = resolveStatus(remoteStatus, fills, order);
         applyOrderState(order, status, remoteStatus, fills);
         reconcileTradeAfterOrderState(trade, order);
+        emitCancellationIfNew(trade, order, previousStatus, status, remoteStatus);
         logReconciliation(order, remoteStatus, fills, status);
         order.markReconciled();
         tradeOrderRepository.save(order);
@@ -236,7 +239,7 @@ public class OrderReconciliationService {
                     coalesce(remoteStatus.rawResponse(), fills.rawResponse())
             );
             case RESTING, SUBMITTED -> order.markResting(remoteStatus.rawResponse());
-            case CANCELLED -> order.markCancelled("remote cancelled", remoteStatus.rawResponse());
+            case CANCELLED -> order.markCancelled(firstNonBlank(order.getCancelReason(), "remote cancelled"), remoteStatus.rawResponse());
             case EXPIRED -> order.markExpired(remoteStatus.rawResponse());
             case REJECTED -> order.markRejected(errorMessage(remoteStatus), remoteStatus.rawResponse());
             case FAILED -> order.markFailed(errorMessage(remoteStatus), remoteStatus.rawResponse());
@@ -270,6 +273,26 @@ public class OrderReconciliationService {
         } else if (order.getStatus() == TradeOrderStatus.RESTING || order.getStatus() == TradeOrderStatus.SUBMITTED) {
             trade.markExitPending();
         }
+    }
+
+    private void emitCancellationIfNew(
+            TradeEntity trade,
+            TradeOrderEntity order,
+            TradeOrderStatus previousStatus,
+            TradeOrderStatus resolvedStatus,
+            ExecutorOrderStatusResponse remoteStatus
+    ) {
+        if (resolvedStatus != TradeOrderStatus.CANCELLED || previousStatus == TradeOrderStatus.CANCELLED) {
+            return;
+        }
+        cancellationEventEmitter.emitCancelled(
+                trade,
+                order,
+                previousStatus,
+                resolvedStatus,
+                order.getCancelReason(),
+                remoteStatus.rawResponse()
+        );
     }
 
     private void logReconciliation(
@@ -370,6 +393,10 @@ public class OrderReconciliationService {
 
     private String coalesce(String first, String second) {
         return first != null ? first : second;
+    }
+
+    private String firstNonBlank(String first, String fallback) {
+        return first == null || first.isBlank() ? fallback : first;
     }
 
     private record FillTotals(

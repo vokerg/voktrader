@@ -214,25 +214,40 @@ public class StrategyV2Engine implements TradingStrategy {
         if (reason == null) {
             return;
         }
-        OrderLifecycleResult result = maybeCancelOrder(order, 0, reason, true);
+        OrderLifecycleResult result = maybeCancelOrder(strategy, state, order, 0, reason, "BEST_BID_MOVED", true);
         if (result != null && result.success() && noFillMakerEntryOrder(strategy, state)) {
             registerNoFillCancelCooldown(strategy, state);
         }
     }
 
     private void maybeCancelPartialRemainder(StrategyV2Properties.Strategy strategy, StrategyRuntimeState state) {
-        maybeCancelOrder(state.activeEntryOrder(), strategy.getPartialFillManagement().getCancelRemainingOnPartialAfterSeconds(), "partial entry remainder pending too long");
+        maybeCancelOrder(strategy, state, state.activeEntryOrder(), strategy.getPartialFillManagement().getCancelRemainingOnPartialAfterSeconds(), "partial entry remainder pending too long", "TIMEOUT");
     }
 
     private void maybeCancelExitPending(StrategyV2Properties.Strategy strategy, StrategyRuntimeState state) {
-        maybeCancelOrder(state.activeExitOrder(), strategy.getExitOrderManagement().getMaxPendingSeconds(), "exit pending too long");
+        maybeCancelOrder(strategy, state, state.activeExitOrder(), strategy.getExitOrderManagement().getMaxPendingSeconds(), "exit pending too long", "TIMEOUT");
     }
 
-    private OrderLifecycleResult maybeCancelOrder(OrderRuntimeState order, int maxPendingSeconds, String reason) {
-        return maybeCancelOrder(order, maxPendingSeconds, reason, false);
+    private OrderLifecycleResult maybeCancelOrder(
+            StrategyV2Properties.Strategy strategy,
+            StrategyRuntimeState state,
+            OrderRuntimeState order,
+            int maxPendingSeconds,
+            String reason,
+            String reasonCategory
+    ) {
+        return maybeCancelOrder(strategy, state, order, maxPendingSeconds, reason, reasonCategory, false);
     }
 
-    private OrderLifecycleResult maybeCancelOrder(OrderRuntimeState order, int maxPendingSeconds, String reason, boolean force) {
+    private OrderLifecycleResult maybeCancelOrder(
+            StrategyV2Properties.Strategy strategy,
+            StrategyRuntimeState state,
+            OrderRuntimeState order,
+            int maxPendingSeconds,
+            String reason,
+            String reasonCategory,
+            boolean force
+    ) {
         if (order == null) {
             return null;
         }
@@ -246,7 +261,29 @@ public class StrategyV2Engine implements TradingStrategy {
         if ((!force && (ageSeconds == null || ageSeconds <= maxPendingSeconds)) || cancelIdentifier == null || cancelIdentifier.isBlank()) {
             return null;
         }
+        diagnosticsRecorder.orderCancelLifecycle(
+                strategy,
+                state,
+                order,
+                "ELIGIBLE",
+                reasonCategory,
+                reason,
+                ageSeconds,
+                maxPendingSeconds,
+                null
+        );
         OrderLifecycleResult result = OrderGatewayContext.current().orElse(orderGateway).cancelOrder(cancelIdentifier, reason);
+        diagnosticsRecorder.orderCancelLifecycle(
+                strategy,
+                state,
+                order,
+                "REQUEST_SENT",
+                reasonCategory,
+                reason,
+                ageSeconds,
+                maxPendingSeconds,
+                result
+        );
         if (!result.success()) {
             log.warn("Strategy V2 order-layer cancel request failed for {}: {}", cancelIdentifier, result.message());
         } else {

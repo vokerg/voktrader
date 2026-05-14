@@ -10,6 +10,7 @@ import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.Disposable;
 
@@ -32,6 +33,9 @@ public class MarketPriceFeedService {
     private final TradingEventLogger eventLogger;
 
     private final Map<String, MarketPriceFeed> feedsByMarketId = new ConcurrentHashMap<>();
+
+    @Value("${voktrader.market-data.log-live-updates:false}")
+    private boolean logLiveUpdates;
 
     public synchronized MarketPriceFeedHandle acquire(
             Long botId,
@@ -340,6 +344,9 @@ public class MarketPriceFeedService {
         }
 
         private void logPriceUpdate(String eventType, String tokenId, String outcome, BigDecimal bid, BigDecimal ask) {
+            if (!logLiveUpdates) {
+                return;
+            }
             Instant now = Instant.now();
             Instant lastLoggedAt = lastPriceLogByTokenId.get(tokenId);
             if (lastLoggedAt != null && Duration.between(lastLoggedAt, now).compareTo(Duration.ofSeconds(10)) < 0) {

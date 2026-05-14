@@ -2,6 +2,7 @@ package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
+import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRiskCheckRepository;
@@ -14,6 +15,8 @@ import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.time.TimeMachine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -33,20 +36,28 @@ class OrderReconciliationServiceTest {
     private final TradeRepository tradeRepository = mock(TradeRepository.class);
     private final TradeOrderRepository tradeOrderRepository = mock(TradeOrderRepository.class);
     private final TradeFillRepository tradeFillRepository = mock(TradeFillRepository.class);
+    private final TradeEventRepository tradeEventRepository = mock(TradeEventRepository.class);
     private final LiveExecutionService liveExecutionService = mock(LiveExecutionService.class);
     private final OrderLayerProperties properties = new OrderLayerProperties();
     private final List<TradeFillEntity> savedFills = new ArrayList<>();
+    private final List<TradeEventEntity> savedEvents = new ArrayList<>();
+    private final OrderCancellationEventEmitter cancellationEventEmitter = new OrderCancellationEventEmitter(
+            tradeEventRepository,
+            new ObjectMapper()
+    );
     private final OrderReconciliationService service = new OrderReconciliationService(
             tradeRepository,
             tradeOrderRepository,
             tradeFillRepository,
             liveExecutionService,
-            properties
+            properties,
+            cancellationEventEmitter
     );
 
     @BeforeEach
     void setUp() {
         savedFills.clear();
+        savedEvents.clear();
         when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(tradeOrderRepository.save(any(TradeOrderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(tradeFillRepository.save(any(TradeFillEntity.class))).thenAnswer(invocation -> {
@@ -58,6 +69,17 @@ class OrderReconciliationServiceTest {
         when(tradeFillRepository.findByRemoteFillId(any())).thenAnswer(invocation -> {
             String remoteFillId = invocation.getArgument(0);
             return savedFills.stream().filter(fill -> remoteFillId.equals(fill.getRemoteFillId())).findFirst();
+        });
+        when(tradeEventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> {
+            TradeEventEntity event = invocation.getArgument(0);
+            savedEvents.add(event);
+            return event;
+        });
+        when(tradeEventRepository.existsByTradeOrderIdAndEventType(any(), any())).thenAnswer(invocation -> {
+            Long orderId = invocation.getArgument(0);
+            String eventType = invocation.getArgument(1);
+            return savedEvents.stream().anyMatch(event -> orderId.equals(event.getTradeOrderId())
+                    && eventType.equals(event.getEventType()));
         });
     }
 
@@ -247,6 +269,7 @@ class OrderReconciliationServiceTest {
     void cancelledEntryWithNoFillCancelsTrade() {
         TradeEntity trade = trade();
         TradeOrderEntity order = order(trade, TradeSide.BUY);
+        ReflectionTestUtils.setField(order, "id", 6358L);
         when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
         when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("CANCELLED"));
         when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
@@ -255,6 +278,32 @@ class OrderReconciliationServiceTest {
 
         assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.CANCELLED);
         assertThat(trade.getStatus()).isEqualTo(TradeStatus.CANCELLED);
+        assertThat(savedEvents)
+                .extracting(TradeEventEntity::getEventType)
+                .containsExactly(OrderCancellationEventEmitter.CANCELLED_EVENT);
+        assertThat(savedEvents.getFirst().getTradeOrderId()).isEqualTo(6358L);
+        assertThat(savedEvents.getFirst().getPayloadJson())
+                .contains("\"previousStatus\":\"SUBMITTED\"")
+                .contains("\"resolvedStatus\":\"CANCELLED\"")
+                .contains("\"cancelReason\":\"remote cancelled\"")
+                .contains("\"remoteOrderId\":\"remote-1\"");
+    }
+
+    @Test
+    void repeatedCancelledReconciliationDoesNotDuplicateCancelEvent() {
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        ReflectionTestUtils.setField(order, "id", 6358L);
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("CANCELLED"));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
+
+        service.reconcileOrder(order);
+        service.reconcileOrder(order);
+
+        assertThat(savedEvents)
+                .extracting(TradeEventEntity::getEventType)
+                .containsExactly(OrderCancellationEventEmitter.CANCELLED_EVENT);
     }
 
     @Test

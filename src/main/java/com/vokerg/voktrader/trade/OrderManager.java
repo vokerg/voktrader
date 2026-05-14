@@ -8,6 +8,7 @@ import com.vokerg.voktrader.trade.persistence.TradeRiskCheckRepository;
 import com.vokerg.voktrader.executor.ExecutorCancelOrderResponse;
 import com.vokerg.voktrader.executor.ExecutorOrderCommand;
 import com.vokerg.voktrader.executor.ExecutorOrderResponse;
+import com.vokerg.voktrader.executor.ExecutorOrderStatusMapper;
 import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.executor.PythonExecutorClient;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class OrderManager {
     private final PythonExecutorClient pythonExecutorClient;
     private final ExecutorProperties executorProperties;
     private final OrderReconciliationService reconciliationService;
+    private final OrderCancellationEventEmitter cancellationEventEmitter;
 
     @Transactional
     public OrderLifecycleResult submitOrder(TradeIntent intent, ExecutionMode mode) {
@@ -72,15 +74,39 @@ public class OrderManager {
 
     @Transactional
     public OrderLifecycleResult cancelOrder(String localOrRemoteOrderId) {
+        return cancelOrder(localOrRemoteOrderId, "manual/explicit cancel requested");
+    }
+
+    @Transactional
+    public OrderLifecycleResult cancelOrder(String localOrRemoteOrderId, String reason) {
         TradeOrderEntity order = findOrder(localOrRemoteOrderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + localOrRemoteOrderId));
         TradeEntity trade = tradeRepository.findById(order.getTradeId()).orElse(null);
-        order.markCancelRequested("cancel requested");
+        String cancelReason = reason == null || reason.isBlank() ? "manual/explicit cancel requested" : reason;
+        order.markCancelRequested(cancelReason);
         tradeOrderRepository.save(order);
+        cancellationEventEmitter.emitCancelRequested(trade, order, cancelReason, null);
 
         ExecutorCancelOrderResponse response = pythonExecutorClient.cancelOrder(order.getRemoteOrderId());
         if (response.success()) {
-            order.markCancelRequested("cancel accepted");
+            TradeOrderStatus resolvedStatus = ExecutorOrderStatusMapper.toLifecycleStatus(response.status());
+            if (resolvedStatus == TradeOrderStatus.CANCELLED) {
+                order.markCancelled(cancelReason, response.rawResponse());
+                if (trade != null && zeroIfNull(order.getFilledShares()).compareTo(java.math.BigDecimal.ZERO) == 0) {
+                    trade.markCancelled();
+                    tradeRepository.save(trade);
+                }
+                cancellationEventEmitter.emitCancelled(
+                        trade,
+                        order,
+                        TradeOrderStatus.CANCEL_REQUESTED,
+                        TradeOrderStatus.CANCELLED,
+                        order.getCancelReason(),
+                        response.rawResponse()
+                );
+            } else {
+                order.markCancelRequested("cancel accepted");
+            }
             tradeOrderRepository.save(order);
             return OrderLifecycleResult.of(trade, order, true, response.status());
         }
@@ -117,5 +143,9 @@ public class OrderManager {
         Instant decisionAt = intent.decisionAt() == null ? Instant.now() : intent.decisionAt();
         String botScope = intent.botId() == null ? "default" : intent.botId().toString();
         return "ORDER:" + mode + ":" + botScope + ":" + intent.strategyId() + ":" + tradeId + ":" + decisionAt.toEpochMilli();
+    }
+
+    private java.math.BigDecimal zeroIfNull(java.math.BigDecimal value) {
+        return value == null ? java.math.BigDecimal.ZERO : value;
     }
 }

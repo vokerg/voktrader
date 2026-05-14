@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProperty scope="context" name="LOG_FILE" source="logging.file.name" defaultValue="logs/voktrader.log"/>
+    <springProperty scope="context" name="CONSOLE_LOG_PATTERN" source="logging.pattern.console"
+                    defaultValue="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p ${PID:- } --- [%15.15t] %-40.40logger{39} : %m%n%wEx"/>
+
+    <property name="MAIN_ROLLING_PATTERN" value="logs/voktrader.%d{yyyy-MM-dd}.%i.log.gz"/>
+    <property name="ENTRY_PULSE_LOG_FILE" value="logs/strategy-v2-entry-pulses.log"/>
+    <property name="ENTRY_PULSE_ROLLING_PATTERN" value="logs/strategy-v2-entry-pulses.%d{yyyy-MM-dd}.%i.log.gz"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_FILE}</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p [%thread] %logger{40} : %m%n%wEx</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${MAIN_ROLLING_PATTERN}</fileNamePattern>
+            <maxFileSize>20MB</maxFileSize>
+            <maxHistory>14</maxHistory>
+        </rollingPolicy>
+    </appender>
+
+    <appender name="ENTRY_PULSE_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${ENTRY_PULSE_LOG_FILE}</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %m%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${ENTRY_PULSE_ROLLING_PATTERN}</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>14</maxHistory>
+        </rollingPolicy>
+    </appender>
+
+    <logger name="voktrader.events.entry-pulse" level="INFO" additivity="false">
+        <appender-ref ref="ENTRY_PULSE_FILE"/>
+    </logger>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>

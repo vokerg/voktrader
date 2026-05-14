@@ -32,7 +32,7 @@ strategy-v2:
       sizing:
         paper-size-usd: "1.00"
         live-size-usd: "5.00"
-        max-order-usd: "3.00"
+        max-order-usd: "3.25"
         min-order-usd: "1.00"
         price-tick: "0.01"
         round-shares-scale: 4
@@ -122,8 +122,8 @@ strategy-v2:
             - feature: market.seconds_to_expiry
               op: between
               values:
-                - "60"
-                - "240"
+                - "55"
+                - "270"
 
             - feature: candidate.price_age_ms
               op: "<="
@@ -137,23 +137,23 @@ strategy-v2:
               op: between
               values:
                 - "0.010"
-                - "0.045"
+                - "0.05"
 
             - feature: candidate.mid
               op: between
               values:
-                - "0.36"
-                - "0.66"
+                - "0.35"
+                - "0.70"
 
             - feature: candidate.bid
               op: between
               values:
-                - "0.30"
-                - "0.60"
+                - "0.29"
+                - "0.65"
 
             - feature: candidate.microprice_edge
               op: ">="
-              value: "0.003"
+              value: "0.002"
 
             - feature: candidate.depth_imbalance_0_03
               op: ">="
@@ -166,8 +166,8 @@ strategy-v2:
             - feature: candidate.mid_move_5s
               op: between
               values:
-                - "-0.003"
-                - "0.014"
+                - "-0.010"
+                - "0.025"
 
             - feature: candidate.bid_move_3s
               op: ">="
@@ -192,13 +192,13 @@ strategy-v2:
             tick-size: "0.01"
             rounding: floor_to_tick
             min-price: "0.05"
-            max-price: "0.60"
+            max-price: "0.65"
             do-not-cross-spread: true
 
           size:
             type: fixed_shares
             shares: "5.00"
-            max-usd: "3.00"
+            max-usd: "3.25"
 
           maker-lifecycle:
             cancel-after-seconds: 2

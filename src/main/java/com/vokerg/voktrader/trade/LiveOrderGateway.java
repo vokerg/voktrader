@@ -17,6 +17,6 @@ public class LiveOrderGateway implements OrderGateway {
 
     @Override
     public OrderLifecycleResult cancelOrder(String localOrderId, String reason) {
-        return orderManager.cancelOrder(localOrderId);
+        return orderManager.cancelOrder(localOrderId, reason);
     }
 }

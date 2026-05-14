@@ -3,6 +3,8 @@ package com.vokerg.voktrader.strategy.v2;
 import com.vokerg.voktrader.telemetry.TelemetryData;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
+import com.vokerg.voktrader.trade.OrderLifecycleResult;
+import com.vokerg.voktrader.trade.OrderRuntimeState;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
 import com.vokerg.voktrader.trade.TradeEventEntity;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
@@ -405,6 +407,49 @@ public class StrategyV2DiagnosticsRecorder {
                         "exitOrderState", state == null || state.activeExitOrder() == null || state.activeExitOrder().status() == null ? null : state.activeExitOrder().status().name(),
                         "decisionBranch", branch
                 ),
+                false
+        );
+    }
+
+    public void orderCancelLifecycle(
+            StrategyV2Properties.Strategy strategy,
+            StrategyRuntimeState state,
+            OrderRuntimeState order,
+            String stage,
+            String reasonCategory,
+            String reason,
+            Long eligibleAgeSeconds,
+            Integer thresholdSeconds,
+            OrderLifecycleResult result
+    ) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("stage", stage);
+        data.put("reasonCategory", reasonCategory);
+        data.put("reason", reason);
+        data.put("thresholdSeconds", thresholdSeconds);
+        data.put("eligibleAgeSeconds", eligibleAgeSeconds);
+        data.put("orderId", order == null ? null : order.orderId());
+        data.put("localOrderId", order == null ? null : order.localOrderId());
+        data.put("remoteOrderId", order == null ? null : order.remoteOrderId());
+        data.put("orderPhase", order == null || order.phase() == null ? null : order.phase().name());
+        data.put("orderStatus", order == null || order.status() == null ? null : order.status().name());
+        data.put("submittedAt", order == null ? null : order.submittedAt());
+        data.put("lastReconciledAt", order == null ? null : order.lastReconciledAt());
+        data.put("resultSuccess", result == null ? null : result.success());
+        data.put("resultOrderStatus", result == null || result.orderStatus() == null ? null : result.orderStatus().name());
+        data.put("resultTradeStatus", result == null || result.tradeStatus() == null ? null : result.tradeStatus().name());
+        data.put("resultMessage", result == null ? null : result.message());
+        eventLogger.execution(
+                "STRATEGY_V2_ORDER_CANCEL_LIFECYCLE",
+                "STATE_V2",
+                strategy == null ? null : strategy.getStrategyId(),
+                null,
+                state == null || state.strategyInstanceKey() == null ? null : state.strategyInstanceKey().botId(),
+                state == null ? null : state.marketId(),
+                state == null ? null : state.tokenId(),
+                null,
+                reason,
+                data,
                 false
         );
     }

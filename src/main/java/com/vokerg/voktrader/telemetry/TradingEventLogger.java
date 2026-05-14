@@ -20,6 +20,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class TradingEventLogger {
     private static final Logger events = LoggerFactory.getLogger("voktrader.events");
+    private static final Logger entryPulseEvents = LoggerFactory.getLogger("voktrader.events.entry-pulse");
+    private static final String ENTRY_PULSE_TYPE = "STRATEGY_V2_ENTRY_PULSE";
 
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
@@ -201,6 +203,9 @@ public class TradingEventLogger {
                 events.info(json);
             } else {
                 events.debug(json);
+            }
+            if (ENTRY_PULSE_TYPE.equals(event.type())) {
+                entryPulseEvents.info(json);
             }
         } catch (JacksonException e) {
             events.warn("Could not serialize trading event type={} reason={}", event.type(), event.reason(), e);

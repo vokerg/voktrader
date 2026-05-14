@@ -4,6 +4,7 @@ import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
+import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRiskCheckRepository;
 import com.vokerg.voktrader.executor.ExecutorOrderCommand;
 import com.vokerg.voktrader.executor.ExecutorOrderResponse;
@@ -15,9 +16,13 @@ import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
+import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,21 +33,40 @@ import static org.mockito.Mockito.when;
 class OrderManagerTest {
     private final TradeRepository tradeRepository = mock(TradeRepository.class);
     private final TradeOrderRepository tradeOrderRepository = mock(TradeOrderRepository.class);
+    private final TradeEventRepository tradeEventRepository = mock(TradeEventRepository.class);
     private final PythonExecutorClient pythonExecutorClient = mock(PythonExecutorClient.class);
     private final OrderReconciliationService reconciliationService = mock(OrderReconciliationService.class);
     private final ExecutorProperties executorProperties = new ExecutorProperties();
+    private final List<TradeEventEntity> savedEvents = new ArrayList<>();
+    private final OrderCancellationEventEmitter cancellationEventEmitter = new OrderCancellationEventEmitter(
+            tradeEventRepository,
+            new ObjectMapper()
+    );
     private final OrderManager orderManager = new OrderManager(
             tradeRepository,
             tradeOrderRepository,
             pythonExecutorClient,
             executorProperties,
-            reconciliationService
+            reconciliationService,
+            cancellationEventEmitter
     );
 
     @BeforeEach
     void setUp() {
+        savedEvents.clear();
         when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(tradeOrderRepository.save(any(TradeOrderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tradeEventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> {
+            TradeEventEntity event = invocation.getArgument(0);
+            savedEvents.add(event);
+            return event;
+        });
+        when(tradeEventRepository.existsByTradeOrderIdAndEventType(any(), any())).thenAnswer(invocation -> {
+            Long orderId = invocation.getArgument(0);
+            String eventType = invocation.getArgument(1);
+            return savedEvents.stream().anyMatch(event -> orderId.equals(event.getTradeOrderId())
+                    && eventType.equals(event.getEventType()));
+        });
     }
 
     @Test
@@ -106,6 +130,7 @@ class OrderManagerTest {
     @Test
     void cancelOrderMarksCancelRequestedAndLeavesFinalStateForReconciliation() {
         TradeOrderEntity order = TradeOrderEntity.fromIntent(1L, intent(TradeSide.BUY), ExecutionMode.LIVE_TINY, TradeVenue.POLYMARKET, "local-1");
+        ReflectionTestUtils.setField(order, "id", 6358L);
         order.markSubmitted("remote-1", "{}");
         TradeEntity trade = TradeEntity.fromIntent(intent(TradeSide.BUY), ExecutionMode.LIVE_TINY);
         when(tradeOrderRepository.findByLocalOrderId("local-1")).thenReturn(Optional.of(order));
@@ -115,7 +140,17 @@ class OrderManagerTest {
         OrderLifecycleResult result = orderManager.cancelOrder("local-1");
 
         assertThat(result.success()).isTrue();
-        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.CANCEL_REQUESTED);
+        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.CANCELLED);
+        assertThat(savedEvents)
+                .extracting(TradeEventEntity::getEventType)
+                .containsExactly(
+                        OrderCancellationEventEmitter.CANCEL_REQUESTED_EVENT,
+                        OrderCancellationEventEmitter.CANCELLED_EVENT
+                );
+        assertThat(savedEvents.getLast().getPayloadJson())
+                .contains("\"previousStatus\":\"CANCEL_REQUESTED\"")
+                .contains("\"resolvedStatus\":\"CANCELLED\"")
+                .contains("\"cancelReason\":\"manual/explicit cancel requested\"");
     }
 
     private TradeIntent intent(TradeSide side) {
