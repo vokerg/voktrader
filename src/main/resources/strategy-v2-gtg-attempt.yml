@@ -85,7 +85,7 @@ strategy-v2:
           - Up
           - Down
         choose: highest_score
-        min-score: "0.018"
+        min-score: "0.014"
         score:
           Up:
             expression: >
@@ -137,27 +137,27 @@ strategy-v2:
               op: between
               values:
                 - "0.010"
-                - "0.05"
+                - "0.06"
 
             - feature: candidate.mid
               op: between
               values:
                 - "0.35"
-                - "0.70"
+                - "0.72"
 
             - feature: candidate.bid
               op: between
               values:
                 - "0.29"
-                - "0.65"
+                - "0.67"
 
             - feature: candidate.microprice_edge
               op: ">="
-              value: "0.002"
+              value: "0.0015"
 
             - feature: candidate.depth_imbalance_0_03
               op: ">="
-              value: "0.070"
+              value: "0.050"
 
             - feature: candidate.bid_depth_within_0_03
               op: ">="
@@ -166,8 +166,8 @@ strategy-v2:
             - feature: candidate.mid_move_5s
               op: between
               values:
-                - "-0.010"
-                - "0.025"
+                - "-0.015"
+                - "0.030"
 
             - feature: candidate.bid_move_3s
               op: ">="
@@ -175,7 +175,7 @@ strategy-v2:
 
             - feature: candidate.volatility_10s
               op: "<="
-              value: "0.025"
+              value: "0.030"
 
             - feature: opposite.bid_move_5s
               op: "<="

@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.List;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -31,6 +31,7 @@ public class PaperExecutionService {
     private final TradeRiskCheckRepository riskCheckRepository;
     private final TradeEventRepository eventRepository;
     private final TradingEventLogger eventLogger;
+    private final TradeExecutionSafetyService safetyService;
 
     @Transactional
     public TradeExecutionResult execute(TradeIntent intent) {
@@ -165,34 +166,14 @@ public class PaperExecutionService {
             return TradeExecutionResult.rejected(mode, null, null, hasClosedTrade ? TradeStatus.CLOSED : null, null,
                     message);
         }
-        if (isLiveBackedTrade(trade)) {
-            String message = "paper exit blocked for live-backed trade";
-            log.error(
-                    "{}: tradeId={} tradeMode={} strategy={} marketId={} tokenId={} outcome={} reason={}",
-                    message,
-                    trade.getId(),
-                    trade.getMode(),
-                    trade.getStrategyId(),
-                    trade.getMarketId(),
-                    trade.getTokenId(),
-                    trade.getOutcome(),
-                    intent.reason()
-            );
-            eventRepository.save(TradeEventEntity.of(trade.getId(), null, null, "PAPER_EXIT_BLOCKED_LIVE_TRADE", message, null));
-            eventLogger.execution(
-                    "PAPER_EXIT_BLOCKED_LIVE_TRADE",
-                    "EXECUTION",
-                    intent.strategyId(),
-                    intent.ruleId(),
-                    intent.botId(),
-                    intent.marketId(),
-                    intent.tokenId(),
-                    intent.outcome(),
-                    message,
-                    TelemetryData.data("mode", mode, "tradeId", trade.getId(), "tradeMode", trade.getMode(), "side", intent.side()),
-                    true
-            );
-            return TradeExecutionResult.rejected(mode, trade.getId(), null, trade.getStatus(), null, message);
+        Optional<TradeExecutionResult> blocked = safetyService.rejectPaperExitIfLiveBacked(
+                trade,
+                intent,
+                mode,
+                "PaperExecutionService.executeSell"
+        );
+        if (blocked.isPresent()) {
+            return blocked.get();
         }
 
         BigDecimal exitPrice = intent.observedBid();
@@ -235,12 +216,16 @@ public class PaperExecutionService {
 
         BigDecimal exitAmountUsd = shares.multiply(exitPrice).setScale(SHARE_SCALE, RoundingMode.HALF_UP);
         String idempotencyKey = idempotencyKey(intent, mode, trade.getId());
-        TradeOrderEntity order = tradeOrderRepository.save(TradeOrderEntity.fromIntent(
-                trade.getId(), intent, mode, TradeVenue.PAPER_SIM, idempotencyKey));
+        TradeOrderEntity order = TradeOrderEntity.fromIntent(
+                trade.getId(), intent, mode, TradeVenue.PAPER_SIM, idempotencyKey);
+        safetyService.assertNoPaperExitOrderForLiveBackedTrade(order, "PaperExecutionService.beforeExitOrderSave");
+        order = tradeOrderRepository.save(order);
         eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "EXIT_ORDER_CREATED", "paper simulated exit order created", null));
 
         BigDecimal fee = feeCalculator.estimate(shares, exitPrice, properties.getPaperFeeRate());
         order.markFilled(null, exitPrice, shares, exitAmountUsd);
+        safetyService.assertNoPaperExitOrderForLiveBackedTrade(order, "PaperExecutionService.beforeFilledExitOrderSave");
+        safetyService.assertPaperMayCloseTrade(trade, intent, "PaperExecutionService.beforeMarkClosed");
         trade.markClosed(exitPrice, shares, exitAmountUsd, fee, order.getCompletedAt());
 
         tradeRepository.save(trade);
@@ -281,30 +266,6 @@ public class PaperExecutionService {
         );
 
         return TradeExecutionResult.accepted(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "paper exit filled");
-    }
-
-    private boolean isLiveBackedTrade(TradeEntity trade) {
-        if (trade == null) {
-            return false;
-        }
-        if (isLiveMode(trade.getMode())) {
-            return true;
-        }
-        List<TradeOrderEntity> orders = trade.getId() == null ? List.of() : tradeOrderRepository.findByTradeId(trade.getId());
-        return orders.stream()
-                .filter(order -> order.getPhase() == TradeOrderPhase.ENTRY)
-                .anyMatch(order -> isLiveMode(order.getMode())
-                        || order.getVenue() == TradeVenue.POLYMARKET
-                        || hasText(order.getRemoteOrderId())
-                        || hasText(order.getExchangeOrderId()));
-    }
-
-    private boolean isLiveMode(ExecutionMode mode) {
-        return mode == ExecutionMode.LIVE_TINY || mode == ExecutionMode.LIVE;
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
     }
 
     private java.util.Optional<TradeEntity> findLatestTokenTrade(TradeIntent intent, TradeStatus status) {

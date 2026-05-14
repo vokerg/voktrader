@@ -11,6 +11,7 @@ import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
+import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -33,6 +34,13 @@ class PaperExecutionServiceTest {
     private final TradeFillRepository tradeFillRepository = mock(TradeFillRepository.class);
     private final TradeRiskCheckRepository riskCheckRepository = mock(TradeRiskCheckRepository.class);
     private final TradeEventRepository eventRepository = mock(TradeEventRepository.class);
+    private final TradingEventLogger eventLogger = mock(TradingEventLogger.class);
+    private final TradeExecutionSafetyService safetyService = new TradeExecutionSafetyService(
+            tradeOrderRepository,
+            eventRepository,
+            eventLogger,
+            new ObjectMapper()
+    );
     private final PaperExecutionService service = new PaperExecutionService(
             properties,
             riskCheckService,
@@ -42,7 +50,8 @@ class PaperExecutionServiceTest {
             tradeFillRepository,
             riskCheckRepository,
             eventRepository,
-            mock(TradingEventLogger.class)
+            eventLogger,
+            safetyService
     );
 
     @Test

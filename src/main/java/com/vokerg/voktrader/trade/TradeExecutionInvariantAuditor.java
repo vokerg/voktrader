@@ -3,6 +3,8 @@ package com.vokerg.voktrader.trade;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -12,6 +14,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TradeExecutionInvariantAuditor {
     private final TradeOrderRepository tradeOrderRepository;
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void auditOnStartup() {
+        auditLiveEntryPaperExitViolations();
+    }
 
     public List<Long> auditLiveEntryPaperExitViolations() {
         List<Long> tradeIds = tradeOrderRepository.findTradeIdsWithLiveEntryAndPaperExit();

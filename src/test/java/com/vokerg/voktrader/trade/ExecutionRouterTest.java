@@ -97,9 +97,77 @@ class ExecutionRouterTest {
         verifyNoInteractions(liveShadowExecutionService);
     }
 
+    @Test
+    void paperModeNetTakeProfitSellFor5314ShapeIsForcedToLiveExecutor() {
+        properties.setMode(ExecutionMode.PAPER);
+        String marketId = "2251671";
+        String tokenId = "down-token-5314";
+        String remoteOrderId = "0xae1db749b628a6740b4ae97e053271c03331bfcd5cb705c12219f38b3ec30227";
+        TradeIntent entryIntent = TradeIntent.buy(
+                67L,
+                market(marketId),
+                price(tokenId, "Down", "0.57", "0.58"),
+                new BigDecimal("2.90"),
+                new BigDecimal("5"),
+                TradeOrderType.GTD,
+                true,
+                new BigDecimal("0.58"),
+                "MK_GTD_EDGE_LIVE_TINY_A",
+                "mk-gtd-edge-live-tiny-a-entry",
+                "entry"
+        );
+        TradeEntity liveTrade = TradeEntity.fromIntent(entryIntent, ExecutionMode.LIVE_TINY);
+        ReflectionTestUtils.setField(liveTrade, "id", 5314L);
+        liveTrade.markOpen(new BigDecimal("0.58"), new BigDecimal("5"), new BigDecimal("2.90"), BigDecimal.ZERO, Instant.parse("2026-05-14T17:06:31.396495Z"));
+        TradeOrderEntity entryOrder = TradeOrderEntity.fromIntent(5314L, entryIntent, ExecutionMode.LIVE_TINY, TradeVenue.POLYMARKET, "entry-local");
+        ReflectionTestUtils.setField(entryOrder, "id", 6362L);
+        entryOrder.markSubmitting("entry-local", "{}");
+        entryOrder.markFilled(remoteOrderId, new BigDecimal("0.58"), new BigDecimal("5"), new BigDecimal("2.90"));
+        TradeIntent exitIntent = TradeIntent.sell(
+                67L,
+                market(marketId),
+                price(tokenId, "Down", "0.63", "0.64"),
+                new BigDecimal("5"),
+                TradeOrderType.FAK,
+                new BigDecimal("0.63"),
+                "MK_GTD_EDGE_LIVE_TINY_A",
+                "net-take-profit",
+                "strategy-v2 exit rule=net-take-profit outcome=Down"
+        );
+        TradeExecutionResult liveResult = TradeExecutionResult.accepted(
+                ExecutionMode.LIVE_TINY,
+                5314L,
+                6363L,
+                TradeStatus.EXIT_PENDING,
+                TradeOrderStatus.SUBMITTED,
+                "live exit submitted"
+        );
+
+        when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+                67L,
+                "MK_GTD_EDGE_LIVE_TINY_A",
+                marketId,
+                tokenId,
+                TradeStatus.OPEN
+        )).thenReturn(Optional.of(liveTrade));
+        when(tradeOrderRepository.findByTradeId(5314L)).thenReturn(List.of(entryOrder));
+        when(liveExecutionService.execute(exitIntent, ExecutionMode.LIVE_TINY)).thenReturn(liveResult);
+
+        TradeExecutionResult result = router.route(exitIntent);
+
+        assertThat(result).isSameAs(liveResult);
+        verify(liveExecutionService).execute(exitIntent, ExecutionMode.LIVE_TINY);
+        verifyNoInteractions(paperExecutionService);
+        verifyNoInteractions(liveShadowExecutionService);
+    }
+
     private GammaMarketDto market() {
+        return market("market-id");
+    }
+
+    private GammaMarketDto market(String marketId) {
         return new GammaMarketDto(
-                "market-id",
+                marketId,
                 "BTC Up or Down?",
                 "condition-id",
                 "btc-updown",
