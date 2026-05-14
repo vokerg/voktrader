@@ -10,9 +10,11 @@ import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -164,6 +166,77 @@ class PaperExecutionServiceTest {
 
         assertThat(result.accepted()).isFalse();
         assertThat(result.message()).isEqualTo("no open trade to close");
+    }
+
+    @Test
+    void sellRejectsLiveBackedTradeBeforeSimulatedClose() {
+        GammaMarketDto market = market();
+        TradeIntent entryIntent = TradeIntent.buy(
+                67L,
+                market,
+                price("up", "Up", "0.54", "0.55"),
+                new BigDecimal("2.75"),
+                new BigDecimal("5"),
+                TradeOrderType.GTD,
+                true,
+                new BigDecimal("0.55"),
+                "MK_GTD_EDGE_LIVE_TINY_A",
+                "mk-gtd-edge-live-tiny-a-entry",
+                "entry"
+        );
+        TradeEntity liveTrade = TradeEntity.fromIntent(entryIntent, ExecutionMode.LIVE_TINY);
+        ReflectionTestUtils.setField(liveTrade, "id", 5306L);
+        liveTrade.markOpen(
+                new BigDecimal("0.55"),
+                new BigDecimal("5"),
+                new BigDecimal("2.75"),
+                BigDecimal.ZERO,
+                Instant.parse("2026-05-13T18:26:46Z")
+        );
+        TradeOrderEntity entryOrder = TradeOrderEntity.fromIntent(5306L, entryIntent, ExecutionMode.LIVE_TINY, TradeVenue.POLYMARKET, "entry-local");
+        ReflectionTestUtils.setField(entryOrder, "id", 6352L);
+        entryOrder.markSubmitting("entry-local", "{}");
+        entryOrder.markFilled("0xbd672edc77c3e2616ca6a96e9f1f8363abc0bb2da286ce95d8991d798c313832", new BigDecimal("0.55"), new BigDecimal("5"), new BigDecimal("2.75"));
+
+        when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+                67L,
+                "MK_GTD_EDGE_LIVE_TINY_A",
+                "market-id",
+                "up",
+                TradeStatus.OPEN
+        )).thenReturn(Optional.of(liveTrade));
+        when(tradeOrderRepository.findByTradeId(5306L)).thenReturn(List.of(entryOrder));
+        when(eventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TradeExecutionResult result = service.execute(TradeIntent.sell(
+                67L,
+                market,
+                price("up", "Up", "0.52", "0.53"),
+                new BigDecimal("5"),
+                TradeOrderType.FAK,
+                new BigDecimal("0.52"),
+                "MK_GTD_EDGE_LIVE_TINY_A",
+                "book-pressure-flips",
+                "strategy-v2 exit strategy=MK_GTD_EDGE_LIVE_TINY_A rule=book-pressure-flips outcome=Up"
+        ));
+
+        assertThat(result.accepted()).isFalse();
+        assertThat(result.tradeId()).isEqualTo(5306L);
+        assertThat(result.tradeStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(result.message()).isEqualTo("paper exit blocked for live-backed trade");
+        assertThat(liveTrade.getStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(liveTrade.getExitFilledUsd()).isNull();
+
+        verify(tradeOrderRepository, org.mockito.Mockito.never()).save(any());
+        verify(tradeFillRepository, org.mockito.Mockito.never()).save(any());
+        verify(tradeRepository, org.mockito.Mockito.never()).save(any());
+
+        ArgumentCaptor<TradeEventEntity> eventCaptor = ArgumentCaptor.forClass(TradeEventEntity.class);
+        verify(eventRepository).save(eventCaptor.capture());
+        assertThat(eventCaptor.getAllValues())
+                .extracting(TradeEventEntity::getEventType)
+                .containsExactly("PAPER_EXIT_BLOCKED_LIVE_TRADE")
+                .doesNotContain("EXIT_ORDER_CREATED", "EXIT_FILLED", "CLOSED");
     }
 
     private GammaMarketDto market() {

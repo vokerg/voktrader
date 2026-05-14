@@ -2,6 +2,7 @@ HELP.md
 target/
 data/
 logs/
+executor-python/logs/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

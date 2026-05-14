@@ -19,6 +19,7 @@ import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -136,6 +137,84 @@ class LiveExecutionServiceTest {
         assertThat(open.getExitFeeUsd()).isEqualByComparingTo("0.03084854");
         assertThat(open.getTotalFeeUsd()).isEqualByComparingTo("0.06108849");
         assertThat(open.getFinalPnlUsd()).isEqualByComparingTo("-0.14948649");
+    }
+
+    @Test
+    void bookPressureExitForLiveTinyTradeUsesExecutorAndNotPaperCloseEvents() {
+        TradeIntent entryIntent = TradeIntent.buy(
+                67L,
+                market(),
+                price("up", "Up", "0.54", "0.55"),
+                new BigDecimal("2.75"),
+                new BigDecimal("5"),
+                TradeOrderType.GTD,
+                true,
+                new BigDecimal("0.55"),
+                "MK_GTD_EDGE_LIVE_TINY_A",
+                "mk-gtd-edge-live-tiny-a-entry",
+                "entry"
+        );
+        TradeEntity open = TradeEntity.fromIntent(entryIntent, ExecutionMode.LIVE_TINY);
+        ReflectionTestUtils.setField(open, "id", 5306L);
+        open.markOpen(
+                new BigDecimal("0.55"),
+                new BigDecimal("5"),
+                new BigDecimal("2.75"),
+                BigDecimal.ZERO,
+                Instant.parse("2026-05-13T18:26:46Z")
+        );
+        when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+                67L,
+                "MK_GTD_EDGE_LIVE_TINY_A",
+                "market-id",
+                "up",
+                TradeStatus.OPEN
+        )).thenReturn(Optional.of(open));
+        when(pythonExecutorClient.submit(any(ExecutorOrderCommand.class))).thenReturn(new ExecutorOrderResponse(
+                true,
+                true,
+                "MATCHED",
+                "0x-live-exit",
+                new BigDecimal("0.52"),
+                new BigDecimal("5"),
+                new BigDecimal("2.60"),
+                BigDecimal.ZERO,
+                "matched",
+                "{}",
+                Instant.parse("2026-05-13T18:27:01Z")
+        ));
+
+        TradeExecutionResult result = service.execute(TradeIntent.sell(
+                67L,
+                market(),
+                price("up", "Up", "0.52", "0.53"),
+                new BigDecimal("5"),
+                TradeOrderType.FAK,
+                new BigDecimal("0.52"),
+                "MK_GTD_EDGE_LIVE_TINY_A",
+                "book-pressure-flips",
+                "strategy-v2 exit strategy=MK_GTD_EDGE_LIVE_TINY_A rule=book-pressure-flips outcome=Up"
+        ), ExecutionMode.LIVE_TINY);
+
+        assertThat(result.accepted()).isTrue();
+        assertThat(result.message()).isEqualTo("live exit filled");
+        verify(pythonExecutorClient).submit(any(ExecutorOrderCommand.class));
+
+        ArgumentCaptor<TradeOrderEntity> orderCaptor = ArgumentCaptor.forClass(TradeOrderEntity.class);
+        verify(tradeOrderRepository, org.mockito.Mockito.atLeastOnce()).save(orderCaptor.capture());
+        TradeOrderEntity exitOrder = orderCaptor.getAllValues().getLast();
+        assertThat(exitOrder.getPhase()).isEqualTo(TradeOrderPhase.EXIT);
+        assertThat(exitOrder.getMode()).isEqualTo(ExecutionMode.LIVE_TINY);
+        assertThat(exitOrder.getVenue()).isEqualTo(TradeVenue.POLYMARKET);
+        assertThat(exitOrder.getRemoteOrderId()).isEqualTo("0x-live-exit");
+        assertThat(exitOrder.getSubmittedAt()).isNotNull();
+
+        ArgumentCaptor<TradeEventEntity> eventCaptor = ArgumentCaptor.forClass(TradeEventEntity.class);
+        verify(tradeEventRepository, org.mockito.Mockito.atLeastOnce()).save(eventCaptor.capture());
+        assertThat(eventCaptor.getAllValues())
+                .extracting(TradeEventEntity::getEventType)
+                .contains("EXIT_ORDER_CREATED", "LIVE_EXIT_FILLED")
+                .doesNotContain("EXIT_FILLED", "CLOSED");
     }
 
     @Test

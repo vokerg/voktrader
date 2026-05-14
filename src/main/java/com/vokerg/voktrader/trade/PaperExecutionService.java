@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -164,6 +165,35 @@ public class PaperExecutionService {
             return TradeExecutionResult.rejected(mode, null, null, hasClosedTrade ? TradeStatus.CLOSED : null, null,
                     message);
         }
+        if (isLiveBackedTrade(trade)) {
+            String message = "paper exit blocked for live-backed trade";
+            log.error(
+                    "{}: tradeId={} tradeMode={} strategy={} marketId={} tokenId={} outcome={} reason={}",
+                    message,
+                    trade.getId(),
+                    trade.getMode(),
+                    trade.getStrategyId(),
+                    trade.getMarketId(),
+                    trade.getTokenId(),
+                    trade.getOutcome(),
+                    intent.reason()
+            );
+            eventRepository.save(TradeEventEntity.of(trade.getId(), null, null, "PAPER_EXIT_BLOCKED_LIVE_TRADE", message, null));
+            eventLogger.execution(
+                    "PAPER_EXIT_BLOCKED_LIVE_TRADE",
+                    "EXECUTION",
+                    intent.strategyId(),
+                    intent.ruleId(),
+                    intent.botId(),
+                    intent.marketId(),
+                    intent.tokenId(),
+                    intent.outcome(),
+                    message,
+                    TelemetryData.data("mode", mode, "tradeId", trade.getId(), "tradeMode", trade.getMode(), "side", intent.side()),
+                    true
+            );
+            return TradeExecutionResult.rejected(mode, trade.getId(), null, trade.getStatus(), null, message);
+        }
 
         BigDecimal exitPrice = intent.observedBid();
         if (exitPrice == null || exitPrice.compareTo(BigDecimal.ZERO) <= 0) {
@@ -251,6 +281,29 @@ public class PaperExecutionService {
         );
 
         return TradeExecutionResult.accepted(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "paper exit filled");
+    }
+
+    private boolean isLiveBackedTrade(TradeEntity trade) {
+        if (trade == null) {
+            return false;
+        }
+        if (isLiveMode(trade.getMode())) {
+            return true;
+        }
+        List<TradeOrderEntity> orders = trade.getId() == null ? List.of() : tradeOrderRepository.findByTradeId(trade.getId());
+        return orders.stream()
+                .filter(order -> order.getPhase() == TradeOrderPhase.ENTRY)
+                .anyMatch(order -> isLiveMode(order.getMode())
+                        || order.getVenue() == TradeVenue.POLYMARKET
+                        || hasText(order.getRemoteOrderId()));
+    }
+
+    private boolean isLiveMode(ExecutionMode mode) {
+        return mode == ExecutionMode.LIVE_TINY || mode == ExecutionMode.LIVE;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private java.util.Optional<TradeEntity> findLatestTokenTrade(TradeIntent intent, TradeStatus status) { if (intent.botId() != null) { return tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(intent.botId(), intent.strategyId(), intent.marketId(), intent.tokenId(), status); } return tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(intent.strategyId(), intent.marketId(), intent.tokenId(), status); } private String idempotencyKey(TradeIntent intent, ExecutionMode mode, Long tradeId) { return mode + ":" + (intent.botId() == null ? "default" : intent.botId()) + ":" + intent.marketId() + ":" + intent.tokenId() + ":" + intent.strategyId() + ":" + intent.side() + ":" + tradeId; }

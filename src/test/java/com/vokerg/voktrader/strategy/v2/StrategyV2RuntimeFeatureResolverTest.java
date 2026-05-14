@@ -1,5 +1,9 @@
 package com.vokerg.voktrader.strategy.v2;
 
+import com.vokerg.voktrader.economy.FeeEstimate;
+import com.vokerg.voktrader.economy.LiquidityRole;
+import com.vokerg.voktrader.marketdata.FillEstimate;
+import com.vokerg.voktrader.marketdata.OrderBookSide;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.strategy.StrategyMarketView;
 import com.vokerg.voktrader.strategy.StrategyOutcomeView;
@@ -61,10 +65,77 @@ class StrategyV2RuntimeFeatureResolverTest {
         assertThat(context.features()).doesNotContainKey("trade.max_adverse_excursion_usd");
     }
 
+    @Test
+    void estimatedNetPnlUsesTakerSellNetProceedsMinusEntryCostAndRealizedFees() {
+        StrategyRuntimeState state = new StrategyRuntimeState(
+                StrategyInstanceKey.of(null, "strategy-test"),
+                "market-id",
+                "strategy-test",
+                "token-up",
+                TradeStatus.OPEN,
+                null,
+                null,
+                new BigDecimal("5"),
+                BigDecimal.ZERO,
+                new BigDecimal("0.53"),
+                BigDecimal.ZERO,
+                true,
+                null,
+                null,
+                null,
+                null,
+                Instant.parse("2026-05-09T12:00:00Z"),
+                null
+        );
+        FillEstimate sellEstimate = new FillEstimate(
+                "token-up",
+                "Up",
+                OrderBookSide.BUY,
+                null,
+                new BigDecimal("5"),
+                new BigDecimal("5"),
+                new BigDecimal("2.70"),
+                new BigDecimal("0.54"),
+                new BigDecimal("0.54"),
+                true,
+                1,
+                Instant.parse("2026-05-09T12:00:01Z")
+        );
+        FeeEstimate takerFee = new FeeEstimate(LiquidityRole.TAKER, new BigDecimal("0.072"), new BigDecimal("0.089424"));
+
+        StrategyV2FeatureContext context = resolver.contexts(
+                market(),
+                marketViewWithTakerSell(sellEstimate, takerFee),
+                new BigDecimal("1.00"),
+                state
+        ).get(0);
+
+        assertThat((BigDecimal) context.features().get("candidate.taker_sell.proceeds_usd")).isEqualByComparingTo("2.70");
+        assertThat((BigDecimal) context.features().get("candidate.taker_sell.fee_usd")).isEqualByComparingTo("0.089424");
+        assertThat((BigDecimal) context.features().get("candidate.taker_sell.net_proceeds_usd")).isEqualByComparingTo("2.610576");
+        assertThat((BigDecimal) context.features().get("trade.estimated_net_pnl_usd")).isEqualByComparingTo("-0.039424");
+        assertThat((BigDecimal) context.features().get("position.unrealized_pnl_usd")).isEqualByComparingTo("-0.039424");
+        assertThat((BigDecimal) context.features().get("trade.estimated_gross_pnl_usd")).isEqualByComparingTo("0.05000000");
+    }
+
     private StrategyMarketView marketView() {
         StrategyMarketView marketView = mock(StrategyMarketView.class);
         StrategyOutcomeView up = outcome("Up", "token-up", "0.62", "0.04");
         StrategyOutcomeView down = outcome("Down", "token-down", "0.38", "0.04");
+        when(marketView.outcomes()).thenReturn(List.of(up, down));
+        when(marketView.outcome("Up")).thenReturn(Optional.of(up));
+        when(marketView.outcome("Down")).thenReturn(Optional.of(down));
+        when(marketView.token("token-up")).thenReturn(Optional.of(up));
+        when(marketView.token("token-down")).thenReturn(Optional.of(down));
+        return marketView;
+    }
+
+    private StrategyMarketView marketViewWithTakerSell(FillEstimate sellEstimate, FeeEstimate takerFee) {
+        StrategyMarketView marketView = mock(StrategyMarketView.class);
+        StrategyOutcomeView up = outcome("Up", "token-up", "0.56", "0.04");
+        StrategyOutcomeView down = outcome("Down", "token-down", "0.44", "0.04");
+        when(up.estimateTakerSell(new BigDecimal("5"))).thenReturn(Optional.of(sellEstimate));
+        when(up.estimateTakerFee(sellEstimate)).thenReturn(Optional.of(takerFee));
         when(marketView.outcomes()).thenReturn(List.of(up, down));
         when(marketView.outcome("Up")).thenReturn(Optional.of(up));
         when(marketView.outcome("Down")).thenReturn(Optional.of(down));

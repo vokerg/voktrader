@@ -69,11 +69,11 @@ public class StrategyV2FeatureResolver {
     ) {
         Map<String, Object> features = new HashMap<>();
         putMarket(features, market, marketView, now);
+        putRuntimeState(features, runtimeState, marketView, now);
         putOutcome(features, "candidate", candidate, opposite, orderUsd, runtimeState);
         putOutcome(features, "opposite", opposite, candidate, orderUsd, runtimeState);
         putAlias(features, "up", marketView.outcome("Up").orElse(null), marketView.outcome("Down").orElse(null));
         putAlias(features, "down", marketView.outcome("Down").orElse(null), marketView.outcome("Up").orElse(null));
-        putRuntimeState(features, runtimeState, marketView, now);
         return new StrategyV2FeatureContext(market, marketView, candidate, opposite, now, features, runtimeState);
     }
 
@@ -310,8 +310,29 @@ public class StrategyV2FeatureResolver {
             view.estimateTakerFee(estimate).map(FeeEstimate::feeUsd).ifPresent(fee -> {
                 features.put(prefix + ".taker_sell.fee_usd", fee);
                 features.put(prefix + ".taker_sell.net_proceeds_usd", estimate.notionalUsd().subtract(fee));
+                putNetExitPnl(features, runtimeState, estimate.notionalUsd().subtract(fee));
             });
         });
+    }
+
+    private void putNetExitPnl(
+            Map<String, Object> features,
+            StrategyRuntimeState state,
+            BigDecimal netExitProceedsUsd
+    ) {
+        if (state == null
+                || state.filledShares() == null
+                || state.avgEntryPrice() == null
+                || netExitProceedsUsd == null) {
+            return;
+        }
+        BigDecimal entryCost = state.avgEntryPrice().multiply(state.filledShares());
+        BigDecimal realizedFees = state.realizedFeeUsd() == null ? BigDecimal.ZERO : state.realizedFeeUsd();
+        BigDecimal pnl = netExitProceedsUsd.subtract(entryCost).subtract(realizedFees);
+        features.put("position.unrealized_pnl_usd", pnl);
+        features.put("position.unrealized_pnl_pct", unrealizedPnlPct(state, pnl));
+        features.put("trade.estimated_net_pnl_usd", pnl);
+        features.put("trade.estimated_net_pnl_pct", features.get("position.unrealized_pnl_pct"));
     }
 
     private void record(StrategyOutcomeView view, Instant now) {
