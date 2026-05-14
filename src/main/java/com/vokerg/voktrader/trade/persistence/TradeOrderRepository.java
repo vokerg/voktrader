@@ -76,7 +76,7 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Lo
             from TradeOrderEntity entry
             where entry.phase = com.vokerg.voktrader.trade.TradeOrderPhase.ENTRY
               and (
-                    entry.mode in (com.vokerg.voktrader.trade.ExecutionMode.LIVE_TINY, com.vokerg.voktrader.trade.ExecutionMode.LIVE)
+                    entry.mode = com.vokerg.voktrader.trade.ExecutionMode.LIVE
                     or entry.venue = com.vokerg.voktrader.trade.TradeVenue.POLYMARKET
                     or entry.remoteOrderId is not null
                     or entry.exchangeOrderId is not null

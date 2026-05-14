@@ -39,10 +39,10 @@ public class StrategyV2OrderActionBuilder {
 
     public TradeExecutionResult routeEntry(
             StrategyV2Properties.Strategy strategy,
-            StrategyV2FeatureContext context,
-            ExecutionMode mode
+            StrategyV2FeatureContext context
     ) {
         StrategyV2Properties.Action action = strategy.getEntry().getAction();
+        ExecutionMode mode = configuredMode();
         if (!"BUY".equalsIgnoreCase(action.getSide())) {
             return TradeExecutionResult.rejected(mode, null, null, null, null, "Strategy V2 entry only supports BUY actions in this version");
         }
@@ -87,9 +87,9 @@ public class StrategyV2OrderActionBuilder {
     public TradeExecutionResult routeExit(
             StrategyV2Properties.Strategy strategy,
             StrategyV2Properties.ExitRule rule,
-            StrategyV2FeatureContext context,
-            ExecutionMode mode
+            StrategyV2FeatureContext context
     ) {
+        ExecutionMode mode = configuredMode();
         TradeOrderType orderType = orderType(rule == null ? null : rule.getOrderType());
         String liquidityRole = rule == null ? null : rule.getLiquidityRole();
         boolean postOnly = liquidityRole != null
@@ -125,6 +125,14 @@ public class StrategyV2OrderActionBuilder {
             );
         }
         return executionRouter.route(intent);
+    }
+
+    private ExecutionMode configuredMode() {
+        ExecutionMode mode = tradingProperties.getMode();
+        if (mode == null) {
+            throw new IllegalStateException("voktrader.trading.mode must be configured explicitly");
+        }
+        return mode;
     }
 
     private BigDecimal amountUsd(StrategyV2Properties.Action action, BigDecimal price, BigDecimal shares) {

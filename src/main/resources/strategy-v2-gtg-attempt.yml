@@ -5,7 +5,7 @@ strategy-v2:
   engine:
     enabled: true
     active-strategy-ids:
-      - MK_GTD_EDGE_LIVE_TINY_A
+      - MK_GTD_EDGE_A
     tick-ms: 1000
     decision-mode: single_market_single_position
     decimal-scale: 8
@@ -53,10 +53,10 @@ strategy-v2:
         maker-fee-rate: "0"
 
   strategies:
-    - strategy-id: MK_GTD_EDGE_LIVE_TINY_A
+    - strategy-id: MK_GTD_EDGE_A
       enabled: true
       profile: deep_research_paper
-      description: Live-tiny passive maker GTD edge capture, 5-share minimum order.
+      description: Live passive maker GTD edge capture, 5-share minimum order.
       hypothesis: >
         Post a small post-only maker bid when spread is at least one tick,
         book pressure is supportive, volatility is low, and the order can be
@@ -68,16 +68,11 @@ strategy-v2:
         - maker
         - gtd
         - passive
-        - live-tiny
+        - live
         - five-shares
         - post-only
         - not-live-proven
 
-      allowed-execution-modes:
-        - PAPER
-        - TESTING
-        - LIVE_SHADOW
-        - LIVE_TINY
 
       candidate-selection:
         type: score
@@ -106,7 +101,7 @@ strategy-v2:
 
       entry:
         enabled: true
-        rule-id: mk-gtd-edge-live-tiny-a-entry
+        rule-id: mk-gtd-edge-a-entry
         when:
           all:
             - feature: market.accepting_orders
@@ -208,7 +203,7 @@ strategy-v2:
             require-reconciliation: true
 
           reason-template: >
-            MK_GTD_EDGE_LIVE_TINY_A maker bid {{candidate.outcome}}
+            MK_GTD_EDGE_A maker bid {{candidate.outcome}}
             bid={{candidate.bid}} ask={{candidate.ask}}
             spread={{candidate.spread}}
             micro={{candidate.microprice_edge}}
@@ -217,7 +212,7 @@ strategy-v2:
 
       exit:
         enabled: true
-        rule-id: mk-gtd-edge-live-tiny-a-exit
+        rule-id: mk-gtd-edge-a-exit
         default-action: HOLD
         rules:
           - name: net-take-profit

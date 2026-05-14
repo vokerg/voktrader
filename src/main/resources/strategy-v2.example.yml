@@ -55,7 +55,6 @@ strategy-v2:
       enabled: true
       profile: "conservative_paper"
       hypothesis: "Intentionally broad maker smoke-test strategy: post a tiny GTD bid almost any time a sane quote exists."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "lower_ask"
         candidates: ["Up", "Down"]
@@ -106,7 +105,6 @@ strategy-v2:
       enabled: true
       profile: "conservative_paper"
       hypothesis: "Buy cheap Down only when spread is tight enough."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "fixed_outcome"
         outcome: "Down"
@@ -162,7 +160,6 @@ strategy-v2:
       enabled: false
       profile: "conservative_paper"
       hypothesis: "Posting at best bid may capture spread without taker fee when momentum and near-bid depth support the candidate."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "score"
         candidates: ["Up", "Down"]
@@ -225,7 +222,6 @@ strategy-v2:
       enabled: false
       profile: "conservative_paper"
       hypothesis: "Buy whichever side is cheapest when both the book and price feed are fresh and the spread is tight."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "lower_ask"
         candidates: ["Up", "Down"]
@@ -296,7 +292,6 @@ strategy-v2:
       enabled: false
       profile: "conservative_paper"
       hypothesis: "Follow the side with stronger short-term mid movement when liquidity is present and volatility is controlled."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "stronger_momentum"
         feature: "mid_move_5s"
@@ -368,7 +363,6 @@ strategy-v2:
       enabled: false
       profile: "conservative_paper"
       hypothesis: "Score both outcomes using momentum, near-book imbalance, microprice edge, and spread cost."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "score"
         candidates: ["Up", "Down"]
@@ -440,7 +434,6 @@ strategy-v2:
       enabled: false
       profile: "conservative_paper"
       hypothesis: "Late in a short market, follow the more expensive side only if the book is fresh and price pressure confirms it."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "higher_mid"
         candidates: ["Up", "Down"]
@@ -511,7 +504,6 @@ strategy-v2:
       enabled: true
       profile: "conservative_paper"
       hypothesis: "Post a small maker bid below a stable mid when spreads are wide enough to pay for waiting."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "score"
         candidates: ["Up", "Down"]

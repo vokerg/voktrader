@@ -53,8 +53,7 @@ strategy-v2:
       profile: "paper_data_collection"
       description: "Strategy V2 liquidity and momentum confirmation for paper and tiny live validation."
       hypothesis: "Enter when one side has a real edge, fresh book, acceptable taker fill quality, and supportive short-horizon momentum; exit on fee-aware profit, stop loss, momentum failure, or time decay."
-      tags: ["paper", "live-tiny", "v2", "liquidity", "momentum", "fee-aware"]
-      allowed-execution-modes: ["PAPER", "LIVE_TINY"]
+      tags: ["paper", "live", "v2", "liquidity", "momentum", "fee-aware"]
 
       candidate-selection:
         type: "score"

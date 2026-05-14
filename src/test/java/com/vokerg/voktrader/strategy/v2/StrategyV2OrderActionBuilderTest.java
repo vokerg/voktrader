@@ -42,7 +42,7 @@ class StrategyV2OrderActionBuilderTest {
     @Test
     void flagDisabledRoutesThroughExistingExecutionRouter() {
         when(executionRouter.route(any(TradeIntent.class))).thenReturn(TradeExecutionResult.accepted(
-                ExecutionMode.LIVE_TINY,
+                ExecutionMode.LIVE,
                 1L,
                 2L,
                 TradeStatus.OPEN,
@@ -50,7 +50,7 @@ class StrategyV2OrderActionBuilderTest {
                 "accepted"
         ));
 
-        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context(), ExecutionMode.LIVE_TINY);
+        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context());
 
         assertThat(result.accepted()).isTrue();
         verify(executionRouter).route(any(TradeIntent.class));
@@ -72,7 +72,7 @@ class StrategyV2OrderActionBuilderTest {
                 null
         ));
 
-        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context(), ExecutionMode.LIVE_TINY);
+        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context());
 
         assertThat(result.accepted()).isTrue();
         assertThat(result.localOrderId()).isEqualTo("local-1");
@@ -97,7 +97,7 @@ class StrategyV2OrderActionBuilderTest {
                 null
         ));
 
-        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.GTC), context(), ExecutionMode.LIVE_TINY);
+        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.GTC), context());
 
         assertThat(result.accepted()).isTrue();
         assertThat(result.tradeStatus()).isEqualTo(TradeStatus.ENTRY_PENDING);
@@ -123,7 +123,7 @@ class StrategyV2OrderActionBuilderTest {
                 null
         ));
 
-        builder.routeEntry(fixedSharesStrategy(), context(), ExecutionMode.TESTING);
+        builder.routeEntry(fixedSharesStrategy(), context());
 
         ArgumentCaptor<TradeIntent> intent = ArgumentCaptor.forClass(TradeIntent.class);
         verify(orderGateway).submitOrder(intent.capture(), any(), any());
@@ -150,7 +150,7 @@ class StrategyV2OrderActionBuilderTest {
         StrategyV2Properties.Strategy strategy = fixedSharesStrategy();
         strategy.getEntry().getAction().getSize().setShares(null);
 
-        builder.routeEntry(strategy, context(), ExecutionMode.TESTING);
+        builder.routeEntry(strategy, context());
 
         ArgumentCaptor<TradeIntent> intent = ArgumentCaptor.forClass(TradeIntent.class);
         verify(orderGateway).submitOrder(intent.capture(), any(), any());
@@ -174,7 +174,7 @@ class StrategyV2OrderActionBuilderTest {
                 "rejected"
         ));
 
-        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context(), ExecutionMode.LIVE_TINY);
+        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context());
 
         assertThat(result.accepted()).isFalse();
         assertThat(result.error()).isEqualTo("rejected");

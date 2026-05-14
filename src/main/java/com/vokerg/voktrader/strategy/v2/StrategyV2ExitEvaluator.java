@@ -2,7 +2,6 @@ package com.vokerg.voktrader.strategy.v2;
 
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.strategy.StrategyMarketView;
-import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeStatus;
@@ -45,8 +44,7 @@ public class StrategyV2ExitEvaluator {
             StrategyV2Properties.Strategy strategy,
             GammaMarketDto market,
             StrategyMarketView marketView,
-            StrategyRuntimeState runtimeState,
-            ExecutionMode mode
+            StrategyRuntimeState runtimeState
     ) {
         if (strategy.getExit() == null || !strategy.getExit().isEnabled()) {
             diagnosticsRecorder.exitDecision(strategy, null, runtimeState, "EXIT_DISABLED", "exit disabled", Map.of());
@@ -99,7 +97,7 @@ public class StrategyV2ExitEvaluator {
                 );
                 return Optional.empty();
             }
-            TradeExecutionResult result = orderActionBuilder.routeExit(strategy, rule, context.get(), mode);
+            TradeExecutionResult result = orderActionBuilder.routeExit(strategy, rule, context.get());
             diagnosticsRecorder.exitRouted(strategy, rule, context.get(), result);
             diagnosticsRecorder.exitDecision(
                     strategy,

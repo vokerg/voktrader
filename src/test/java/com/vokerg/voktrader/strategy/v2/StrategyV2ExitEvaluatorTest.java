@@ -3,10 +3,10 @@ package com.vokerg.voktrader.strategy.v2;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.strategy.StrategyMarketView;
 import com.vokerg.voktrader.strategy.StrategyOutcomeView;
-import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.ExecutionRouter;
 import com.vokerg.voktrader.trade.OrderGateway;
 import com.vokerg.voktrader.trade.OrderLifecycleResult;
+import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.OrderRuntimeState;
 import com.vokerg.voktrader.trade.StrategyInstanceKey;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
@@ -56,7 +56,7 @@ class StrategyV2ExitEvaluatorTest {
     void openProfitTargetCreatesSellIntent() {
         givenRouteAccepted();
 
-        evaluator.evaluate(strategy(">=", "0.05"), market(), marketView("0.58"), state(TradeStatus.OPEN, "10", true), ExecutionMode.PAPER);
+        evaluator.evaluate(strategy(">=", "0.05"), market(), marketView("0.58"), state(TradeStatus.OPEN, "10", true));
 
         TradeIntent intent = capturedIntent();
         assertThat(intent.side()).isEqualTo(TradeSide.SELL);
@@ -67,7 +67,7 @@ class StrategyV2ExitEvaluatorTest {
     void openStopLossCreatesSellIntent() {
         givenRouteAccepted();
 
-        evaluator.evaluate(strategy("<=", "-0.10"), market(), marketView("0.50"), state(TradeStatus.OPEN, "10", true), ExecutionMode.PAPER);
+        evaluator.evaluate(strategy("<=", "-0.10"), market(), marketView("0.50"), state(TradeStatus.OPEN, "10", true));
 
         TradeIntent intent = capturedIntent();
         assertThat(intent.side()).isEqualTo(TradeSide.SELL);
@@ -76,21 +76,21 @@ class StrategyV2ExitEvaluatorTest {
 
     @Test
     void openNoRuleMatchDoesNotExit() {
-        evaluator.evaluate(strategy(">=", "10.00"), market(), marketView("0.58"), state(TradeStatus.OPEN, "10", true), ExecutionMode.PAPER);
+        evaluator.evaluate(strategy(">=", "10.00"), market(), marketView("0.58"), state(TradeStatus.OPEN, "10", true));
 
         verify(executionRouter, never()).route(any());
     }
 
     @Test
     void entryPendingDoesNotExit() {
-        evaluator.evaluate(strategy(">=", "0.05"), market(), marketView("0.58"), state(TradeStatus.ENTRY_PENDING, "10", true), ExecutionMode.PAPER);
+        evaluator.evaluate(strategy(">=", "0.05"), market(), marketView("0.58"), state(TradeStatus.ENTRY_PENDING, "10", true));
 
         verify(executionRouter, never()).route(any());
     }
 
     @Test
     void exitPendingDoesNotDuplicateExit() {
-        evaluator.evaluate(strategy(">=", "0.05"), market(), marketView("0.58"), state(TradeStatus.EXIT_PENDING, "10", true), ExecutionMode.PAPER);
+        evaluator.evaluate(strategy(">=", "0.05"), market(), marketView("0.58"), state(TradeStatus.EXIT_PENDING, "10", true));
 
         verify(executionRouter, never()).route(any());
     }
@@ -101,7 +101,7 @@ class StrategyV2ExitEvaluatorTest {
         StrategyV2Properties.Strategy strategy = strategy(">=", "0.05");
         strategy.getPartialFillManagement().setAllowExitPartialPosition(true);
 
-        evaluator.evaluate(strategy, market(), marketView("0.58"), state(TradeStatus.PARTIALLY_OPEN, "3.5", true), ExecutionMode.PAPER);
+        evaluator.evaluate(strategy, market(), marketView("0.58"), state(TradeStatus.PARTIALLY_OPEN, "3.5", true));
 
         assertThat(capturedIntent().shares()).isEqualByComparingTo("3.5");
     }
@@ -111,14 +111,14 @@ class StrategyV2ExitEvaluatorTest {
         StrategyV2Properties.Strategy strategy = strategy(">=", "0.05");
         strategy.getPartialFillManagement().setAllowExitPartialPosition(false);
 
-        evaluator.evaluate(strategy, market(), marketView("0.58"), state(TradeStatus.PARTIALLY_OPEN, "3.5", true), ExecutionMode.PAPER);
+        evaluator.evaluate(strategy, market(), marketView("0.58"), state(TradeStatus.PARTIALLY_OPEN, "3.5", true));
 
         verify(executionRouter, never()).route(any());
     }
 
     @Test
     void unknownFeeUsesFallbackInsteadOfZero() {
-        evaluator.evaluate(strategy(">=", "0.50"), market(), marketView("0.58"), state(TradeStatus.OPEN, "10", false), ExecutionMode.PAPER);
+        evaluator.evaluate(strategy(">=", "0.50"), market(), marketView("0.58"), state(TradeStatus.OPEN, "10", false));
 
         verify(executionRouter, never()).route(any());
     }
@@ -138,7 +138,7 @@ class StrategyV2ExitEvaluatorTest {
                 null
         ));
 
-        evaluator.evaluate(strategy(">=", "0.05"), market(), marketView("0.58"), state(TradeStatus.OPEN, "10", true), ExecutionMode.PAPER);
+        evaluator.evaluate(strategy(">=", "0.05"), market(), marketView("0.58"), state(TradeStatus.OPEN, "10", true));
 
         ArgumentCaptor<TradeIntent> captor = ArgumentCaptor.forClass(TradeIntent.class);
         verify(orderGateway).submitOrder(captor.capture(), any(), any());

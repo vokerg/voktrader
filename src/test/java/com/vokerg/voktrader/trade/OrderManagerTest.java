@@ -85,7 +85,7 @@ class OrderManagerTest {
                 Instant.parse("2026-05-09T12:00:00Z")
         ));
 
-        OrderLifecycleResult result = orderManager.submitOrder(intent(TradeSide.BUY), ExecutionMode.LIVE_TINY);
+        OrderLifecycleResult result = orderManager.submitOrder(intent(TradeSide.BUY), ExecutionMode.LIVE);
 
         assertThat(result.success()).isTrue();
         assertThat(result.tradeStatus()).isEqualTo(TradeStatus.ENTRY_PENDING);
@@ -96,7 +96,7 @@ class OrderManagerTest {
     void rejectedOrderBecomesRejectedAndTradeFailed() {
         when(pythonExecutorClient.submit(any(ExecutorOrderCommand.class))).thenReturn(ExecutorOrderResponse.rejected("exchange rejected"));
 
-        OrderLifecycleResult result = orderManager.submitOrder(intent(TradeSide.BUY), ExecutionMode.LIVE_TINY);
+        OrderLifecycleResult result = orderManager.submitOrder(intent(TradeSide.BUY), ExecutionMode.LIVE);
 
         assertThat(result.success()).isFalse();
         assertThat(result.tradeStatus()).isEqualTo(TradeStatus.FAILED);
@@ -119,7 +119,7 @@ class OrderManagerTest {
                 Instant.parse("2026-05-09T12:00:00Z")
         ));
 
-        orderManager.submitOrder(intent(TradeSide.BUY), ExecutionMode.LIVE_TINY);
+        orderManager.submitOrder(intent(TradeSide.BUY), ExecutionMode.LIVE);
 
         ArgumentCaptor<TradeOrderEntity> orderCaptor = ArgumentCaptor.forClass(TradeOrderEntity.class);
         org.mockito.Mockito.verify(reconciliationService).applyImmediateFill(any(TradeEntity.class), orderCaptor.capture(), any(ExecutorOrderResponse.class));
@@ -129,10 +129,10 @@ class OrderManagerTest {
 
     @Test
     void cancelOrderMarksCancelRequestedAndLeavesFinalStateForReconciliation() {
-        TradeOrderEntity order = TradeOrderEntity.fromIntent(1L, intent(TradeSide.BUY), ExecutionMode.LIVE_TINY, TradeVenue.POLYMARKET, "local-1");
+        TradeOrderEntity order = TradeOrderEntity.fromIntent(1L, intent(TradeSide.BUY), ExecutionMode.LIVE, TradeVenue.POLYMARKET, "local-1");
         ReflectionTestUtils.setField(order, "id", 6358L);
         order.markSubmitted("remote-1", "{}");
-        TradeEntity trade = TradeEntity.fromIntent(intent(TradeSide.BUY), ExecutionMode.LIVE_TINY);
+        TradeEntity trade = TradeEntity.fromIntent(intent(TradeSide.BUY), ExecutionMode.LIVE);
         when(tradeOrderRepository.findByLocalOrderId("local-1")).thenReturn(Optional.of(order));
         when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
         when(pythonExecutorClient.cancelOrder("remote-1")).thenReturn(new ExecutorCancelOrderResponse(true, "remote-1", "CANCELLED", "{}", null));

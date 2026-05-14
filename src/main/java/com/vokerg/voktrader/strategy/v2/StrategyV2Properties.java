@@ -93,7 +93,6 @@ public class StrategyV2Properties {
         private String description;
         private String hypothesis;
         private List<String> tags = new ArrayList<>();
-        private List<String> allowedExecutionModes = new ArrayList<>();
         private CandidateSelection candidateSelection = new CandidateSelection();
         private Entry entry = new Entry();
         private Exit exit = new Exit();
@@ -121,8 +120,6 @@ public class StrategyV2Properties {
         public void setHypothesis(String hypothesis) { this.hypothesis = hypothesis; }
         public List<String> getTags() { return tags; }
         public void setTags(List<String> tags) { this.tags = tags == null ? new ArrayList<>() : tags; }
-        public List<String> getAllowedExecutionModes() { return allowedExecutionModes; }
-        public void setAllowedExecutionModes(List<String> allowedExecutionModes) { this.allowedExecutionModes = allowedExecutionModes == null ? new ArrayList<>() : allowedExecutionModes; }
         public CandidateSelection getCandidateSelection() { return candidateSelection; }
         public void setCandidateSelection(CandidateSelection candidateSelection) { this.candidateSelection = candidateSelection == null ? new CandidateSelection() : candidateSelection; }
         public Entry getEntry() { return entry; }

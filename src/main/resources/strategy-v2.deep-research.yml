@@ -65,8 +65,6 @@ strategy-v2:
     - alignment
     - fok
     - paper
-    allowed-execution-modes:
-    - PAPER
     candidate-selection:
       type: score
       candidates:
@@ -202,9 +200,6 @@ strategy-v2:
     - anti-chop
     - fok
     - paper
-    allowed-execution-modes:
-    - PAPER
-    - LIVE_TINY
     candidate-selection:
       type: score
       candidates:
@@ -348,8 +343,6 @@ strategy-v2:
     - imbalance
     - fok
     - paper
-    allowed-execution-modes:
-    - PAPER
     candidate-selection:
       type: score
       candidates:
@@ -476,7 +469,6 @@ strategy-v2:
     - reversal
     - fok
     - paper
-    allowed-execution-modes: ["PAPER", "LIVE_TINY"]
     candidate-selection:
       type: score
       candidates:
@@ -608,9 +600,6 @@ strategy-v2:
     - resolution
     - fok
     - paper
-    allowed-execution-modes:
-    - PAPER
-    - LIVE_TINY
     candidate-selection:
       type: score
       candidates:
@@ -738,8 +727,6 @@ strategy-v2:
     - fee-edge
     - paper
     - disabled
-    allowed-execution-modes:
-    - PAPER
     candidate-selection:
       type: score
       candidates:

@@ -1,6 +1,6 @@
 # Voktrader Runbook
 
-This runbook is the operational source of truth for run modes, strategy selection, backtests, and live-tiny safety.
+This runbook is the operational source of truth for run modes, strategy selection, backtests, and live safety.
 
 ## Strategy Namespaces
 
@@ -89,19 +89,9 @@ $env:VOKTRADER_BOTS_INCLUDE_IDS="10"
 .\mvnw.cmd spring-boot:run
 ```
 
-## Shadow Run
+## Live
 
-`LIVE_SHADOW` records live-like trades and orders locally but never sends orders to Polymarket. Use it to inspect live decisions, risk checks, and order records without exchange exposure.
-
-```powershell
-cd C:\repos\voktrader
-$env:SPRING_PROFILES_ACTIVE="shadow"
-.\mvnw.cmd spring-boot:run
-```
-
-## Live Tiny
-
-Live-tiny requires two processes:
+Live requires two processes:
 
 1. Python executor sidecar
 2. Java Spring Boot app
@@ -131,14 +121,14 @@ Start Java:
 
 ```powershell
 cd C:\repos\voktrader
-$env:SPRING_PROFILES_ACTIVE="live-tiny,live-test"
+$env:SPRING_PROFILES_ACTIVE="live,live-test"
 $env:VOKTRADER_EXECUTOR_API_TOKEN="change-me"
 .\mvnw.cmd spring-boot:run
 ```
 
-Live-tiny safety gates:
+Live safety gates:
 
-- `voktrader.trading.mode=LIVE_TINY`
+- `voktrader.trading.mode=LIVE`
 - `voktrader.trading.kill-switch-enabled=false`
 - `voktrader.trading.live-enabled=true`
 - `voktrader.trading.max-order-usd=1.00`
@@ -163,21 +153,18 @@ Authoritative Java risk gates are enforced by `RiskCheckService` and related exe
 - Strategy allowlist: `voktrader.trading.allowed-strategy-ids`
 - Executor enabled/dry-run/auth settings: `voktrader.executor.*`
 
-The old `voktrader.risk.enable-live-tiny`, `voktrader.risk.enable-live-full`, and `voktrader.risk.global-kill-switch` properties are not enforced by `RiskCheckService` and should not be treated as authoritative.
+The old `voktrader.risk.enable-live-full` and `voktrader.risk.global-kill-switch` properties are not enforced by `RiskCheckService` and should not be treated as authoritative.
 
 ## Recommended Operational Matrix
 
 | Mode | ExecutionMode | Strategy source | Sends real order? |
 | --- | --- | --- | --- |
-| Backtest | `TESTING` / replay context | Request `strategyId`; Strategy V2 may use YAML override | No |
+| Backtest | `BACKTEST` / replay context | Request `strategyId`; Strategy V2 may use YAML override | No |
 | Paper | `PAPER` | Bot `strategy_id`; V2 YAML bundle from `strategy_set_id` or app import | No |
-| Shadow | `LIVE_SHADOW` | Bot `strategy_id`; V2 YAML bundle from `strategy_set_id` or app import | No |
-| Live tiny | `LIVE_TINY` | Bot `strategy_id`; V2 YAML bundle from `strategy_set_id` or app import | Yes, through Python executor |
-| Full live | `LIVE` | Not a default operator profile | Do not enable by default |
+| Live | `LIVE` | Bot `strategy_id`; V2 YAML bundle from `strategy_set_id` or app import | Yes, through Python executor |
 
 ## Visibility Endpoints
 
 - Runtime status: `GET /api/runtime/status`
 - Strategy catalog: `GET /api/strategies`
 - Bot configs: `GET /api/bots`
-

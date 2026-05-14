@@ -76,7 +76,7 @@ public class MakerResolutionCarryStrategy implements TradingStrategy {
                         + "That means the strategy has deliberately chosen settlement as the exit path.",
                 "Makes maker/taker distinction visible to future strategy authors and avoids hiding resolution carry inside an empty Optional. Good as a template for settlement-aware strategies.",
                 "Weak because maker orders may not fill before the edge disappears, and the current JVM lifecycle still needs exchange reconciliation for live resting orders. "
-                        + "Waiting for resolution can turn a mark-to-market loss into a full loss if the selected outcome resolves wrong. It is intentionally conservative and should start in paper or shadow mode.",
+                        + "Waiting for resolution can turn a mark-to-market loss into a full loss if the selected outcome resolves wrong. It is intentionally conservative and should start in paper mode.",
                 "Tune maker bid cap, wait-for-resolution seconds, and near-bid depth together. Do not use live resting orders without reconciliation and cancellation policy."
         );
     }

@@ -11,12 +11,11 @@ import java.util.Set;
 @ConfigurationProperties(prefix = "voktrader.trading")
 public class TradingProperties {
     /**
-     * PAPER keeps the old no-money behavior. LIVE_SHADOW records live-like intents/orders but never submits.
-     * LIVE_TINY/LIVE are intentionally blocked by LiveExecutionService until a real executor is wired in.
+     * Selects the execution source of truth for this process. Strategies do not choose this.
      */
     private ExecutionMode mode = ExecutionMode.PAPER;
 
-    /** If true, any real-live mode is blocked. LIVE_SHADOW still records the block as a risk check. */
+    /** If true, real-live execution is blocked. */
     private boolean killSwitchEnabled = true;
 
     /** A second explicit switch. Real live modes require liveEnabled=true and killSwitchEnabled=false. */

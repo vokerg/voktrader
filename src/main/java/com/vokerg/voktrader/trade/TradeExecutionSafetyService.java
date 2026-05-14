@@ -198,7 +198,7 @@ public class TradeExecutionSafetyService {
     }
 
     private boolean isLiveMode(ExecutionMode mode) {
-        return mode == ExecutionMode.LIVE_TINY || mode == ExecutionMode.LIVE;
+        return mode == ExecutionMode.LIVE;
     }
 
     private boolean hasText(String value) {

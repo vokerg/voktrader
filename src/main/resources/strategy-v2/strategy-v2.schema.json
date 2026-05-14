@@ -46,7 +46,6 @@
         "description": {"type": "string"},
         "hypothesis": {"type": "string"},
         "tags": {"type": "array", "items": {"type": "string"}},
-        "allowed-execution-modes": {"type": "array", "items": {"enum": ["PAPER", "LIVE_SHADOW", "LIVE_TINY", "LIVE", "TESTING"]}},
         "candidate-selection": {"$ref": "#/$defs/candidateSelection"},
         "entry": {"$ref": "#/$defs/entry"},
         "exit": {"$ref": "#/$defs/exit"},

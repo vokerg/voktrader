@@ -13,7 +13,7 @@ public class StrategyV2SimulationConfig {
             "maker_queue_simple",
             "maker_queue_pessimistic",
             "maker_never",
-            "hybrid_live_shadow"
+            "hybrid_live"
     );
 
     public boolean supportedFillModel(String fillModel) {

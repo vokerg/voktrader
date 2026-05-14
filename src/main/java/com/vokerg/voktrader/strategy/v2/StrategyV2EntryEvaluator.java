@@ -1,6 +1,5 @@
 package com.vokerg.voktrader.strategy.v2;
 
-import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import org.springframework.stereotype.Component;
 
@@ -31,8 +30,7 @@ public class StrategyV2EntryEvaluator {
     public Optional<TradeExecutionResult> evaluate(
             StrategyV2Properties.Strategy strategy,
             List<StrategyV2FeatureContext> contexts,
-            StrategyV2FeatureResolver featureResolver,
-            ExecutionMode mode
+            StrategyV2FeatureResolver featureResolver
     ) {
         if (strategy.getEntry() == null || !strategy.getEntry().isEnabled()) {
             return Optional.empty();
@@ -59,7 +57,7 @@ public class StrategyV2EntryEvaluator {
             }
             return Optional.empty();
         }
-        TradeExecutionResult result = orderActionBuilder.routeEntry(strategy, context, mode);
+        TradeExecutionResult result = orderActionBuilder.routeEntry(strategy, context);
         diagnosticsRecorder.routed(strategy, context, result);
         return Optional.of(result);
     }

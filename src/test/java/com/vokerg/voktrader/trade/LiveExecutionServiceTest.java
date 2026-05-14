@@ -82,7 +82,7 @@ class LiveExecutionServiceTest {
                 "cost-aware-momentum-paper",
                 "cost-aware-momentum",
                 "entry"
-        ), ExecutionMode.LIVE_TINY);
+        ), ExecutionMode.LIVE);
 
         ArgumentCaptor<TradeEntity> tradeCaptor = ArgumentCaptor.forClass(TradeEntity.class);
         ArgumentCaptor<TradeFillEntity> fillCaptor = ArgumentCaptor.forClass(TradeFillEntity.class);
@@ -104,7 +104,7 @@ class LiveExecutionServiceTest {
                 "cost-aware-momentum-paper",
                 "cost-aware-momentum",
                 "entry"
-        ), ExecutionMode.LIVE_TINY);
+        ), ExecutionMode.LIVE);
         open.markOpen(
                 new BigDecimal("0.57999983"),
                 new BigDecimal("1.724135"),
@@ -132,7 +132,7 @@ class LiveExecutionServiceTest {
                 "cost-aware-momentum-paper",
                 "cost-aware-momentum",
                 "exit"
-        ), ExecutionMode.LIVE_TINY);
+        ), ExecutionMode.LIVE);
 
         assertThat(open.getExitFeeUsd()).isEqualByComparingTo("0.03084854");
         assertThat(open.getTotalFeeUsd()).isEqualByComparingTo("0.06108849");
@@ -150,11 +150,11 @@ class LiveExecutionServiceTest {
                 TradeOrderType.GTD,
                 true,
                 new BigDecimal("0.55"),
-                "MK_GTD_EDGE_LIVE_TINY_A",
-                "mk-gtd-edge-live-tiny-a-entry",
+                "MK_GTD_EDGE_A",
+                "mk-gtd-edge-a-entry",
                 "entry"
         );
-        TradeEntity open = TradeEntity.fromIntent(entryIntent, ExecutionMode.LIVE_TINY);
+        TradeEntity open = TradeEntity.fromIntent(entryIntent, ExecutionMode.LIVE);
         ReflectionTestUtils.setField(open, "id", 5306L);
         open.markOpen(
                 new BigDecimal("0.55"),
@@ -165,7 +165,7 @@ class LiveExecutionServiceTest {
         );
         when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
                 67L,
-                "MK_GTD_EDGE_LIVE_TINY_A",
+                "MK_GTD_EDGE_A",
                 "market-id",
                 "up",
                 TradeStatus.OPEN
@@ -191,10 +191,10 @@ class LiveExecutionServiceTest {
                 new BigDecimal("5"),
                 TradeOrderType.FAK,
                 new BigDecimal("0.52"),
-                "MK_GTD_EDGE_LIVE_TINY_A",
+                "MK_GTD_EDGE_A",
                 "book-pressure-flips",
-                "strategy-v2 exit strategy=MK_GTD_EDGE_LIVE_TINY_A rule=book-pressure-flips outcome=Up"
-        ), ExecutionMode.LIVE_TINY);
+                "strategy-v2 exit strategy=MK_GTD_EDGE_A rule=book-pressure-flips outcome=Up"
+        ), ExecutionMode.LIVE);
 
         assertThat(result.accepted()).isTrue();
         assertThat(result.message()).isEqualTo("live exit filled");
@@ -204,7 +204,7 @@ class LiveExecutionServiceTest {
         verify(tradeOrderRepository, org.mockito.Mockito.atLeastOnce()).save(orderCaptor.capture());
         TradeOrderEntity exitOrder = orderCaptor.getAllValues().getLast();
         assertThat(exitOrder.getPhase()).isEqualTo(TradeOrderPhase.EXIT);
-        assertThat(exitOrder.getMode()).isEqualTo(ExecutionMode.LIVE_TINY);
+        assertThat(exitOrder.getMode()).isEqualTo(ExecutionMode.LIVE);
         assertThat(exitOrder.getVenue()).isEqualTo(TradeVenue.POLYMARKET);
         assertThat(exitOrder.getRemoteOrderId()).isEqualTo("0x-live-exit");
         assertThat(exitOrder.getSubmittedAt()).isNotNull();
@@ -233,7 +233,7 @@ class LiveExecutionServiceTest {
                 "cost-aware-momentum-paper",
                 "cost-aware-momentum",
                 "entry"
-        ), ExecutionMode.LIVE_TINY);
+        ), ExecutionMode.LIVE);
 
         ArgumentCaptor<TradeEntity> tradeCaptor = ArgumentCaptor.forClass(TradeEntity.class);
         org.mockito.Mockito.verify(tradeRepository, org.mockito.Mockito.atLeastOnce()).save(tradeCaptor.capture());
@@ -257,7 +257,7 @@ class LiveExecutionServiceTest {
                 "cost-aware-momentum-paper",
                 "cost-aware-momentum",
                 "entry"
-        ), ExecutionMode.LIVE_TINY);
+        ), ExecutionMode.LIVE);
 
         ArgumentCaptor<TradeEntity> tradeCaptor = ArgumentCaptor.forClass(TradeEntity.class);
         org.mockito.Mockito.verify(tradeRepository, org.mockito.Mockito.atLeastOnce()).save(tradeCaptor.capture());
@@ -273,7 +273,7 @@ class LiveExecutionServiceTest {
                 "maker-resolution-carry",
                 "maker-resolution-carry",
                 "entry"
-        ), ExecutionMode.LIVE_TINY);
+        ), ExecutionMode.LIVE);
 
         assertThat(result.accepted()).isFalse();
         assertThat(result.message()).contains("require-immediate-fill=true");
@@ -304,7 +304,7 @@ class LiveExecutionServiceTest {
                 "maker-resolution-carry",
                 "maker-resolution-carry",
                 "entry"
-        ), ExecutionMode.LIVE_TINY);
+        ), ExecutionMode.LIVE);
 
         assertThat(result.accepted()).isTrue();
         assertThat(result.tradeStatus()).isEqualTo(TradeStatus.ENTRY_PENDING);

@@ -35,7 +35,7 @@ class TradeExecutionSafetyServiceTest {
     @Test
     void paperSimExitOrderForLiveBackedTradeFailsAtPersistenceBoundary() {
         TradeIntent entryIntent = entryIntent();
-        TradeOrderEntity entryOrder = TradeOrderEntity.fromIntent(5314L, entryIntent, ExecutionMode.LIVE_TINY, TradeVenue.POLYMARKET, "entry-local");
+        TradeOrderEntity entryOrder = TradeOrderEntity.fromIntent(5314L, entryIntent, ExecutionMode.LIVE, TradeVenue.POLYMARKET, "entry-local");
         entryOrder.markFilled(REMOTE_ORDER_ID, new BigDecimal("0.58"), new BigDecimal("5"), new BigDecimal("2.90"));
         TradeOrderEntity paperExit = TradeOrderEntity.fromIntent(
                 5314L,
@@ -55,7 +55,7 @@ class TradeExecutionSafetyServiceTest {
 
     @Test
     void paperCloseForLiveBackedTradeFailsBeforeMarkClosed() {
-        TradeEntity trade = TradeEntity.fromIntent(entryIntent(), ExecutionMode.LIVE_TINY);
+        TradeEntity trade = TradeEntity.fromIntent(entryIntent(), ExecutionMode.LIVE);
         ReflectionTestUtils.setField(trade, "id", 5314L);
         trade.markOpen(new BigDecimal("0.58"), new BigDecimal("5"), new BigDecimal("2.90"), BigDecimal.ZERO, Instant.parse("2026-05-14T17:06:31.396495Z"));
 
@@ -67,9 +67,9 @@ class TradeExecutionSafetyServiceTest {
 
     @Test
     void blockedPaperExitEmitsDiagnosticEventWithEntryDetails() {
-        TradeEntity trade = TradeEntity.fromIntent(entryIntent(), ExecutionMode.LIVE_TINY);
+        TradeEntity trade = TradeEntity.fromIntent(entryIntent(), ExecutionMode.LIVE);
         ReflectionTestUtils.setField(trade, "id", 5314L);
-        TradeOrderEntity entryOrder = TradeOrderEntity.fromIntent(5314L, entryIntent(), ExecutionMode.LIVE_TINY, TradeVenue.POLYMARKET, "entry-local");
+        TradeOrderEntity entryOrder = TradeOrderEntity.fromIntent(5314L, entryIntent(), ExecutionMode.LIVE, TradeVenue.POLYMARKET, "entry-local");
         ReflectionTestUtils.setField(entryOrder, "id", 6362L);
         entryOrder.markFilled(REMOTE_ORDER_ID, new BigDecimal("0.58"), new BigDecimal("5"), new BigDecimal("2.90"));
         when(tradeOrderRepository.findByTradeId(5314L)).thenReturn(List.of(entryOrder));
@@ -97,8 +97,8 @@ class TradeExecutionSafetyServiceTest {
                 TradeOrderType.GTD,
                 true,
                 new BigDecimal("0.58"),
-                "MK_GTD_EDGE_LIVE_TINY_A",
-                "mk-gtd-edge-live-tiny-a-entry",
+                "MK_GTD_EDGE_A",
+                "mk-gtd-edge-a-entry",
                 "entry"
         );
     }
@@ -111,7 +111,7 @@ class TradeExecutionSafetyServiceTest {
                 new BigDecimal("5"),
                 TradeOrderType.FAK,
                 new BigDecimal("0.63"),
-                "MK_GTD_EDGE_LIVE_TINY_A",
+                "MK_GTD_EDGE_A",
                 "net-take-profit",
                 "strategy-v2 exit rule=net-take-profit outcome=Down"
         );

@@ -54,7 +54,7 @@ public class RuntimeStatusController {
         return new RuntimeStatusResponse(
                 Arrays.asList(environment.getActiveProfiles()),
                 maskDatasourceUrl(environment.getProperty("spring.datasource.url")),
-                tradingProperties.getMode() == null ? null : tradingProperties.getMode().name(),
+                tradingProperties.getMode().name(),
                 tradingProperties.isKillSwitchEnabled(),
                 tradingProperties.isLiveEnabled(),
                 tradingProperties.getMaxOrderUsd(),
@@ -142,4 +142,3 @@ public class RuntimeStatusController {
         }
     }
 }
-

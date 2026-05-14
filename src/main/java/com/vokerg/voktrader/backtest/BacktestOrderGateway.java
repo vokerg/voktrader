@@ -90,7 +90,7 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
         TradeOrderEntity order = tradeOrderRepository.save(TradeOrderEntity.fromIntent(
                 trade.getId(),
                 intent,
-                ExecutionMode.TESTING,
+                ExecutionMode.BACKTEST,
                 TradeVenue.BACKTEST_SIM,
                 localOrderId
         ));
@@ -411,7 +411,7 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
     }
 
     private TradeEntity createEntryTrade(TradeIntent intent) {
-        TradeEntity trade = TradeEntity.fromIntent(intent, ExecutionMode.TESTING);
+        TradeEntity trade = TradeEntity.fromIntent(intent, ExecutionMode.BACKTEST);
         trade.attachBacktestRun(runId);
         return tradeRepository.save(trade);
     }

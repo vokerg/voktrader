@@ -44,8 +44,7 @@ public class StrategyCatalogController {
                         strategy.getStrategyId(),
                         strategy.isEnabled(),
                         strategy.getProfile(),
-                        strategy.getDescription(),
-                        strategy.getAllowedExecutionModes()
+                        strategy.getDescription()
                 ))
                 .toList();
         return new StrategyCatalogResponse(
@@ -82,9 +81,7 @@ public class StrategyCatalogController {
             String id,
             boolean enabled,
             String profile,
-            String description,
-            List<String> allowedExecutionModes
+            String description
     ) {
     }
 }
-

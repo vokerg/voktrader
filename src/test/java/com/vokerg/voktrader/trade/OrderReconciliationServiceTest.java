@@ -326,8 +326,8 @@ class OrderReconciliationServiceTest {
         TradeOrderEntity[] orderHolder = new TradeOrderEntity[1];
         TimeMachine.runAt(now.minus(Duration.ofMinutes(121)), () -> {
             TradeIntent intent = TradeIntent.buy(null, market(), price(), new BigDecimal("1.00"), TradeOrderType.GTD, true, new BigDecimal("0.50"), "strategy", "rule", "entry");
-            tradeHolder[0] = TradeEntity.fromIntent(intent, ExecutionMode.LIVE_TINY);
-            orderHolder[0] = TradeOrderEntity.fromIntent(1L, intent, ExecutionMode.LIVE_TINY, TradeVenue.POLYMARKET, "local-1");
+            tradeHolder[0] = TradeEntity.fromIntent(intent, ExecutionMode.LIVE);
+            orderHolder[0] = TradeOrderEntity.fromIntent(1L, intent, ExecutionMode.LIVE, TradeVenue.POLYMARKET, "local-1");
             orderHolder[0].markSubmitting("local-1", "{}");
             orderHolder[0].markSubmitted("remote-1", "{}");
         });
@@ -394,11 +394,11 @@ class OrderReconciliationServiceTest {
     }
 
     private TradeEntity trade() {
-        return TradeEntity.fromIntent(intent(TradeSide.BUY), ExecutionMode.LIVE_TINY);
+        return TradeEntity.fromIntent(intent(TradeSide.BUY), ExecutionMode.LIVE);
     }
 
     private TradeOrderEntity order(TradeEntity trade, TradeSide side) {
-        TradeOrderEntity order = TradeOrderEntity.fromIntent(1L, intent(side), ExecutionMode.LIVE_TINY, TradeVenue.POLYMARKET, "local-1");
+        TradeOrderEntity order = TradeOrderEntity.fromIntent(1L, intent(side), ExecutionMode.LIVE, TradeVenue.POLYMARKET, "local-1");
         order.markSubmitted("remote-1", "{}");
         return order;
     }
