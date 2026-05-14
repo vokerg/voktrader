@@ -1,6 +1,7 @@
 package com.vokerg.voktrader.marketdata;
 
 import com.vokerg.voktrader.market.MarketEntity;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.Instant;
@@ -12,4 +13,5 @@ public interface MarketDepthSnapshotRepository extends JpaRepository<MarketDepth
     List<MarketDepthSnapshotEntity> findByMarketIdAndCapturedAt(Long marketId, Instant capturedAt);
     List<MarketDepthSnapshotEntity> findByMarketIdInOrderByMarketIdAscCapturedAtAsc(Collection<Long> marketIds);
     Optional<MarketDepthSnapshotEntity> findFirstByMarketOrderByCapturedAtDesc(MarketEntity market);
+    List<MarketDepthSnapshotEntity> findByMarket(MarketEntity market, Pageable pageable);
 }

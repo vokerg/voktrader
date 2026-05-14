@@ -25,13 +25,16 @@ class ExecutionRouterTest {
     private final LiveExecutionService liveExecutionService = mock(LiveExecutionService.class);
     private final TradeRepository tradeRepository = mock(TradeRepository.class);
     private final TradeOrderRepository tradeOrderRepository = mock(TradeOrderRepository.class);
+    private final ExitExecutionModeResolver exitExecutionModeResolver = new ExitExecutionModeResolver(
+            tradeRepository,
+            tradeOrderRepository
+    );
     private final ExecutionRouter router = new ExecutionRouter(
             properties,
             paperExecutionService,
             liveShadowExecutionService,
             liveExecutionService,
-            tradeRepository,
-            tradeOrderRepository
+            exitExecutionModeResolver
     );
 
     @Test
