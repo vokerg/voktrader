@@ -1,11 +1,12 @@
 import { Component, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { BotConfigResponse } from '../../models/api.models';
 
 @Component({
   selector: 'app-bots',
-  imports: [CommonModule],
+  imports: [CommonModule, RouterModule],
   template: `
     <div class="header">
       <h1>Trading Bots</h1>
@@ -19,7 +20,7 @@ import { BotConfigResponse } from '../../models/api.models';
           Active only
         </label>
         <button class="btn btn-outline-danger" (click)="killAllBots()">Kill All</button>
-        <button class="btn btn-primary">Create Bot</button>
+        <button class="btn btn-primary" routerLink="/bots/create">Create Bot</button>
       </div>
     </div>
 

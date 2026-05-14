@@ -1,18 +1,19 @@
 import { Component, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, TradeSummaryResponse } from '../../models/api.models';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [CommonModule],
+  imports: [CommonModule, RouterModule],
   template: `
     <div class="dashboard-grid">
-      <div class="stat-card">
+      <div class="stat-card clickable" routerLink="/bots">
         <h3>Active Bots</h3>
         <div class="value">{{ activeBotsCount() }}</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card clickable" routerLink="/trades">
         <h3>Total Trades</h3>
         <div class="value">{{ trades().length }}</div>
       </div>
@@ -87,7 +88,7 @@ import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, Trad
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let bot of runtimeStatus()?.enabledBots">
+            <tr *ngFor="let bot of runtimeStatus()?.enabledBots" class="clickable-row" routerLink="/bots">
               <td>{{ bot.id }}</td>
               <td>{{ bot.name }}</td>
               <td>{{ bot.marketFamily }}</td>
@@ -102,7 +103,10 @@ import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, Trad
     </section>
 
     <div class="recent-section">
-      <h2>Recent Trades</h2>
+      <div class="section-header">
+        <h2>Recent Trades</h2>
+        <a routerLink="/trades" class="view-all">View All →</a>
+      </div>
       <div class="card">
         <table *ngIf="trades().length > 0; else noTrades">
           <thead>
@@ -115,10 +119,14 @@ import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, Trad
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let trade of trades() | slice:0:5">
+            <tr *ngFor="let trade of trades() | slice:0:5" class="clickable-row" [routerLink]="['/trades', trade.id]">
               <td>{{ trade.decisionAt | date:'short' }}</td>
               <td>Bot #{{ trade.botId }}</td>
-              <td>{{ trade.marketSlug }}</td>
+              <td>
+                <a [routerLink]="['/markets', trade.marketId]" (click)="$event.stopPropagation()" class="link">
+                  {{ trade.marketSlug }}
+                </a>
+              </td>
               <td>{{ trade.status }}</td>
               <td [class.positive]="trade.finalPnlUsd > 0" [class.negative]="trade.finalPnlUsd < 0">
                 $ {{ trade.finalPnlUsd | number:'1.2-2' }}
@@ -145,6 +153,13 @@ import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, Trad
       padding: 24px;
       border-radius: 8px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .stat-card.clickable:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      cursor: pointer;
     }
 
     .stat-card h3 {
@@ -163,9 +178,23 @@ import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, Trad
     .positive { color: #10b981; }
     .negative { color: #ef4444; }
 
-    .recent-section h2 {
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       margin-bottom: 16px;
+    }
+
+    .section-header h2 {
+      margin: 0;
       font-size: 20px;
+    }
+
+    .view-all {
+      font-size: 14px;
+      color: #3b82f6;
+      text-decoration: none;
+      font-weight: 500;
     }
 
     .runtime-section {
@@ -249,6 +278,24 @@ import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, Trad
 
     tr:last-child td {
       border-bottom: none;
+    }
+
+    .clickable-row {
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .clickable-row:hover {
+      background-color: #f9fafb;
+    }
+
+    .link {
+      color: #3b82f6;
+      text-decoration: none;
+    }
+
+    .link:hover {
+      text-decoration: underline;
     }
   `
 })

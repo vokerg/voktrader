@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { 
   BotConfigResponse, 
+  BotCreateRequest,
   DashboardOptionsResponse, 
   MarketDetailResponse,
   MarketSummaryResponse, 
@@ -21,6 +22,10 @@ export class ApiService {
 
   getBots(): Observable<BotConfigResponse[]> {
     return this.http.get<BotConfigResponse[]>(`${this.baseUrl}/bots`);
+  }
+
+  createBot(request: BotCreateRequest): Observable<BotConfigResponse> {
+    return this.http.post<BotConfigResponse>(`${this.baseUrl}/bots`, request);
   }
 
   getDashboardOptions(): Observable<DashboardOptionsResponse> {

@@ -17,6 +17,17 @@ export interface BotConfigResponse {
   updatedAt: string;
 }
 
+export interface BotCreateRequest {
+  name: string | null;
+  marketFamily: string | null;
+  asset: string | null;
+  interval: string | null;
+  strategyId: string;
+  strategySetId: string | null;
+  subStrategyId: string | null;
+  enabled: boolean;
+}
+
 export interface DashboardOptionsResponse {
   marketFamilies: MarketFamilyOption[];
   strategies: StrategyOption[];
