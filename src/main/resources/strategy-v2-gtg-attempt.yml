@@ -201,7 +201,7 @@ strategy-v2:
             max-usd: "3.00"
 
           maker-lifecycle:
-            cancel-after-seconds: 5
+            cancel-after-seconds: 2
             cooldown-after-no-fill-cancel-seconds: 20
             replace-if-best-bid-moves-ticks: 1
             max-reposts: 1

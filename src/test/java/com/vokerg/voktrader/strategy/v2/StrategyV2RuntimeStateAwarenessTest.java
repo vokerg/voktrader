@@ -1,6 +1,7 @@
 package com.vokerg.voktrader.strategy.v2;
 
 import com.vokerg.voktrader.market.TrackedMarketState;
+import com.vokerg.voktrader.marketdata.OrderBookLevel;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.strategy.StrategyMarketDataProvider;
 import com.vokerg.voktrader.strategy.StrategyMarketView;
@@ -91,6 +92,28 @@ class StrategyV2RuntimeStateAwarenessTest {
 
         verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
         verify(orderGateway).cancelOrder(eq("entry-local"), any());
+    }
+
+    @Test
+    void makerEntryPendingRequestsCancelWhenBestBidMovesAwayBeforeTimeout() {
+        EngineFixture fixture = fixture(true, state(TradeStatus.ENTRY_PENDING, entryOrder(TradeOrderStatus.RESTING, 1), null));
+        fixture.strategy.getEntry().getAction().setLiquidityRole("maker");
+        fixture.strategy.getEntry().getAction().setPostOnly(true);
+        fixture.strategy.getEntry().getAction().getMakerLifecycle().setCancelAfterSeconds(5);
+        fixture.strategy.getEntry().getAction().getMakerLifecycle().setReplaceIfBestBidMovesTicks(1);
+        StrategyOutcomeView movedUp = outcome("Up", "token-up", "0.51");
+        when(fixture.marketView.token("token-up")).thenReturn(Optional.of(movedUp));
+        when(orderGateway.cancelOrder(eq("entry-local"), any())).thenReturn(new OrderLifecycleResult(
+                true, 1L, 2L, "entry-local", "entry-remote", TradeStatus.ENTRY_PENDING, TradeOrderStatus.CANCEL_REQUESTED, "cancel accepted", null
+        ));
+
+        fixture.engine.tick();
+
+        verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
+        verify(orderGateway).cancelOrder(
+                eq("entry-local"),
+                org.mockito.ArgumentMatchers.contains("maker best bid moved away")
+        );
     }
 
     @Test
@@ -185,7 +208,7 @@ class StrategyV2RuntimeStateAwarenessTest {
                 tradingProperties,
                 configCatalog
         );
-        return new EngineFixture(engine, strategy);
+        return new EngineFixture(engine, strategy, marketView);
     }
 
     private StrategyV2Properties.Strategy strategy() {
@@ -267,16 +290,23 @@ class StrategyV2RuntimeStateAwarenessTest {
         StrategyOutcomeView down = outcome("Down", "token-down");
         when(marketView.outcome("Up")).thenReturn(Optional.of(up));
         when(marketView.outcome("Down")).thenReturn(Optional.of(down));
+        when(marketView.token("token-up")).thenReturn(Optional.of(up));
+        when(marketView.token("token-down")).thenReturn(Optional.of(down));
         when(marketView.outcomes()).thenReturn(List.of(up, down));
         return marketView;
     }
 
     private StrategyOutcomeView outcome(String name, String tokenId) {
+        return outcome(name, tokenId, null);
+    }
+
+    private StrategyOutcomeView outcome(String name, String tokenId, String bestBid) {
         StrategyOutcomeView view = mock(StrategyOutcomeView.class);
         when(view.outcome()).thenReturn(name);
         when(view.tokenId()).thenReturn(tokenId);
         when(view.mid()).thenReturn(new BigDecimal("0.50"));
         when(view.spread()).thenReturn(BigDecimal.ZERO);
+        when(view.bestBidLevel()).thenReturn(bestBid == null ? Optional.empty() : Optional.of(new OrderBookLevel(new BigDecimal(bestBid), BigDecimal.ONE)));
         return view;
     }
 
@@ -298,7 +328,7 @@ class StrategyV2RuntimeStateAwarenessTest {
         );
     }
 
-    private record EngineFixture(StrategyV2Engine engine, StrategyV2Properties.Strategy strategy) {
+    private record EngineFixture(StrategyV2Engine engine, StrategyV2Properties.Strategy strategy, StrategyMarketView marketView) {
     }
 }
 

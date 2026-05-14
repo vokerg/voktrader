@@ -5,6 +5,7 @@ import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.strategy.StrategyMarketDataProvider;
 import com.vokerg.voktrader.strategy.StrategyMarketView;
+import com.vokerg.voktrader.strategy.StrategyOutcomeView;
 import com.vokerg.voktrader.strategy.TradingStrategy;
 import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.ExecutionMode;
@@ -178,7 +179,7 @@ public class StrategyV2Engine implements TradingStrategy {
         }
         if (status.isPendingEntry()) {
             diagnosticsRecorder.stateBranch(strategy, state, market.id(), "ENTRY_PENDING_MANAGEMENT", "entry order pending; suppressing duplicate entry");
-            maybeCancelEntryPending(strategy, state);
+            maybeCancelEntryPending(strategy, marketView, state);
             return false;
         }
         if (status == TradeStatus.PARTIALLY_OPEN) {
@@ -203,8 +204,17 @@ public class StrategyV2Engine implements TradingStrategy {
         return evaluateEntry(strategy, market, marketView, mode, state);
     }
 
-    private void maybeCancelEntryPending(StrategyV2Properties.Strategy strategy, StrategyRuntimeState state) {
-        OrderLifecycleResult result = maybeCancelOrder(state.activeEntryOrder(), strategy.getEntryOrderManagement().getMaxPendingSeconds(), "entry pending too long");
+    private void maybeCancelEntryPending(
+            StrategyV2Properties.Strategy strategy,
+            StrategyMarketView marketView,
+            StrategyRuntimeState state
+    ) {
+        OrderRuntimeState order = state.activeEntryOrder();
+        String reason = entryPendingCancelReason(strategy, marketView, state);
+        if (reason == null) {
+            return;
+        }
+        OrderLifecycleResult result = maybeCancelOrder(order, 0, reason, true);
         if (result != null && result.success() && noFillMakerEntryOrder(strategy, state)) {
             registerNoFillCancelCooldown(strategy, state);
         }
@@ -219,12 +229,21 @@ public class StrategyV2Engine implements TradingStrategy {
     }
 
     private OrderLifecycleResult maybeCancelOrder(OrderRuntimeState order, int maxPendingSeconds, String reason) {
-        if (order == null || maxPendingSeconds <= 0) {
+        return maybeCancelOrder(order, maxPendingSeconds, reason, false);
+    }
+
+    private OrderLifecycleResult maybeCancelOrder(OrderRuntimeState order, int maxPendingSeconds, String reason, boolean force) {
+        if (order == null) {
             return null;
+        }
+        if (maxPendingSeconds <= 0) {
+            if (!force) {
+                return null;
+            }
         }
         Long ageSeconds = order.ageSeconds(TimeMachine.now());
         String cancelIdentifier = order.cancelIdentifier();
-        if (ageSeconds == null || ageSeconds <= maxPendingSeconds || cancelIdentifier == null || cancelIdentifier.isBlank()) {
+        if ((!force && (ageSeconds == null || ageSeconds <= maxPendingSeconds)) || cancelIdentifier == null || cancelIdentifier.isBlank()) {
             return null;
         }
         OrderLifecycleResult result = OrderGatewayContext.current().orElse(orderGateway).cancelOrder(cancelIdentifier, reason);
@@ -234,6 +253,75 @@ public class StrategyV2Engine implements TradingStrategy {
             log.info("Strategy V2 requested cancel for {} because {}", cancelIdentifier, reason);
         }
         return result;
+    }
+
+    private String entryPendingCancelReason(
+            StrategyV2Properties.Strategy strategy,
+            StrategyMarketView marketView,
+            StrategyRuntimeState state
+    ) {
+        OrderRuntimeState order = state == null ? null : state.activeEntryOrder();
+        if (order == null) {
+            return null;
+        }
+        String bestBidReason = bestBidMovedReason(strategy, marketView, state, order);
+        if (bestBidReason != null) {
+            diagnosticsRecorder.stateBranch(strategy, state, state.marketId(), "MAKER_LIFECYCLE_CANCEL", bestBidReason);
+            log.info("Strategy V2 maker lifecycle cancel reason=BEST_BID_MOVED {}", bestBidReason);
+            return bestBidReason;
+        }
+        int timeoutSeconds = entryPendingTimeoutSeconds(strategy);
+        Long ageSeconds = order.ageSeconds(TimeMachine.now());
+        if (ageSeconds != null && timeoutSeconds > 0 && ageSeconds > timeoutSeconds) {
+            String reason = "maker lifecycle timeout; entry pending too long ageSeconds=%s maxPendingSeconds=%s".formatted(ageSeconds, timeoutSeconds);
+            diagnosticsRecorder.stateBranch(strategy, state, state.marketId(), "MAKER_LIFECYCLE_CANCEL", reason);
+            log.info("Strategy V2 maker lifecycle cancel reason=TIMEOUT {}", reason);
+            return reason;
+        }
+        return null;
+    }
+
+    private String bestBidMovedReason(
+            StrategyV2Properties.Strategy strategy,
+            StrategyMarketView marketView,
+            StrategyRuntimeState state,
+            OrderRuntimeState order
+    ) {
+        if (!noFillMakerEntryOrder(strategy, state)
+                || marketView == null
+                || !strategy.getEntryOrderManagement().isCancelIfPriceMovesAway()) {
+            return null;
+        }
+        StrategyV2Properties.Action action = strategy.getEntry() == null ? null : strategy.getEntry().getAction();
+        StrategyV2Properties.MakerLifecycle lifecycle = action == null ? null : action.getMakerLifecycle();
+        int moveTicks = lifecycle == null ? 0 : lifecycle.getReplaceIfBestBidMovesTicks();
+        if (moveTicks <= 0 || order.requestedPrice() == null || state.tokenId() == null) {
+            return null;
+        }
+        var viewOptional = marketView.token(state.tokenId());
+        StrategyOutcomeView view = viewOptional == null ? null : viewOptional.orElse(null);
+        var bestBidLevel = view == null ? null : view.bestBidLevel();
+        BigDecimal bestBid = bestBidLevel == null || bestBidLevel.isEmpty() ? null : bestBidLevel.get().price();
+        BigDecimal tickSize = action.getPrice() == null || action.getPrice().getTickSize() == null
+                ? new BigDecimal("0.01")
+                : action.getPrice().getTickSize();
+        BigDecimal threshold = tickSize.multiply(BigDecimal.valueOf(moveTicks));
+        if (bestBid == null || bestBid.subtract(order.requestedPrice()).compareTo(threshold) < 0) {
+            return null;
+        }
+        return "maker best bid moved away; orderPrice=%s bestBid=%s thresholdTicks=%s tickSize=%s"
+                .formatted(order.requestedPrice(), bestBid, moveTicks, tickSize);
+    }
+
+    private int entryPendingTimeoutSeconds(StrategyV2Properties.Strategy strategy) {
+        if (isMakerEntry(strategy)) {
+            StrategyV2Properties.Action action = strategy.getEntry() == null ? null : strategy.getEntry().getAction();
+            StrategyV2Properties.MakerLifecycle lifecycle = action == null ? null : action.getMakerLifecycle();
+            if (lifecycle != null && lifecycle.getCancelAfterSeconds() > 0) {
+                return lifecycle.getCancelAfterSeconds();
+            }
+        }
+        return strategy.getEntryOrderManagement().getMaxPendingSeconds();
     }
 
     private boolean entryNoFillCancelCooldownActive(
@@ -276,7 +364,12 @@ public class StrategyV2Engine implements TradingStrategy {
         if (action == null) {
             return false;
         }
-        return "maker".equalsIgnoreCase(action.getLiquidityRole()) || Boolean.TRUE.equals(action.getPostOnly());
+        return isMakerEntry(strategy);
+    }
+
+    private boolean isMakerEntry(StrategyV2Properties.Strategy strategy) {
+        StrategyV2Properties.Action action = strategy == null || strategy.getEntry() == null ? null : strategy.getEntry().getAction();
+        return action != null && ("maker".equalsIgnoreCase(action.getLiquidityRole()) || Boolean.TRUE.equals(action.getPostOnly()));
     }
 
     private void registerNoFillCancelCooldown(StrategyV2Properties.Strategy strategy, StrategyRuntimeState state) {

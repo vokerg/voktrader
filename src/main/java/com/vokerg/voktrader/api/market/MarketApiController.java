@@ -35,4 +35,3 @@ public class MarketApiController {
         return marketQueryService.getDetail(polymarketMarketId);
     }
 }
-}

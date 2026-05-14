@@ -39,10 +39,10 @@ size:
     min-usd: {status: implemented}
     shares: {status: implemented}
 maker_lifecycle:
-  cancel-after-seconds: {status: config_only, notes: "Entry pending cancellation uses entry-order-management.max-pending-seconds, not maker-lifecycle."}
+  cancel-after-seconds: {status: implemented, notes: "Maker entry timeout; non-maker entries use entry-order-management.max-pending-seconds."}
   cooldown-after-no-fill-cancel-seconds: {status: implemented, notes: "Suppresses same bot/strategy/market/token/side entry after a successful no-fill maker cancel."}
   max-reposts: {status: config_only}
-  replace-if-best-bid-moves-ticks: {status: config_only}
+  replace-if-best-bid-moves-ticks: {status: implemented, notes: "Cancels a no-fill maker buy when current best bid rises above the resting price by this many ticks."}
 reason_template:
   status: implemented
   placeholder_syntax: "{{feature.name}}"
