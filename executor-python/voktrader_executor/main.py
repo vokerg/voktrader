@@ -11,6 +11,7 @@ from py_clob_client_v2.exceptions import PolyApiException
 from pydantic import ValidationError
 
 from .config import Settings
+from .executor_logging import configure_executor_logging
 from .idempotency import IdempotencyStore
 from .log_colors import event_label
 from .models import (
@@ -26,9 +27,9 @@ from .models import (
 )
 from .polymarket_client import PolymarketExecutor, UnsupportedOperationError
 
-logger = logging.getLogger("uvicorn.error")
-logger.setLevel(logging.INFO)
 settings = Settings()
+configure_executor_logging(settings)
+logger = logging.getLogger("uvicorn.error")
 app = FastAPI(
     title="voktrader executor",
     version="0.3.0",
@@ -400,7 +401,7 @@ async def all_exception_handler(_, exc: Exception) -> JSONResponse:
 
 
 def run() -> None:
-    uvicorn.run("voktrader_executor.main:app", host="127.0.0.1", port=8099, reload=False)
+    uvicorn.run("voktrader_executor.main:app", host="127.0.0.1", port=8099, reload=False, log_config=None)
 
 
 if __name__ == "__main__":

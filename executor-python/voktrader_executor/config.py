@@ -21,3 +21,7 @@ class Settings(BaseSettings):
     max_order_amount_usd: float = Field(default=5.0, alias="MAX_ORDER_AMOUNT_USD")
     require_fok: bool = Field(default=False, alias="REQUIRE_FOK")
     gtd_expiration_seconds: int = Field(default=90, alias="GTD_EXPIRATION_SECONDS")
+
+    executor_log_file: str = Field(default="logs/voktrader-executor.log", alias="EXECUTOR_LOG_FILE")
+    executor_log_max_bytes: int = Field(default=10_485_760, alias="EXECUTOR_LOG_MAX_BYTES")
+    executor_log_backup_count: int = Field(default=5, alias="EXECUTOR_LOG_BACKUP_COUNT")

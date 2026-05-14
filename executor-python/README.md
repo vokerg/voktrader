@@ -25,6 +25,9 @@ cp .env.example .env
 uvicorn voktrader_executor.main:app --host 127.0.0.1 --port 8099
 ```
 
+Executor log lines include timestamps on stdout/stderr and are also written to `logs/voktrader-executor.log` by default.
+Set `EXECUTOR_LOG_FILE` to change the file path. Rotation defaults to 10 MB with 5 backups.
+
 In another shell:
 
 ```bash
