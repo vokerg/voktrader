@@ -12,10 +12,10 @@ import com.vokerg.voktrader.trade.OrderLifecycleResult;
 import com.vokerg.voktrader.trade.OrderRuntimeState;
 import com.vokerg.voktrader.trade.StrategyInstanceKey;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
-import com.vokerg.voktrader.trade.TradeOrderType;
 import com.vokerg.voktrader.trade.TradeStateProvider;
 import com.vokerg.voktrader.trade.model.TradeOrderPhase;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeStatus;
 
 import org.junit.jupiter.api.Test;

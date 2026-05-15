@@ -6,6 +6,7 @@ import com.vokerg.voktrader.trade.model.TradeEventEntity;
 import com.vokerg.voktrader.trade.model.TradeFillEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeRiskCheckEntity;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeStatus;

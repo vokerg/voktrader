@@ -18,7 +18,6 @@ import java.time.Duration;
 import java.time.Instant;
 import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.TradeOrderType;
 
 @Entity
 @Table(

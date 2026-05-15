@@ -8,9 +8,9 @@ import com.vokerg.voktrader.trade.OrderGatewayContext;
 import com.vokerg.voktrader.trade.StrategyInstanceKey;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.TradeOrderType;
 import com.vokerg.voktrader.trade.TradingProperties;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeSide;
 
 import org.springframework.stereotype.Component;

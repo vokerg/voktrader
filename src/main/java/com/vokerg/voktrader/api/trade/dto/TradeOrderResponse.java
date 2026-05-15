@@ -1,11 +1,11 @@
 package com.vokerg.voktrader.api.trade.dto;
 
 import com.vokerg.voktrader.economy.LiquidityRole;
-import com.vokerg.voktrader.trade.TradeOrderType;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderPhase;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeVenue;
 

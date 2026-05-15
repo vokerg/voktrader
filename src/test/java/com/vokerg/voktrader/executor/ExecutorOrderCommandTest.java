@@ -3,7 +3,8 @@ package com.vokerg.voktrader.executor;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.TradeOrderType;
+import com.vokerg.voktrader.trade.model.TradeOrderType;
+
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

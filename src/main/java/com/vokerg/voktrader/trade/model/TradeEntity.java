@@ -3,7 +3,6 @@ package com.vokerg.voktrader.trade.model;
 import jakarta.persistence.*;
 import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.TradeOrderType;
 
 import java.math.BigDecimal;
 import java.time.Instant;

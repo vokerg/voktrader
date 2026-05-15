@@ -7,6 +7,7 @@ import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeSide;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -14,7 +15,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
-public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Long> {
+public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Long>, JpaSpecificationExecutor<TradeOrderEntity> {
     boolean existsByClientOrderId(String clientOrderId);
 
     Optional<TradeOrderEntity> findByClientOrderId(String clientOrderId);

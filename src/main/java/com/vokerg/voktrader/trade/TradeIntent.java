@@ -5,6 +5,7 @@ import com.vokerg.voktrader.economy.LiquidityRole;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.time.TimeMachine;
+import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeSide;
 
 import java.math.BigDecimal;

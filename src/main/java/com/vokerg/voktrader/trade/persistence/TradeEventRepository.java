@@ -8,6 +8,7 @@ import java.util.List;
 
 public interface TradeEventRepository extends JpaRepository<TradeEventEntity, Long> {
     List<TradeEventEntity> findByTradeIdOrderByCreatedAtAsc(Long tradeId);
+    List<TradeEventEntity> findByTradeOrderIdOrderByCreatedAtAsc(Long tradeOrderId);
 
     boolean existsByTradeOrderIdAndEventType(Long tradeOrderId, String eventType);
 }

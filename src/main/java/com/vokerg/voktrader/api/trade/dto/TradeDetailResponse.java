@@ -1,8 +1,8 @@
 package com.vokerg.voktrader.api.trade.dto;
 
-import com.vokerg.voktrader.trade.TradeOrderType;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeStatus;
 

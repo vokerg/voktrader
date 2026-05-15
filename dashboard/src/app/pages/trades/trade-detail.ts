@@ -39,6 +39,8 @@ import { TradeDetailResponse } from '../../models/api.models';
             <div class="info-item"><label>Intended USD</label><span>$ {{ t.intendedAmountUsd | number:'1.2-2' }}</span></div>
             <div class="info-item"><label>Entry USD</label><span>$ {{ t.entryFilledUsd | number:'1.2-2' }}</span></div>
             <div class="info-item"><label>Exit USD</label><span>$ {{ t.exitFilledUsd | number:'1.2-2' }}</span></div>
+            <div class="info-item"><label>Entry Fee</label><span>$ {{ t.entryFeeUsd | number:'1.2-2' }}</span></div>
+            <div class="info-item"><label>Exit Fee</label><span>$ {{ t.exitFeeUsd | number:'1.2-2' }}</span></div>
             <div class="info-item"><label>Total Fee</label><span>$ {{ t.totalFeeUsd | number:'1.2-2' }}</span></div>
             <div class="info-item"><label>Final PnL</label><span [class.positive]="t.finalPnlUsd > 0" [class.negative]="t.finalPnlUsd < 0">$ {{ t.finalPnlUsd | number:'1.2-2' }}</span></div>
             <div class="info-item"><label>Entry Price</label><span>{{ t.entryAvgPrice | number:'1.3-3' }}</span></div>
@@ -60,17 +62,19 @@ import { TradeDetailResponse } from '../../models/api.models';
               <th>Amount USD</th>
               <th>Fee</th>
               <th>Venue</th>
+              <th>Order</th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let fill of t.fills">
+            <tr *ngFor="let fill of t.fills" [routerLink]="fill.orderId ? ['/orders', fill.orderId] : null" [class.clickable-row]="fill.orderId">
               <td>{{ fill.filledAt | date:'medium' }}</td>
-              <td>{{ fill.side }}</td>
+              <td><span class="side" [class.side-buy]="fill.side === 'BUY'" [class.side-sell]="fill.side === 'SELL'">{{ fill.side }}</span></td>
               <td>{{ fill.price | number:'1.3-3' }}</td>
               <td>{{ fill.shares | number:'1.2-2' }}</td>
               <td>$ {{ fill.amountUsd | number:'1.2-2' }}</td>
               <td>$ {{ fill.feeUsd | number:'1.4-4' }}</td>
               <td>{{ fill.venue }}</td>
+              <td>{{ fill.orderId ? '#' + fill.orderId : 'N/A' }}</td>
             </tr>
           </tbody>
         </table>
@@ -82,6 +86,7 @@ import { TradeDetailResponse } from '../../models/api.models';
         <table>
           <thead>
             <tr>
+              <th>ID</th>
               <th>Created At</th>
               <th>Side</th>
               <th>Status</th>
@@ -92,10 +97,11 @@ import { TradeDetailResponse } from '../../models/api.models';
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let order of t.orders">
+            <tr *ngFor="let order of t.orders" [routerLink]="['/orders', order.id]" class="clickable-row">
+              <td>#{{ order.id }}</td>
               <td>{{ order.createdAt | date:'medium' }}</td>
-              <td>{{ order.side }} ({{ order.phase }})</td>
-              <td>{{ order.status }}</td>
+              <td><span class="side" [class.side-buy]="order.side === 'BUY'" [class.side-sell]="order.side === 'SELL'">{{ order.side }}</span> ({{ order.phase }})</td>
+              <td><div class="status-badge" [attr.data-status]="order.status">{{ order.status }}</div></td>
               <td>{{ order.requestedPrice | number:'1.3-3' }}</td>
               <td>{{ order.requestedShares | number:'1.2-2' }}</td>
               <td>{{ order.filledShares | number:'1.2-2' }}</td>
@@ -135,6 +141,10 @@ import { TradeDetailResponse } from '../../models/api.models';
     .status-badge[data-status="OPEN"] { background: #d1fae5; color: #065f46; }
     .status-badge[data-status="CLOSED"] { background: #dbeafe; color: #1e40af; }
     .status-badge[data-status="RESOLVED"] { background: #fef3c7; color: #92400e; }
+    
+    .status-badge[data-status="FILLED"] { background: #d1fae5; color: #065f46; }
+    .status-badge[data-status="PARTIALLY_FILLED"] { background: #dbeafe; color: #1e40af; }
+    .status-badge[data-status="FAILED"], .status-badge[data-status="REJECTED"] { background: #fee2e2; color: #991b1b; }
 
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
     
@@ -156,8 +166,12 @@ import { TradeDetailResponse } from '../../models/api.models';
     th { text-align: left; padding: 12px 8px; border-bottom: 2px solid #f3f4f6; color: #6b7280; font-size: 12px; text-transform: uppercase; }
     td { padding: 12px 8px; border-bottom: 1px solid #f3f4f6; font-size: 14px; }
 
-    .side-buy { color: #10b981; font-weight: 600; }
-    .side-sell { color: #3b82f6; font-weight: 600; }
+    .clickable-row { cursor: pointer; transition: background-color 0.2s; }
+    .clickable-row:hover { background-color: #f9fafb; }
+
+    .side { font-weight: 700; }
+    .side-buy { color: #10b981; }
+    .side-sell { color: #3b82f6; }
     .positive { color: #10b981; font-weight: 600; }
     .negative { color: #ef4444; font-weight: 600; }
 

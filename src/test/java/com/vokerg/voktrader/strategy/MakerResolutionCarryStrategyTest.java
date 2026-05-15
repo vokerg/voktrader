@@ -2,7 +2,6 @@ package com.vokerg.voktrader.strategy;
 import com.vokerg.voktrader.trade.ExecutionRouter;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.TradeOrderType;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import com.vokerg.voktrader.economy.ExitEconomy;
 import com.vokerg.voktrader.economy.LiquidityRole;
@@ -16,6 +15,7 @@ import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeStatus;
 
 import org.junit.jupiter.api.BeforeEach;

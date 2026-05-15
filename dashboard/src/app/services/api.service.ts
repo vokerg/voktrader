@@ -10,7 +10,9 @@ import {
   RuntimeStatusResponse,
   StrategyCatalogResponse,
   TradeDetailResponse,
-  TradeSummaryResponse 
+  TradeSummaryResponse,
+  TradeOrderResponse,
+  TradeOrderDetailResponse
 } from '../models/api.models';
 
 @Injectable({
@@ -54,6 +56,14 @@ export class ApiService {
 
   getTrade(id: number): Observable<TradeDetailResponse> {
     return this.http.get<TradeDetailResponse>(`${this.baseUrl}/trades/${id}`);
+  }
+
+  getOrders(params: any = {}): Observable<TradeOrderResponse[]> {
+    return this.http.get<TradeOrderResponse[]>(`${this.baseUrl}/orders`, { params });
+  }
+
+  getOrder(id: number): Observable<TradeOrderDetailResponse> {
+    return this.http.get<TradeOrderDetailResponse>(`${this.baseUrl}/orders/${id}`);
   }
 
   pauseBot(id: number): Observable<BotConfigResponse> {

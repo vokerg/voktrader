@@ -182,6 +182,10 @@ export interface TradeOrderResponse {
   submittedAt: string | null;
   acknowledgedAt: string | null;
   completedAt: string | null;
+  lastReconciledAt: string | null;
+  latencyMs: number | null;
+  rawRequest: string | null;
+  rawResponse: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -195,6 +199,12 @@ export interface TradeEventResponse {
   message: string;
   payloadJson: string | null;
   createdAt: string;
+}
+
+export interface TradeOrderDetailResponse {
+  order: TradeOrderResponse;
+  fills: TradeFillResponse[];
+  events: TradeEventResponse[];
 }
 
 export interface MarketDetailResponse extends MarketSummaryResponse {
