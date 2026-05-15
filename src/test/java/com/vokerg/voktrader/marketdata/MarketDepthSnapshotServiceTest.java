@@ -1,6 +1,10 @@
 package com.vokerg.voktrader.marketdata;
 
 import com.vokerg.voktrader.market.MarketRepository;
+import com.vokerg.voktrader.marketdata.model.MarketDepthSnapshotEntity;
+import com.vokerg.voktrader.marketdata.model.MarketDepthSnapshotLevelEntity;
+import com.vokerg.voktrader.marketdata.persistence.MarketDepthSnapshotLevelRepository;
+import com.vokerg.voktrader.marketdata.persistence.MarketDepthSnapshotRepository;
 import com.vokerg.voktrader.polymarket.dto.PriceLevelDto;
 import com.vokerg.voktrader.trade.TradingProperties;
 import org.junit.jupiter.api.Test;

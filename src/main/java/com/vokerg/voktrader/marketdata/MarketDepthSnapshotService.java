@@ -2,6 +2,10 @@ package com.vokerg.voktrader.marketdata;
 
 import com.vokerg.voktrader.market.MarketEntity;
 import com.vokerg.voktrader.market.MarketRepository;
+import com.vokerg.voktrader.marketdata.model.MarketDepthSnapshotEntity;
+import com.vokerg.voktrader.marketdata.model.MarketDepthSnapshotLevelEntity;
+import com.vokerg.voktrader.marketdata.persistence.MarketDepthSnapshotLevelRepository;
+import com.vokerg.voktrader.marketdata.persistence.MarketDepthSnapshotRepository;
 import com.vokerg.voktrader.trade.TradingProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

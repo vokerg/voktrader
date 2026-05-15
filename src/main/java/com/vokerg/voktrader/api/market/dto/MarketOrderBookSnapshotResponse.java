@@ -1,9 +1,9 @@
 package com.vokerg.voktrader.api.market.dto;
 
-import com.vokerg.voktrader.marketdata.MarketDepthSnapshotEntity;
-
 import java.math.BigDecimal;
 import java.time.Instant;
+
+import com.vokerg.voktrader.marketdata.model.MarketDepthSnapshotEntity;
 
 public record MarketOrderBookSnapshotResponse(
         Long marketId,
