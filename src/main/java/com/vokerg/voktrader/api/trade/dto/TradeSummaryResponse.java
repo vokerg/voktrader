@@ -1,9 +1,9 @@
 package com.vokerg.voktrader.api.trade.dto;
 
-import com.vokerg.voktrader.trade.ExecutionMode;
-import com.vokerg.voktrader.trade.TradeEntity;
-import com.vokerg.voktrader.trade.TradeSide;
-import com.vokerg.voktrader.trade.TradeStatus;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeSide;
+import com.vokerg.voktrader.trade.model.TradeStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;

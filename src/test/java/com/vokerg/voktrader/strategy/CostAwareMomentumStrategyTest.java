@@ -8,14 +8,15 @@ import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.LatestPriceState;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
-import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.ExecutionRouter;
-import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.TradeOrderStatus;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
-import com.vokerg.voktrader.trade.TradeStatus;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeStatus;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -50,7 +51,7 @@ class CostAwareMomentumStrategyTest {
     @BeforeEach
     void setUp() {
         StrategyProperties properties = new StrategyProperties(
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 1000L,
                 null,
                 null,
@@ -470,21 +471,21 @@ class CostAwareMomentumStrategyTest {
         );
     }
 
-    private TradeEntity openTrade(String tokenId, String outcome, String entryPrice, String paperShares) {
-        return openTrade(tokenId, outcome, entryPrice, paperShares, 5);
+    private TradeEntity openTrade(String tokenId, String outcome, String entryPrice, String filledShares) {
+        return openTrade(tokenId, outcome, entryPrice, filledShares, 5);
     }
 
     private TradeEntity openTradeWithEntryFee(
             String tokenId,
             String outcome,
             String entryPrice,
-            String paperShares,
+            String filledShares,
             String entryFee
     ) {
-        TradeEntity trade = openTrade(tokenId, outcome, entryPrice, paperShares);
+        TradeEntity trade = openTrade(tokenId, outcome, entryPrice, filledShares);
         trade.markOpen(
                 new BigDecimal(entryPrice),
-                new BigDecimal(paperShares),
+                new BigDecimal(filledShares),
                 new BigDecimal("1.00"),
                 new BigDecimal(entryFee),
                 clock.instant().minusSeconds(5)
@@ -496,7 +497,7 @@ class CostAwareMomentumStrategyTest {
             String tokenId,
             String outcome,
             String entryPrice,
-            String paperShares,
+            String filledShares,
             long secondsAgo
     ) {
         TradeEntity trade = TradeEntity.fromIntent(new TradeIntent(
@@ -509,7 +510,7 @@ class CostAwareMomentumStrategyTest {
                 null,
                 tokenId,
                 outcome,
-                com.vokerg.voktrader.trade.TradeSide.BUY,
+                com.vokerg.voktrader.trade.model.TradeSide.BUY,
                 new BigDecimal("1.00"),
                 null,
                 com.vokerg.voktrader.trade.TradeOrderType.FOK,
@@ -528,7 +529,7 @@ class CostAwareMomentumStrategyTest {
         ), ExecutionMode.PAPER);
         trade.markOpen(
                 new BigDecimal(entryPrice),
-                new BigDecimal(paperShares),
+                new BigDecimal(filledShares),
                 new BigDecimal("1.00"),
                 BigDecimal.ZERO,
                 clock.instant().minusSeconds(secondsAgo)

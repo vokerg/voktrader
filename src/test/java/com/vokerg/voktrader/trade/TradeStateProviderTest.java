@@ -1,5 +1,12 @@
 package com.vokerg.voktrader.trade;
 
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeSide;
+import com.vokerg.voktrader.trade.model.TradeStatus;
+import com.vokerg.voktrader.trade.model.TradeVenue;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import org.junit.jupiter.api.Test;
@@ -23,10 +30,10 @@ class TradeStateProviderTest {
 
     @Test
     void readsActiveTradeAndOrdersFromLocalPersistenceOnly() {
-        TradeEntity trade = TradeEntity.fromIntent(intent(), ExecutionMode.LIVE_TINY);
+        TradeEntity trade = TradeEntity.fromIntent(intent(), ExecutionMode.LIVE);
         ReflectionTestUtils.setField(trade, "id", 10L);
         trade.markEntryPending();
-        TradeOrderEntity order = TradeOrderEntity.fromIntent(10L, intent(), ExecutionMode.LIVE_TINY, TradeVenue.POLYMARKET, "local-1");
+        TradeOrderEntity order = TradeOrderEntity.fromIntent(10L, intent(), ExecutionMode.LIVE, TradeVenue.POLYMARKET, "local-1");
         ReflectionTestUtils.setField(order, "id", 20L);
         order.markSubmitting("local-1", "{}");
         order.markSubmitted("remote-1", "{}");

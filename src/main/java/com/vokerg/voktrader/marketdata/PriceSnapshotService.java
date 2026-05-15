@@ -2,6 +2,9 @@ package com.vokerg.voktrader.marketdata;
 
 import com.vokerg.voktrader.market.MarketEntity;
 import com.vokerg.voktrader.market.MarketRepository;
+import com.vokerg.voktrader.marketdata.model.PriceSnapshotEntity;
+import com.vokerg.voktrader.marketdata.persistence.PriceSnapshotRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

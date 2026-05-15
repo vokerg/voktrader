@@ -1,8 +1,10 @@
-package com.vokerg.voktrader.trade;
+package com.vokerg.voktrader.trade.model;
 
 import jakarta.persistence.*;
 
 import java.time.Instant;
+
+import com.vokerg.voktrader.trade.RiskSeverity;
 
 @Entity
 @Table(name = "trade_risk_checks", indexes = {

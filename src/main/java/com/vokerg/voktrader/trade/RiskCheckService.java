@@ -1,5 +1,11 @@
 package com.vokerg.voktrader.trade;
 
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeOrderPhase;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeRiskCheckEntity;
+import com.vokerg.voktrader.trade.model.TradeSide;
+import com.vokerg.voktrader.trade.model.TradeStatus;
 import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
@@ -87,7 +93,7 @@ public class RiskCheckService {
                 idempotencyKey, "unique non-blank idempotency key",
                 idempotencyOk ? "idempotency key accepted" : "duplicate idempotency key belongs to a different order"));
 
-        if (mode == ExecutionMode.LIVE_TINY || mode == ExecutionMode.LIVE) {
+        if (mode == ExecutionMode.LIVE) {
             long cooldownSeconds = properties.getLiveRetryCooldownSeconds();
             if (cooldownSeconds > 0 && intent.side() == TradeSide.BUY) {
                 Instant cooldownSince = Instant.now().minus(Duration.ofSeconds(cooldownSeconds));
@@ -119,7 +125,7 @@ public class RiskCheckService {
                     liveEnabledOk ? "live trading explicitly enabled" : "live trading not explicitly enabled"));
 
             long openLiveTradesIncludingCurrent = tradeRepository.countByModeInAndStatusIn(
-                    List.of(ExecutionMode.LIVE_TINY, ExecutionMode.LIVE), ACTIVE_STATUSES);
+                    List.of(ExecutionMode.LIVE), ACTIVE_STATUSES);
             long openLiveTrades = Math.max(0, openLiveTradesIncludingCurrent - 1);
             boolean openLiveOk = openLiveTrades < properties.getMaxOpenLiveTrades();
             assessment.add(check(tradeId, orderId, mode, "MAX_OPEN_LIVE_TRADES", openLiveOk,

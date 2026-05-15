@@ -3,7 +3,7 @@ package com.vokerg.voktrader.strategy;
 import com.vokerg.voktrader.backtest.BacktestDiagnosticsContext;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.time.TimeMachine;
-import com.vokerg.voktrader.trade.TradeEntity;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -75,9 +75,9 @@ public class MakerResolutionCarryStrategy implements TradingStrategy {
                 "Uses StrategyExitSupport.evaluateCurrentMarketOpenTradesWithDecision. If a profitable taker sell is available, it sells. If expiry is close and exit bid is poor, it returns WAIT_FOR_RESOLUTION. "
                         + "That means the strategy has deliberately chosen settlement as the exit path.",
                 "Makes maker/taker distinction visible to future strategy authors and avoids hiding resolution carry inside an empty Optional. Good as a template for settlement-aware strategies.",
-                "Weak because maker orders may not fill before the edge disappears, and the current JVM lifecycle still needs exchange reconciliation for live resting orders. "
-                        + "Waiting for resolution can turn a mark-to-market loss into a full loss if the selected outcome resolves wrong. It is intentionally conservative and should start in paper or shadow mode.",
-                "Tune maker bid cap, wait-for-resolution seconds, and near-bid depth together. Do not use live resting orders without reconciliation and cancellation policy."
+                "Weak because maker orders may not fill before the edge disappears, and resting orders need exchange reconciliation. "
+                        + "Waiting for resolution can turn a mark-to-market loss into a full loss if the selected outcome resolves wrong. It is intentionally conservative and should start with small sizing.",
+                "Tune maker bid cap, wait-for-resolution seconds, and near-bid depth together. Do not use resting orders without reconciliation and cancellation policy."
         );
     }
 
@@ -171,7 +171,7 @@ public class MakerResolutionCarryStrategy implements TradingStrategy {
         }
         return Optional.of(StrategyEntrySupport.EntrySignal.makerBuy(
                 selected.price(),
-                config.paperSizeUsdOrDefault(),
+                config.orderSizeUsdOrDefault(),
                 "maker resolution carry: post maker bid on supported side"
         ));
     }

@@ -1,19 +1,19 @@
 package com.vokerg.voktrader.backtest;
 
-import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
-import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
-import com.vokerg.voktrader.trade.TradeFillEntity;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.TradeOrderEntity;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
-import com.vokerg.voktrader.trade.TradeSide;
-import com.vokerg.voktrader.trade.TradeStatus;
-import com.vokerg.voktrader.trade.TradeVenue;
 import com.vokerg.voktrader.trade.TradingProperties;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeFillEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeSide;
+import com.vokerg.voktrader.trade.model.TradeStatus;
+import com.vokerg.voktrader.trade.model.TradeVenue;
 import com.vokerg.voktrader.time.TimeMachine;
 import lombok.RequiredArgsConstructor;
 
@@ -41,7 +41,7 @@ class BacktestExecutionService {
     }
 
     private TradeExecutionResult buy(TradeIntent intent) {
-        TradeEntity trade = TradeEntity.fromIntent(intent, ExecutionMode.TESTING);
+        TradeEntity trade = TradeEntity.fromIntent(intent, ExecutionMode.BACKTEST);
         trade.attachBacktestRun(runId);
         trade = tradeRepository.save(trade);
 
@@ -49,7 +49,7 @@ class BacktestExecutionService {
         TradeOrderEntity order = tradeOrderRepository.save(TradeOrderEntity.fromIntent(
                 trade.getId(),
                 intent,
-                ExecutionMode.TESTING,
+                ExecutionMode.BACKTEST,
                 TradeVenue.BACKTEST_SIM,
                 clientOrderId
         ));
@@ -70,7 +70,7 @@ class BacktestExecutionService {
             trade.markFailed(message);
             tradeOrderRepository.save(order);
             tradeRepository.save(trade);
-            return TradeExecutionResult.rejected(ExecutionMode.TESTING, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), message);
+            return TradeExecutionResult.rejected(ExecutionMode.BACKTEST, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), message);
         }
 
         BigDecimal feeUsd = feeCalculator.estimateFeeUsd(shares, price, tradingProperties.getTakerFeeRate());
@@ -89,7 +89,7 @@ class BacktestExecutionService {
         trade.markOpen(price, shares, amountUsd, feeUsd, intent.priceUpdatedAt());
         tradeOrderRepository.save(order);
         tradeRepository.save(trade);
-        return TradeExecutionResult.accepted(ExecutionMode.TESTING, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "backtest buy filled");
+        return TradeExecutionResult.accepted(ExecutionMode.BACKTEST, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "backtest buy filled");
     }
 
     private TradeExecutionResult sell(TradeIntent intent) {
@@ -99,7 +99,7 @@ class BacktestExecutionService {
                 : tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
                         intent.botId(), intent.strategyId(), intent.marketId(), intent.tokenId(), TradeStatus.OPEN);
         if (open.isEmpty() || !runId.equals(open.get().getBacktestRunId())) {
-            return TradeExecutionResult.rejected(ExecutionMode.TESTING, null, null, null, null, "backtest sell rejected: no open run trade");
+            return TradeExecutionResult.rejected(ExecutionMode.BACKTEST, null, null, null, null, "backtest sell rejected: no open run trade");
         }
 
         TradeEntity trade = open.get();
@@ -107,7 +107,7 @@ class BacktestExecutionService {
         TradeOrderEntity order = tradeOrderRepository.save(TradeOrderEntity.fromIntent(
                 trade.getId(),
                 intent,
-                ExecutionMode.TESTING,
+                ExecutionMode.BACKTEST,
                 TradeVenue.BACKTEST_SIM,
                 clientOrderId
         ));
@@ -120,7 +120,7 @@ class BacktestExecutionService {
             String message = "backtest sell rejected: missing executable price/size";
             order.markFailed(message);
             tradeOrderRepository.save(order);
-            return TradeExecutionResult.rejected(ExecutionMode.TESTING, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), message);
+            return TradeExecutionResult.rejected(ExecutionMode.BACKTEST, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), message);
         }
 
         BigDecimal feeUsd = feeCalculator.estimateFeeUsd(shares, price, tradingProperties.getTakerFeeRate());
@@ -139,7 +139,7 @@ class BacktestExecutionService {
         trade.markClosed(price, shares, amountUsd, feeUsd, intent.priceUpdatedAt());
         tradeOrderRepository.save(order);
         tradeRepository.save(trade);
-        return TradeExecutionResult.accepted(ExecutionMode.TESTING, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "backtest sell filled");
+        return TradeExecutionResult.accepted(ExecutionMode.BACKTEST, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "backtest sell filled");
     }
 
     private String clientOrderId(TradeIntent intent, Long tradeId) {

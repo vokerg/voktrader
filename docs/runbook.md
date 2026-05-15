@@ -1,6 +1,6 @@
 # Voktrader Runbook
 
-This runbook is the operational source of truth for run modes, strategy selection, backtests, and live-tiny safety.
+This runbook is the operational source of truth for run modes, strategy selection, backtests, and live safety.
 
 ## Strategy Namespaces
 
@@ -12,24 +12,24 @@ Top-level Spring/Java strategy IDs are registered in `StrategyRegistry`. These a
 - `resolution-pressure-fok`
 - `order-book-liquidity`
 - `maker-resolution-carry`
-- `cost-aware-momentum-paper`
+- `cost-aware-momentum`
 
-Strategy V2 inner YAML strategy IDs live inside a Strategy V2 config file such as `strategy-v2.paper.yml` or `strategy-v2.deep-research.yml`. Examples:
+Strategy V2 inner YAML strategy IDs live inside a Strategy V2 config file such as `strategy-v2.default.yml` or `strategy-v2.deep-research.yml`. Examples:
 
-- `cfg_v2_liquidity_momentum_paper`
+- `cfg_v2_liquidity_momentum`
 - `ANTI_CHOP_FOK_A`
 - `RP_FOK_B`
 
 Use `strategyId=strategy-v2` to run the Java Strategy V2 engine. A bot can optionally set `strategySetId` to choose a whole Strategy V2 YAML bundle:
 
-- `paper` loads `strategy-v2.paper.yml`
+- `default` loads `strategy-v2.default.yml`
 - `deep-research` loads `strategy-v2.deep-research.yml`
 
 If `strategySetId` is blank, Strategy V2 uses the app-level imported config. After the YAML bundle is selected, the engine uses that bundle's `strategy-v2.engine.active-strategy-ids`.
 
 `subStrategyId` is an advanced isolation/debug field. If set, it filters the selected YAML bundle down to one inner strategy. Leave it blank for normal portfolio-style operation.
 
-Important: `cfg_v2_liquidity_momentum_paper` is not a top-level `/api/backtests.strategyId`. It is a Strategy V2 inner ID.
+Important: `cfg_v2_liquidity_momentum` is not a top-level `/api/backtests.strategyId`. It is a Strategy V2 inner ID.
 
 ## Manual Backtest
 
@@ -89,19 +89,9 @@ $env:VOKTRADER_BOTS_INCLUDE_IDS="10"
 .\mvnw.cmd spring-boot:run
 ```
 
-## Shadow Run
+## Live
 
-`LIVE_SHADOW` records live-like trades and orders locally but never sends orders to Polymarket. Use it to inspect live decisions, risk checks, and order records without exchange exposure.
-
-```powershell
-cd C:\repos\voktrader
-$env:SPRING_PROFILES_ACTIVE="shadow"
-.\mvnw.cmd spring-boot:run
-```
-
-## Live Tiny
-
-Live-tiny requires two processes:
+Live requires two processes:
 
 1. Python executor sidecar
 2. Java Spring Boot app
@@ -131,14 +121,14 @@ Start Java:
 
 ```powershell
 cd C:\repos\voktrader
-$env:SPRING_PROFILES_ACTIVE="live-tiny,live-test"
+$env:SPRING_PROFILES_ACTIVE="live,live-test"
 $env:VOKTRADER_EXECUTOR_API_TOKEN="change-me"
 .\mvnw.cmd spring-boot:run
 ```
 
-Live-tiny safety gates:
+Live safety gates:
 
-- `voktrader.trading.mode=LIVE_TINY`
+- `voktrader.trading.mode=LIVE`
 - `voktrader.trading.kill-switch-enabled=false`
 - `voktrader.trading.live-enabled=true`
 - `voktrader.trading.max-order-usd=1.00`
@@ -163,21 +153,18 @@ Authoritative Java risk gates are enforced by `RiskCheckService` and related exe
 - Strategy allowlist: `voktrader.trading.allowed-strategy-ids`
 - Executor enabled/dry-run/auth settings: `voktrader.executor.*`
 
-The old `voktrader.risk.enable-live-tiny`, `voktrader.risk.enable-live-full`, and `voktrader.risk.global-kill-switch` properties are not enforced by `RiskCheckService` and should not be treated as authoritative.
+The old `voktrader.risk.enable-live-full` and `voktrader.risk.global-kill-switch` properties are not enforced by `RiskCheckService` and should not be treated as authoritative.
 
 ## Recommended Operational Matrix
 
 | Mode | ExecutionMode | Strategy source | Sends real order? |
 | --- | --- | --- | --- |
-| Backtest | `TESTING` / replay context | Request `strategyId`; Strategy V2 may use YAML override | No |
+| Backtest | `BACKTEST` / replay context | Request `strategyId`; Strategy V2 may use YAML override | No |
 | Paper | `PAPER` | Bot `strategy_id`; V2 YAML bundle from `strategy_set_id` or app import | No |
-| Shadow | `LIVE_SHADOW` | Bot `strategy_id`; V2 YAML bundle from `strategy_set_id` or app import | No |
-| Live tiny | `LIVE_TINY` | Bot `strategy_id`; V2 YAML bundle from `strategy_set_id` or app import | Yes, through Python executor |
-| Full live | `LIVE` | Not a default operator profile | Do not enable by default |
+| Live | `LIVE` | Bot `strategy_id`; V2 YAML bundle from `strategy_set_id` or app import | Yes, through Python executor |
 
 ## Visibility Endpoints
 
 - Runtime status: `GET /api/runtime/status`
 - Strategy catalog: `GET /api/strategies`
 - Bot configs: `GET /api/bots`
-

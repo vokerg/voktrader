@@ -137,7 +137,7 @@ public class PythonExecutorClient {
             String remoteOrderId,
             String marketId,
             String tokenId,
-            com.vokerg.voktrader.trade.TradeSide side,
+            com.vokerg.voktrader.trade.model.TradeSide side,
             java.math.BigDecimal price,
             java.math.BigDecimal shares,
             Instant since
@@ -179,7 +179,7 @@ public class PythonExecutorClient {
             String marketId,
             String tokenId,
             String remoteOrderId,
-            com.vokerg.voktrader.trade.TradeSide side,
+            com.vokerg.voktrader.trade.model.TradeSide side,
             java.math.BigDecimal price,
             java.math.BigDecimal shares,
             Instant since

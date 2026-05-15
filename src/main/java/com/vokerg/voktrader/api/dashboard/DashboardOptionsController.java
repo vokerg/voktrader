@@ -7,8 +7,9 @@ import com.vokerg.voktrader.market.MarketResolutionStatus;
 import com.vokerg.voktrader.market.MarketTrackingStatus;
 import com.vokerg.voktrader.strategy.StrategyRegistry;
 import com.vokerg.voktrader.strategy.TradingStrategy;
-import com.vokerg.voktrader.trade.ExecutionMode;
-import com.vokerg.voktrader.trade.TradeStatus;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeStatus;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;

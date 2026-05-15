@@ -13,25 +13,22 @@ strategy-v2:
     require-mid-sum-sane: true
     min-mid-sum: "0.97"
     max-mid-sum: "1.03"
-    default-profile: "conservative_paper"
+    default-profile: "conservative"
     safety:
       kill-switch-respected: true
-      live-requires-explicit-allowlist: true
-      block-live-maker-without-reconciliation: true
       block-unknown-order-type: true
       block-missing-fee-model: true
       block-missing-book-for-book-rules: true
 
   defaults:
-    conservative_paper:
+    conservative:
       data:
         max-price-age-ms: 1500
         max-book-age-ms: 1500
         warmup-seconds: 30
         min-samples-per-window: 3
       sizing:
-        paper-size-usd: "1.00"
-        live-size-usd: "5.00"
+        order-size-usd: "1.00"
         max-order-usd: "5.00"
         min-order-usd: "1.00"
         price-tick: "0.01"
@@ -39,7 +36,7 @@ strategy-v2:
       fees:
         maker-fee-rate: "0.00"
         taker-fee-rate: "0.072"
-        estimate-live-fees-when-missing: true
+        estimate-fees-when-missing: true
       execution:
         default-entry-order-type: "FOK"
         default-exit-order-type: "FOK"
@@ -53,9 +50,8 @@ strategy-v2:
   strategies:
     - strategy-id: "cfg_shower_trades_v2"
       enabled: true
-      profile: "conservative_paper"
+      profile: "conservative"
       hypothesis: "Intentionally broad maker smoke-test strategy: post a tiny GTD bid almost any time a sane quote exists."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "lower_ask"
         candidates: ["Up", "Down"]
@@ -104,9 +100,8 @@ strategy-v2:
 
     - strategy-id: "cfg_simple_down_cheap_v2"
       enabled: true
-      profile: "conservative_paper"
+      profile: "conservative"
       hypothesis: "Buy cheap Down only when spread is tight enough."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "fixed_outcome"
         outcome: "Down"
@@ -134,8 +129,7 @@ strategy-v2:
             rounding: "ceil_to_tick"
           size:
             type: "fixed_usd"
-            paper-usd: "1.00"
-            live-usd: "5.00"
+            usd: "1.00"
             max-usd: "5.00"
           reason-template: "strategy-v2 simple down cheap candidate={{candidate.outcome}} ask={{candidate.ask}} spread={{candidate.spread}}"
       exit:
@@ -160,9 +154,8 @@ strategy-v2:
 
     - strategy-id: "cfg_maker_probe_v2"
       enabled: false
-      profile: "conservative_paper"
+      profile: "conservative"
       hypothesis: "Posting at best bid may capture spread without taker fee when momentum and near-bid depth support the candidate."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "score"
         candidates: ["Up", "Down"]
@@ -210,8 +203,7 @@ strategy-v2:
             max-price: "0.58"
           size:
             type: "fixed_usd"
-            paper-usd: "1.00"
-            live-usd: "5.00"
+            usd: "1.00"
             max-usd: "5.00"
           maker-lifecycle:
             cancel-after-seconds: 8
@@ -223,9 +215,8 @@ strategy-v2:
 
     - strategy-id: "cfg_lower_ask_tight_spread_v2"
       enabled: false
-      profile: "conservative_paper"
+      profile: "conservative"
       hypothesis: "Buy whichever side is cheapest when both the book and price feed are fresh and the spread is tight."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "lower_ask"
         candidates: ["Up", "Down"]
@@ -266,8 +257,7 @@ strategy-v2:
             rounding: "ceil_to_tick"
           size:
             type: "fixed_usd"
-            paper-usd: "1.00"
-            live-usd: "5.00"
+            usd: "1.00"
             max-usd: "5.00"
           reason-template: "strategy-v2 lower ask candidate={{candidate.outcome}} ask={{candidate.ask}} spread={{candidate.spread}}"
       exit:
@@ -294,9 +284,8 @@ strategy-v2:
 
     - strategy-id: "cfg_momentum_taker_v2"
       enabled: false
-      profile: "conservative_paper"
+      profile: "conservative"
       hypothesis: "Follow the side with stronger short-term mid movement when liquidity is present and volatility is controlled."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "stronger_momentum"
         feature: "mid_move_5s"
@@ -335,8 +324,7 @@ strategy-v2:
             rounding: "ceil_to_tick"
           size:
             type: "fixed_usd"
-            paper-usd: "1.00"
-            live-usd: "5.00"
+            usd: "1.00"
             max-usd: "5.00"
           reason-template: "strategy-v2 momentum candidate={{candidate.outcome}} move5={{candidate.mid_move_5s}} ask={{candidate.ask}}"
       exit:
@@ -366,9 +354,8 @@ strategy-v2:
 
     - strategy-id: "cfg_depth_imbalance_score_v2"
       enabled: false
-      profile: "conservative_paper"
+      profile: "conservative"
       hypothesis: "Score both outcomes using momentum, near-book imbalance, microprice edge, and spread cost."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "score"
         candidates: ["Up", "Down"]
@@ -410,8 +397,7 @@ strategy-v2:
             rounding: "ceil_to_tick"
           size:
             type: "fixed_usd"
-            paper-usd: "1.00"
-            live-usd: "5.00"
+            usd: "1.00"
             max-usd: "5.00"
           reason-template: "strategy-v2 depth score candidate={{candidate.outcome}} imbalance={{candidate.depth_imbalance_0_03}} edge={{candidate.microprice_edge}}"
       exit:
@@ -438,9 +424,8 @@ strategy-v2:
 
     - strategy-id: "cfg_late_window_pressure_v2"
       enabled: false
-      profile: "conservative_paper"
+      profile: "conservative"
       hypothesis: "Late in a short market, follow the more expensive side only if the book is fresh and price pressure confirms it."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "higher_mid"
         candidates: ["Up", "Down"]
@@ -481,8 +466,7 @@ strategy-v2:
             rounding: "ceil_to_tick"
           size:
             type: "fixed_usd"
-            paper-usd: "1.00"
-            live-usd: "5.00"
+            usd: "1.00"
             max-usd: "5.00"
           reason-template: "strategy-v2 late pressure candidate={{candidate.outcome}} seconds={{market.seconds_to_expiry}} mid={{candidate.mid}}"
       exit:
@@ -509,9 +493,8 @@ strategy-v2:
 
     - strategy-id: "cfg_post_bid_fade_v2"
       enabled: true
-      profile: "conservative_paper"
+      profile: "conservative"
       hypothesis: "Post a small maker bid below a stable mid when spreads are wide enough to pay for waiting."
-      allowed-execution-modes: ["PAPER", "TESTING", "LIVE_SHADOW"]
       candidate-selection:
         type: "score"
         candidates: ["Up", "Down"]
@@ -556,8 +539,7 @@ strategy-v2:
             do-not-cross-spread: true
           size:
             type: "fixed_usd"
-            paper-usd: "1.00"
-            live-usd: "5.00"
+            usd: "1.00"
             max-usd: "5.00"
           maker-lifecycle:
             cancel-after-seconds: 6

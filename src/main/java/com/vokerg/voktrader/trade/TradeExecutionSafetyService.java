@@ -2,6 +2,12 @@ package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.telemetry.TelemetryData;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeEventEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderPhase;
+import com.vokerg.voktrader.trade.model.TradeVenue;
 import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import lombok.RequiredArgsConstructor;
@@ -198,7 +204,7 @@ public class TradeExecutionSafetyService {
     }
 
     private boolean isLiveMode(ExecutionMode mode) {
-        return mode == ExecutionMode.LIVE_TINY || mode == ExecutionMode.LIVE;
+        return mode == ExecutionMode.LIVE;
     }
 
     private boolean hasText(String value) {

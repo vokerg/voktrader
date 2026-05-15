@@ -8,7 +8,6 @@ import com.vokerg.voktrader.strategy.StrategyMarketView;
 import com.vokerg.voktrader.strategy.StrategyOutcomeView;
 import com.vokerg.voktrader.strategy.TradingStrategy;
 import com.vokerg.voktrader.time.TimeMachine;
-import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.OrderLifecycleResult;
 import com.vokerg.voktrader.trade.OrderGateway;
 import com.vokerg.voktrader.trade.OrderGatewayContext;
@@ -16,8 +15,8 @@ import com.vokerg.voktrader.trade.OrderRuntimeState;
 import com.vokerg.voktrader.trade.StrategyInstanceKey;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
 import com.vokerg.voktrader.trade.TradeStateProvider;
-import com.vokerg.voktrader.trade.TradeStatus;
-import com.vokerg.voktrader.trade.TradingProperties;
+import com.vokerg.voktrader.trade.model.TradeStatus;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -44,7 +43,6 @@ public class StrategyV2Engine implements TradingStrategy {
     private final StrategyV2ExecutionProperties executionProperties;
     private final TradeStateProvider tradeStateProvider;
     private final OrderGateway orderGateway;
-    private final TradingProperties tradingProperties;
     private final StrategyV2SetCatalog configCatalog;
     private final Map<CooldownKey, Instant> noFillCancelCooldownUntil = new ConcurrentHashMap<>();
 
@@ -60,7 +58,6 @@ public class StrategyV2Engine implements TradingStrategy {
             StrategyV2ExecutionProperties executionProperties,
             TradeStateProvider tradeStateProvider,
             OrderGateway orderGateway,
-            TradingProperties tradingProperties,
             StrategyV2SetCatalog configCatalog
     ) {
         this.properties = properties;
@@ -74,7 +71,6 @@ public class StrategyV2Engine implements TradingStrategy {
         this.executionProperties = executionProperties;
         this.tradeStateProvider = tradeStateProvider;
         this.orderGateway = orderGateway;
-        this.tradingProperties = tradingProperties;
         this.configCatalog = configCatalog;
     }
 
@@ -94,7 +90,7 @@ public class StrategyV2Engine implements TradingStrategy {
                 "Selects a candidate, evaluates a small condition tree, and routes configured BUY entry actions.",
                 "Evaluates configured exit rules against runtime position state and routes SELL exits through the configured execution path.",
                 "Good for parameter sweeps and safer config-only experiments.",
-                "For paper runs it can use DB runtime state while keeping order-layer routing disabled.",
+                "Can use DB runtime state while keeping order-layer routing disabled.",
                 "Put configured strategy ids under strategy-v2.engine.active-strategy-ids or leave empty to run all enabled V2 strategies."
         );
     }
@@ -125,16 +121,12 @@ public class StrategyV2Engine implements TradingStrategy {
         if (effective.getEngine().isRequireMidSumSane() && !midSumSane(marketView)) {
             return;
         }
-        ExecutionMode mode = tradingProperties.getMode() == null ? ExecutionMode.PAPER : tradingProperties.getMode();
         for (StrategyV2Properties.Strategy strategy : strategiesForCurrentBot()) {
-            if (!modeAllowed(strategy, mode)) {
-                continue;
-            }
             StrategyRuntimeState state = tradeStateProvider.getState(
                     StrategyInstanceKey.of(BotRuntimeContextHolder.currentBotId().orElse(null), strategy.getStrategyId()),
                     market.id()
             );
-            boolean accepted = evaluateStateAware(strategy, market, marketView, mode, state);
+            boolean accepted = evaluateStateAware(strategy, market, marketView, state);
             if (accepted) {
                 break;
             }
@@ -145,22 +137,21 @@ public class StrategyV2Engine implements TradingStrategy {
             StrategyV2Properties.Strategy strategy,
             GammaMarketDto market,
             StrategyMarketView marketView,
-            ExecutionMode mode,
             StrategyRuntimeState state
     ) {
         if (state == null) {
             exitEvaluator.evaluate(strategy);
         } else {
-            exitEvaluator.evaluate(strategy, market, marketView, state, mode);
+            exitEvaluator.evaluate(strategy, market, marketView, state);
         }
-        BigDecimal orderUsd = strategy.getEntry().getAction().getSize().getPaperUsd();
+        BigDecimal orderUsd = strategy.getEntry().getAction().getSize().getUsd();
         List<StrategyV2FeatureContext> contexts = state == null
                 ? featureResolver.contexts(market, marketView, orderUsd)
                 : featureResolver.contexts(market, marketView, orderUsd, state);
         contexts = contexts.stream()
                 .filter(context -> !entryNoFillCancelCooldownActive(strategy, market, context))
                 .toList();
-        return entryEvaluator.evaluate(strategy, contexts, featureResolver, mode)
+        return entryEvaluator.evaluate(strategy, contexts, featureResolver)
                     .map(result -> result.accepted() && "single_market_single_position".equals(effectiveProperties().getEngine().getDecisionMode()))
                     .orElse(false);
     }
@@ -169,13 +160,12 @@ public class StrategyV2Engine implements TradingStrategy {
             StrategyV2Properties.Strategy strategy,
             GammaMarketDto market,
             StrategyMarketView marketView,
-            ExecutionMode mode,
             StrategyRuntimeState state
     ) {
         TradeStatus status = state == null ? TradeStatus.NEW : state.currentTradeStatus();
         if (status == null || status == TradeStatus.NEW || !status.isActive()) {
             diagnosticsRecorder.stateBranch(strategy, state, market.id(), "ENTRY", "no active trade; evaluating entry");
-            return evaluateEntry(strategy, market, marketView, mode, state);
+            return evaluateEntry(strategy, market, marketView, state);
         }
         if (status.isPendingEntry()) {
             diagnosticsRecorder.stateBranch(strategy, state, market.id(), "ENTRY_PENDING_MANAGEMENT", "entry order pending; suppressing duplicate entry");
@@ -186,13 +176,13 @@ public class StrategyV2Engine implements TradingStrategy {
             diagnosticsRecorder.stateBranch(strategy, state, market.id(), "PARTIAL_POSITION_MANAGEMENT", "partial position active; suppressing duplicate entry");
             maybeCancelPartialRemainder(strategy, state);
             if (strategy.getPartialFillManagement().isAllowExitPartialPosition()) {
-                exitEvaluator.evaluate(strategy, market, marketView, state, mode);
+                exitEvaluator.evaluate(strategy, market, marketView, state);
             }
             return false;
         }
         if (status == TradeStatus.OPEN) {
             diagnosticsRecorder.stateBranch(strategy, state, market.id(), "EXIT", "position open; evaluating exit rules");
-            exitEvaluator.evaluate(strategy, market, marketView, state, mode);
+            exitEvaluator.evaluate(strategy, market, marketView, state);
             return false;
         }
         if (status.isPendingExit()) {
@@ -201,7 +191,7 @@ public class StrategyV2Engine implements TradingStrategy {
             return false;
         }
         diagnosticsRecorder.stateBranch(strategy, state, market.id(), "ENTRY", "terminal or unknown trade state; evaluating entry");
-        return evaluateEntry(strategy, market, marketView, mode, state);
+        return evaluateEntry(strategy, market, marketView, state);
     }
 
     private void maybeCancelEntryPending(
@@ -390,7 +380,7 @@ public class StrategyV2Engine implements TradingStrategy {
 
     private boolean noFillMakerEntryOrder(StrategyV2Properties.Strategy strategy, StrategyRuntimeState state) {
         OrderRuntimeState order = state == null ? null : state.activeEntryOrder();
-        if (strategy == null || order == null || order.phase() != com.vokerg.voktrader.trade.TradeOrderPhase.ENTRY) {
+        if (strategy == null || order == null || order.phase() != com.vokerg.voktrader.trade.model.TradeOrderPhase.ENTRY) {
             return false;
         }
         BigDecimal filledShares = order.filledShares();
@@ -437,11 +427,6 @@ public class StrategyV2Engine implements TradingStrategy {
         return action == null || action.getSide() == null ? "BUY" : action.getSide();
     }
 
-    private boolean modeAllowed(StrategyV2Properties.Strategy strategy, ExecutionMode mode) {
-        List<String> allowed = strategy.getAllowedExecutionModes();
-        return allowed == null || allowed.isEmpty() || allowed.stream().anyMatch(value -> value.equalsIgnoreCase(mode.name()));
-    }
-
     private List<StrategyV2Properties.Strategy> strategiesForCurrentBot() {
         String subStrategyId = BotRuntimeContextHolder.currentSubStrategyId().orElse(null);
         List<StrategyV2Properties.Strategy> active = registry.activeStrategies();
@@ -474,4 +459,3 @@ public class StrategyV2Engine implements TradingStrategy {
     }
 
 }
-

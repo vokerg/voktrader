@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import com.vokerg.voktrader.trade.model.TradeRiskCheckEntity;
+
 public class RiskAssessment {
     private final List<TradeRiskCheckEntity> checks = new ArrayList<>();
 

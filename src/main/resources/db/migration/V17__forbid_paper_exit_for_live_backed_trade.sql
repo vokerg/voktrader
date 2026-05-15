@@ -13,8 +13,8 @@ BEGIN
             AND entry.phase = 'ENTRY'
         WHERE t.id = NEW.trade_id
           AND (
-                t.mode IN ('LIVE_TINY', 'LIVE')
-                OR entry.mode IN ('LIVE_TINY', 'LIVE')
+                t.mode = 'LIVE'
+                OR entry.mode = 'LIVE'
                 OR entry.venue = 'POLYMARKET'
                 OR entry.remote_order_id IS NOT NULL
                 OR entry.exchange_order_id IS NOT NULL
@@ -31,7 +31,7 @@ BEGIN
 
     IF NEW.phase = 'ENTRY'
        AND (
-            NEW.mode IN ('LIVE_TINY', 'LIVE')
+            NEW.mode = 'LIVE'
             OR NEW.venue = 'POLYMARKET'
             OR NEW.remote_order_id IS NOT NULL
             OR NEW.exchange_order_id IS NOT NULL
@@ -81,8 +81,8 @@ BEGIN
         WHERE entry.trade_id = NEW.id
           AND entry.phase = 'ENTRY'
           AND (
-                NEW.mode IN ('LIVE_TINY', 'LIVE')
-                OR entry.mode IN ('LIVE_TINY', 'LIVE')
+                NEW.mode = 'LIVE'
+                OR entry.mode = 'LIVE'
                 OR entry.venue = 'POLYMARKET'
                 OR entry.remote_order_id IS NOT NULL
                 OR entry.exchange_order_id IS NOT NULL

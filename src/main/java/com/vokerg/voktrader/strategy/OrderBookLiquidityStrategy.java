@@ -5,7 +5,8 @@ import com.vokerg.voktrader.marketdata.FillEstimate;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.time.TimeMachine;
-import com.vokerg.voktrader.trade.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -83,12 +84,12 @@ public class OrderBookLiquidityStrategy implements TradingStrategy {
                         + "complete taker fill for configured size, average taker price, worst taker level, and taker fee cap. It routes using estimated taker average price rather than blindly using best ask.",
                 "Uses the common exit support with fee-aware exit estimates, a trailing-stop style profit exit, and a stop-loss path after minimum hold when mid and net PnL are both poor. "
                         + "Exit is still top-of-book bid based today, although StrategyOutcomeView exposes taker sell estimates for future improvement.",
-                "Best suited for avoiding paper wins that would fail in a thin real book. It is explicit about fill completeness, slippage, depth, and commissions. "
+                "Best suited for avoiding apparent wins that would fail in a thin real book. It is explicit about fill completeness, slippage, depth, and commissions. "
                         + "It is also the clearest starting point for AI agents because the strategy-facing API lists most available building blocks.",
                 "Weak when the visible order book is stale, spoofed, or changes faster than the tick cadence. It may reject good trades if depth thresholds are too strict. "
                         + "It intentionally routes through the FOK/taker-style execution path even though maker estimates are available, because this strategy optimizes immediate fill quality. "
                         + "It can also overfit to near-top depth and ignore broader market structure unless additional signals are added.",
-                "Tune near-top range, minimum near depths, maximum taker slippage, and worst-price cap together. For live work, next improvement should be sell-side book-walk exits and maker-order support."
+                "Tune near-top range, minimum near depths, maximum taker slippage, and worst-price cap together. Next improvement should be sell-side book-walk exits and maker-order support."
         );
     }
 
@@ -176,7 +177,7 @@ public class OrderBookLiquidityStrategy implements TradingStrategy {
         );
         return Optional.of(new StrategyEntrySupport.EntrySignal(
                 executablePrice,
-                config.paperSizeUsdOrDefault(),
+                config.orderSizeUsdOrDefault(),
                 "order-book liquidity: taker depth, fees, spread and near-book support passed"
         ));
     }
@@ -184,9 +185,9 @@ public class OrderBookLiquidityStrategy implements TradingStrategy {
     private Candidate candidate(StrategyOutcomeView view, StrategyProperties.OrderBookLiquidity config) {
         OutcomePrice price = view.price();
         Optional<BigDecimal> midMove = moveSince(price.tokenId(), MID_MOMENTUM_WINDOW);
-        FillEstimate takerFill = view.estimateTakerBuy(config.paperSizeUsdOrDefault()).orElse(null);
+        FillEstimate takerFill = view.estimateTakerBuy(config.orderSizeUsdOrDefault()).orElse(null);
         FeeEstimate takerFee = takerFill == null ? null : view.estimateTakerFee(takerFill).orElse(null);
-        FeeEstimate makerFee = view.estimateMakerBuyFee(config.paperSizeUsdOrDefault()).orElse(null);
+        FeeEstimate makerFee = view.estimateMakerBuyFee(config.orderSizeUsdOrDefault()).orElse(null);
         BigDecimal nearBidDepth = view.bidDepthWithin(config.nearTopRangeOrDefault());
         BigDecimal nearAskDepth = view.askDepthWithin(config.nearTopRangeOrDefault());
         BigDecimal nearImbalance = imbalance(nearBidDepth, nearAskDepth);

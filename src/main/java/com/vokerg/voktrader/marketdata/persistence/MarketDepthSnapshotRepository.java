@@ -1,6 +1,8 @@
-package com.vokerg.voktrader.marketdata;
+package com.vokerg.voktrader.marketdata.persistence;
 
 import com.vokerg.voktrader.market.MarketEntity;
+import com.vokerg.voktrader.marketdata.model.MarketDepthSnapshotEntity;
+
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 

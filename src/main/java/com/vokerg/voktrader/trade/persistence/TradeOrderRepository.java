@@ -1,10 +1,10 @@
 package com.vokerg.voktrader.trade.persistence;
 
-import com.vokerg.voktrader.trade.TradeOrderEntity;
-import com.vokerg.voktrader.trade.ExecutionMode;
-import com.vokerg.voktrader.trade.TradeOrderPhase;
-import com.vokerg.voktrader.trade.TradeOrderStatus;
-import com.vokerg.voktrader.trade.TradeSide;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderPhase;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeSide;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -37,10 +37,10 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Lo
               and (
                     o.status in :activeStatuses
                     or (
-                        o.status = com.vokerg.voktrader.trade.TradeOrderStatus.EXPIRED
-                        and o.phase = com.vokerg.voktrader.trade.TradeOrderPhase.ENTRY
+                        o.status = com.vokerg.voktrader.trade.model.TradeOrderStatus.EXPIRED
+                        and o.phase = com.vokerg.voktrader.trade.model.TradeOrderPhase.ENTRY
                         and o.filledShares is null
-                        and t.status = com.vokerg.voktrader.trade.TradeStatus.CANCELLED
+                        and t.status = com.vokerg.voktrader.trade.model.TradeStatus.CANCELLED
                     )
               )
             """)
@@ -74,10 +74,10 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Lo
     @Query("""
             select distinct entry.tradeId
             from TradeOrderEntity entry
-            where entry.phase = com.vokerg.voktrader.trade.TradeOrderPhase.ENTRY
+            where entry.phase = com.vokerg.voktrader.trade.model.TradeOrderPhase.ENTRY
               and (
-                    entry.mode in (com.vokerg.voktrader.trade.ExecutionMode.LIVE_TINY, com.vokerg.voktrader.trade.ExecutionMode.LIVE)
-                    or entry.venue = com.vokerg.voktrader.trade.TradeVenue.POLYMARKET
+                    entry.mode = com.vokerg.voktrader.trade.model.ExecutionMode.LIVE
+                    or entry.venue = com.vokerg.voktrader.trade.model.TradeVenue.POLYMARKET
                     or entry.remoteOrderId is not null
                     or entry.exchangeOrderId is not null
               )
@@ -85,8 +85,8 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Lo
                     select 1
                     from TradeOrderEntity exit
                     where exit.tradeId = entry.tradeId
-                      and exit.phase = com.vokerg.voktrader.trade.TradeOrderPhase.EXIT
-                      and exit.venue = com.vokerg.voktrader.trade.TradeVenue.PAPER_SIM
+                      and exit.phase = com.vokerg.voktrader.trade.model.TradeOrderPhase.EXIT
+                      and exit.venue = com.vokerg.voktrader.trade.model.TradeVenue.PAPER_SIM
               )
             """)
     List<Long> findTradeIdsWithLiveEntryAndPaperExit();

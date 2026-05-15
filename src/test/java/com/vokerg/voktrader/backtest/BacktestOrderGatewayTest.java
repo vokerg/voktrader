@@ -7,20 +7,20 @@ import com.vokerg.voktrader.marketdata.LatestPriceState;
 import com.vokerg.voktrader.marketdata.OrderBookState;
 import com.vokerg.voktrader.polymarket.dto.PriceLevelDto;
 import com.vokerg.voktrader.time.TimeMachine;
-import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.OrderLifecycleResult;
 import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
 import com.vokerg.voktrader.trade.StrategyInstanceKey;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
-import com.vokerg.voktrader.trade.TradeEntity;
-import com.vokerg.voktrader.trade.TradeFillEntity;
 import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.TradeOrderEntity;
-import com.vokerg.voktrader.trade.TradeOrderStatus;
 import com.vokerg.voktrader.trade.TradeOrderType;
-import com.vokerg.voktrader.trade.TradeSide;
-import com.vokerg.voktrader.trade.TradeStatus;
 import com.vokerg.voktrader.trade.TradingProperties;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeFillEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeSide;
+import com.vokerg.voktrader.trade.model.TradeStatus;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
@@ -98,7 +98,7 @@ class BacktestOrderGatewayTest {
     @Test
     void fokFillsWhenDepthIsAvailable() {
         OrderLifecycleResult result = withBook("0.49", "10", "0.50", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.FOK, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.TESTING)
+                gateway.submitOrder(intent(TradeOrderType.FOK, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.BACKTEST)
         );
 
         assertThat(result.success()).isTrue();
@@ -109,7 +109,7 @@ class BacktestOrderGatewayTest {
     @Test
     void fokDoesNotFillWhenDepthIsInsufficient() {
         OrderLifecycleResult result = withBook("0.49", "1", "0.50", "1", () ->
-                gateway.submitOrder(intent(TradeOrderType.FOK, TradeSide.BUY, "0.50", "10.00", null), owner(), ExecutionMode.TESTING)
+                gateway.submitOrder(intent(TradeOrderType.FOK, TradeSide.BUY, "0.50", "10.00", null), owner(), ExecutionMode.BACKTEST)
         );
 
         assertThat(result.success()).isFalse();
@@ -120,7 +120,7 @@ class BacktestOrderGatewayTest {
     @Test
     void fakPartiallyFillsAndLeavesTradePartiallyOpen() {
         OrderLifecycleResult result = withBook("0.49", "1", "0.50", "1", () ->
-                gateway.submitOrder(intent(TradeOrderType.FAK, TradeSide.BUY, "0.50", "10.00", null), owner(), ExecutionMode.TESTING)
+                gateway.submitOrder(intent(TradeOrderType.FAK, TradeSide.BUY, "0.50", "10.00", null), owner(), ExecutionMode.BACKTEST)
         );
 
         assertThat(result.success()).isTrue();
@@ -134,7 +134,7 @@ class BacktestOrderGatewayTest {
         executionProperties.setDefaultGtdSeconds(8);
         Instant start = Instant.parse("2026-05-09T12:00:00Z");
         TimeMachine.runAt(start, () -> withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTD, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.TESTING)
+                gateway.submitOrder(intent(TradeOrderType.GTD, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.BACKTEST)
         ));
 
         TimeMachine.runAt(start.plusSeconds(9), () -> withBook("0.49", "10", "0.51", "10", () -> {
@@ -152,7 +152,7 @@ class BacktestOrderGatewayTest {
     void makerTouchBuyFillsWhenFutureAskTouchesLimit() {
         executionProperties.setFillModel("maker_touch");
         TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.TESTING)
+                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.BACKTEST)
         ));
 
         TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook("0.49", "10", "0.50", "10", () -> {
@@ -171,7 +171,7 @@ class BacktestOrderGatewayTest {
         executionProperties.setFillModel("maker_touch");
         executionProperties.setMakerTouchFillRatio(new BigDecimal("0.25"));
         TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "50.00", null), owner(), ExecutionMode.TESTING)
+                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "50.00", null), owner(), ExecutionMode.BACKTEST)
         ));
 
         TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook("0.49", "10", "0.50", "40", () -> {
@@ -200,7 +200,7 @@ class BacktestOrderGatewayTest {
     void makerCrossPessimisticBuyRequiresFutureAskBelowLimit() {
         executionProperties.setFillModel("maker_cross_pessimistic");
         TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.TESTING)
+                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.BACKTEST)
         ));
         TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook("0.49", "10", "0.50", "10", () -> {
             gateway.advanceOpenOrders();
@@ -218,7 +218,7 @@ class BacktestOrderGatewayTest {
     @Test
     void cancelledOrderDoesNotFillLaterAndStateShowsNoActiveTrade() {
         TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.TESTING)
+                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.BACKTEST)
         ));
         String localOrderId = orders.values().iterator().next().getLocalOrderId();
         gateway.cancelOrder(localOrderId, "test cancel");

@@ -74,7 +74,7 @@ public class SimpleDownCheapTightSpreadStrategy implements TradingStrategy {
         TradeExecutionResult result = executionRouter.route(TradeIntent.buy(
                 market,
                 down,
-                config.paperSizeUsdOrDefault(),
+                config.orderSizeUsdOrDefault(),
                 ID,
                 "down-ask-cheap-spread-tight",
                 "Down ask <= " + config.maxAskOrDefault()

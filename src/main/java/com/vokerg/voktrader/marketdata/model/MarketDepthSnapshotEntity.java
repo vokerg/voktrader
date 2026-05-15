@@ -1,6 +1,10 @@
-package com.vokerg.voktrader.marketdata;
+package com.vokerg.voktrader.marketdata.model;
 
 import com.vokerg.voktrader.market.MarketEntity;
+import com.vokerg.voktrader.marketdata.FillEstimate;
+import com.vokerg.voktrader.marketdata.OrderBookLevel;
+import com.vokerg.voktrader.marketdata.OutcomeOrderBook;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;

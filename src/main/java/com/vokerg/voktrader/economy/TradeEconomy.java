@@ -1,8 +1,8 @@
 package com.vokerg.voktrader.economy;
 
-import com.vokerg.voktrader.trade.TradeEntity;
-
 import java.math.BigDecimal;
+
+import com.vokerg.voktrader.trade.model.TradeEntity;
 
 public interface TradeEconomy {
     FeeEstimate estimateFee(BigDecimal shares, BigDecimal price, LiquidityRole liquidityRole);

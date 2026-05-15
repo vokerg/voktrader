@@ -14,10 +14,10 @@ import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class StrategyV2PaperConfigTest {
+class StrategyV2ConfigTest {
     @ParameterizedTest
     @CsvSource({
-            "strategy-v2.paper.yml,cfg_v2_liquidity_momentum_paper,1",
+            "strategy-v2.default.yml,cfg_v2_liquidity_momentum,1",
             "strategy-v2.example.yml,cfg_shower_trades_v2,8"
     })
     void configBindsAndValidates(String resource, String activeStrategyId, int strategyCount) {

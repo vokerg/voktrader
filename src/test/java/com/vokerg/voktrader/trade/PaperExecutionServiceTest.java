@@ -1,5 +1,15 @@
 package com.vokerg.voktrader.trade;
 
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeEventEntity;
+import com.vokerg.voktrader.trade.model.TradeFillEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeRiskCheckEntity;
+import com.vokerg.voktrader.trade.model.TradeSide;
+import com.vokerg.voktrader.trade.model.TradeStatus;
+import com.vokerg.voktrader.trade.model.TradeVenue;
 import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
@@ -73,14 +83,14 @@ class PaperExecutionServiceTest {
                 eq(ExecutionMode.PAPER),
                 eq(null),
                 eq(null),
-                eq("PAPER:default:market-id:up:cost-aware-momentum-paper:BUY")
+                eq("PAPER:default:market-id:up:cost-aware-momentum:BUY")
         )).thenReturn(blocked);
 
         TradeExecutionResult result = service.execute(TradeIntent.buy(
                 market(),
                 price("up", "Up", "0.59", "0.61"),
                 new BigDecimal("1.00"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "entry"
         ));
@@ -105,7 +115,7 @@ class PaperExecutionServiceTest {
                 market,
                 price("up", "Up", "0.49", "0.50"),
                 new BigDecimal("1.00"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "entry"
         ), ExecutionMode.PAPER);
@@ -118,7 +128,7 @@ class PaperExecutionServiceTest {
         );
 
         when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "market-id",
                 "up",
                 TradeStatus.OPEN
@@ -132,7 +142,7 @@ class PaperExecutionServiceTest {
                 market,
                 price("up", "Up", "0.60", "0.62"),
                 new BigDecimal("2.00000000"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "exit"
         ));
@@ -158,7 +168,7 @@ class PaperExecutionServiceTest {
     void sellRejectsWhenNoOpenTradeExists() {
         GammaMarketDto market = market();
         when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "market-id",
                 "up",
                 TradeStatus.OPEN
@@ -168,7 +178,7 @@ class PaperExecutionServiceTest {
                 market,
                 price("up", "Up", "0.60", "0.62"),
                 new BigDecimal("2.00000000"),
-                "cost-aware-momentum-paper",
+                "cost-aware-momentum",
                 "cost-aware-momentum",
                 "exit"
         ));
@@ -189,11 +199,11 @@ class PaperExecutionServiceTest {
                 TradeOrderType.GTD,
                 true,
                 new BigDecimal("0.51"),
-                "MK_GTD_EDGE_LIVE_TINY_A",
-                "mk-gtd-edge-live-tiny-a-entry",
+                "MK_GTD_EDGE_A",
+                "mk-gtd-edge-a-entry",
                 "entry"
         );
-        TradeEntity liveTrade = TradeEntity.fromIntent(entryIntent, ExecutionMode.LIVE_TINY);
+        TradeEntity liveTrade = TradeEntity.fromIntent(entryIntent, ExecutionMode.LIVE);
         ReflectionTestUtils.setField(liveTrade, "id", 5308L);
         liveTrade.markOpen(
                 new BigDecimal("0.51"),
@@ -202,14 +212,14 @@ class PaperExecutionServiceTest {
                 BigDecimal.ZERO,
                 Instant.parse("2026-05-13T18:26:46Z")
         );
-        TradeOrderEntity entryOrder = TradeOrderEntity.fromIntent(5308L, entryIntent, ExecutionMode.LIVE_TINY, TradeVenue.POLYMARKET, "entry-local");
+        TradeOrderEntity entryOrder = TradeOrderEntity.fromIntent(5308L, entryIntent, ExecutionMode.LIVE, TradeVenue.POLYMARKET, "entry-local");
         ReflectionTestUtils.setField(entryOrder, "id", 6355L);
         entryOrder.markSubmitting("entry-local", "{}");
         entryOrder.markFilled("0xec019dfad0d11eedca8c3c47071f4a279dcd74ef548fc7969721f1e7b7a268e7", new BigDecimal("0.51"), new BigDecimal("5"), new BigDecimal("2.55"));
 
         when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
                 67L,
-                "MK_GTD_EDGE_LIVE_TINY_A",
+                "MK_GTD_EDGE_A",
                 "market-id",
                 "down",
                 TradeStatus.OPEN
@@ -224,9 +234,9 @@ class PaperExecutionServiceTest {
                 new BigDecimal("5"),
                 TradeOrderType.FAK,
                 new BigDecimal("0.40"),
-                "MK_GTD_EDGE_LIVE_TINY_A",
+                "MK_GTD_EDGE_A",
                 "book-pressure-flips",
-                "strategy-v2 exit strategy=MK_GTD_EDGE_LIVE_TINY_A rule=book-pressure-flips outcome=Down"
+                "strategy-v2 exit strategy=MK_GTD_EDGE_A rule=book-pressure-flips outcome=Down"
         ));
 
         assertThat(result.accepted()).isFalse();
@@ -260,8 +270,8 @@ class PaperExecutionServiceTest {
                 TradeOrderType.GTD,
                 true,
                 new BigDecimal("0.51"),
-                "MK_GTD_EDGE_LIVE_TINY_A",
-                "mk-gtd-edge-live-tiny-a-entry",
+                "MK_GTD_EDGE_A",
+                "mk-gtd-edge-a-entry",
                 "entry"
         );
         TradeEntity trade = TradeEntity.fromIntent(entryIntent, ExecutionMode.PAPER);
@@ -280,7 +290,7 @@ class PaperExecutionServiceTest {
 
         when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
                 67L,
-                "MK_GTD_EDGE_LIVE_TINY_A",
+                "MK_GTD_EDGE_A",
                 "market-id",
                 "down",
                 TradeStatus.OPEN
@@ -295,9 +305,9 @@ class PaperExecutionServiceTest {
                 new BigDecimal("5"),
                 TradeOrderType.FAK,
                 new BigDecimal("0.40"),
-                "MK_GTD_EDGE_LIVE_TINY_A",
+                "MK_GTD_EDGE_A",
                 "book-pressure-flips",
-                "strategy-v2 exit strategy=MK_GTD_EDGE_LIVE_TINY_A rule=book-pressure-flips outcome=Down"
+                "strategy-v2 exit strategy=MK_GTD_EDGE_A rule=book-pressure-flips outcome=Down"
         ));
 
         assertThat(result.accepted()).isFalse();

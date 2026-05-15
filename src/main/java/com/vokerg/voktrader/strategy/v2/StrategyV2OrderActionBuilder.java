@@ -2,7 +2,6 @@ package com.vokerg.voktrader.strategy.v2;
 
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
-import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.ExecutionRouter;
 import com.vokerg.voktrader.trade.OrderGateway;
 import com.vokerg.voktrader.trade.OrderGatewayContext;
@@ -10,8 +9,10 @@ import com.vokerg.voktrader.trade.StrategyInstanceKey;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradeOrderType;
-import com.vokerg.voktrader.trade.TradeSide;
 import com.vokerg.voktrader.trade.TradingProperties;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeSide;
+
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -39,10 +40,10 @@ public class StrategyV2OrderActionBuilder {
 
     public TradeExecutionResult routeEntry(
             StrategyV2Properties.Strategy strategy,
-            StrategyV2FeatureContext context,
-            ExecutionMode mode
+            StrategyV2FeatureContext context
     ) {
         StrategyV2Properties.Action action = strategy.getEntry().getAction();
+        ExecutionMode mode = configuredMode();
         if (!"BUY".equalsIgnoreCase(action.getSide())) {
             return TradeExecutionResult.rejected(mode, null, null, null, null, "Strategy V2 entry only supports BUY actions in this version");
         }
@@ -87,9 +88,9 @@ public class StrategyV2OrderActionBuilder {
     public TradeExecutionResult routeExit(
             StrategyV2Properties.Strategy strategy,
             StrategyV2Properties.ExitRule rule,
-            StrategyV2FeatureContext context,
-            ExecutionMode mode
+            StrategyV2FeatureContext context
     ) {
+        ExecutionMode mode = configuredMode();
         TradeOrderType orderType = orderType(rule == null ? null : rule.getOrderType());
         String liquidityRole = rule == null ? null : rule.getLiquidityRole();
         boolean postOnly = liquidityRole != null
@@ -127,6 +128,14 @@ public class StrategyV2OrderActionBuilder {
         return executionRouter.route(intent);
     }
 
+    private ExecutionMode configuredMode() {
+        ExecutionMode mode = tradingProperties.getMode();
+        if (mode == null) {
+            throw new IllegalStateException("voktrader.trading.mode must be configured explicitly");
+        }
+        return mode;
+    }
+
     private BigDecimal amountUsd(StrategyV2Properties.Action action, BigDecimal price, BigDecimal shares) {
         StrategyV2Properties.Size size = action.getSize();
         if ("fixed_shares".equalsIgnoreCase(size.getType())) {
@@ -135,7 +144,7 @@ public class StrategyV2OrderActionBuilder {
             }
             return shares.multiply(price).setScale(SCALE, RoundingMode.HALF_UP);
         }
-        BigDecimal value = size.getPaperUsd() == null ? new BigDecimal("1.00") : size.getPaperUsd();
+        BigDecimal value = size.getUsd() == null ? new BigDecimal("1.00") : size.getUsd();
         if (size.getMaxUsd() != null && value.compareTo(size.getMaxUsd()) > 0) {
             value = size.getMaxUsd();
         }

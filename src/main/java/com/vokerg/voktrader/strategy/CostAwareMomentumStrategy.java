@@ -2,8 +2,9 @@ package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
-import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.time.TimeMachine;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -24,7 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Component
 public class CostAwareMomentumStrategy implements TradingStrategy {
 
-    public static final String ID = "cost-aware-momentum-paper";
+    public static final String ID = "cost-aware-momentum";
 
     private static final Duration SAMPLE_WINDOW = Duration.ofSeconds(30);
     private static final Duration MID_MOMENTUM_WINDOW = Duration.ofSeconds(10);
@@ -139,7 +140,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
         if (isNearExpiry(analysis.market(), config)) {
             if (profitTargetReached) {
                 clearTrailingState(trade);
-                return Optional.of("near expiry profitable paper exit");
+                return Optional.of("near expiry profitable exit");
             }
 
             return Optional.empty();
@@ -252,7 +253,7 @@ public class CostAwareMomentumStrategy implements TradingStrategy {
 
         return Optional.of(new StrategyEntrySupport.EntrySignal(
                 candidate,
-                config.paperSizeUsdOrDefault(),
+                config.orderSizeUsdOrDefault(),
                 "cost-aware momentum: stronger side with positive 10s move"
         ));
     }

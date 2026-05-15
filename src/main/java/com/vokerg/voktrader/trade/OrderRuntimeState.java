@@ -1,6 +1,9 @@
 package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.economy.LiquidityRole;
+import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderPhase;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 
 import java.math.BigDecimal;
 import java.time.Duration;

@@ -1,13 +1,13 @@
 package com.vokerg.voktrader.api.trade;
 
 import com.vokerg.voktrader.api.trade.dto.TradeDetailResponse;
-import com.vokerg.voktrader.trade.ExecutionMode;
-import com.vokerg.voktrader.trade.TradeEntity;
-import com.vokerg.voktrader.trade.TradeEventEntity;
 import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.TradeOrderEntity;
 import com.vokerg.voktrader.trade.TradeOrderType;
-import com.vokerg.voktrader.trade.TradeSide;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeEventEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
@@ -65,13 +65,13 @@ class TradeQueryServiceTest {
 
     private TradeEntity trade(Long id) {
         TradeIntent intent = intent();
-        TradeEntity trade = TradeEntity.fromIntent(intent, ExecutionMode.LIVE_TINY);
+        TradeEntity trade = TradeEntity.fromIntent(intent, ExecutionMode.LIVE);
         ReflectionTestUtils.setField(trade, "id", id);
         return trade;
     }
 
     private TradeOrderEntity order(Long tradeId) {
-        TradeOrderEntity order = TradeOrderEntity.fromIntent(tradeId, intent(), ExecutionMode.LIVE_TINY, null, "entry-local");
+        TradeOrderEntity order = TradeOrderEntity.fromIntent(tradeId, intent(), ExecutionMode.LIVE, null, "entry-local");
         ReflectionTestUtils.setField(order, "id", 6340L);
         return order;
     }
@@ -80,8 +80,8 @@ class TradeQueryServiceTest {
         Instant now = Instant.parse("2026-05-13T18:26:42Z");
         return new TradeIntent(
                 67L,
-                "MK_GTD_EDGE_LIVE_TINY_A",
-                "mk-gtd-edge-live-tiny-a-entry",
+                "MK_GTD_EDGE_A",
+                "mk-gtd-edge-a-entry",
                 "2243638",
                 "btc-updown-5m-1778696700",
                 "Bitcoin Up or Down",

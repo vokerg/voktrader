@@ -2,16 +2,17 @@ package com.vokerg.voktrader.strategy.v2;
 
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.strategy.StrategyOutcomeView;
-import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.ExecutionRouter;
 import com.vokerg.voktrader.trade.OrderGateway;
 import com.vokerg.voktrader.trade.OrderLifecycleResult;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.TradeOrderStatus;
 import com.vokerg.voktrader.trade.TradeOrderType;
-import com.vokerg.voktrader.trade.TradeStatus;
 import com.vokerg.voktrader.trade.TradingProperties;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeStatus;
+
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -42,7 +43,7 @@ class StrategyV2OrderActionBuilderTest {
     @Test
     void flagDisabledRoutesThroughExistingExecutionRouter() {
         when(executionRouter.route(any(TradeIntent.class))).thenReturn(TradeExecutionResult.accepted(
-                ExecutionMode.LIVE_TINY,
+                ExecutionMode.LIVE,
                 1L,
                 2L,
                 TradeStatus.OPEN,
@@ -50,7 +51,7 @@ class StrategyV2OrderActionBuilderTest {
                 "accepted"
         ));
 
-        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context(), ExecutionMode.LIVE_TINY);
+        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context());
 
         assertThat(result.accepted()).isTrue();
         verify(executionRouter).route(any(TradeIntent.class));
@@ -72,7 +73,7 @@ class StrategyV2OrderActionBuilderTest {
                 null
         ));
 
-        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context(), ExecutionMode.LIVE_TINY);
+        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context());
 
         assertThat(result.accepted()).isTrue();
         assertThat(result.localOrderId()).isEqualTo("local-1");
@@ -97,7 +98,7 @@ class StrategyV2OrderActionBuilderTest {
                 null
         ));
 
-        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.GTC), context(), ExecutionMode.LIVE_TINY);
+        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.GTC), context());
 
         assertThat(result.accepted()).isTrue();
         assertThat(result.tradeStatus()).isEqualTo(TradeStatus.ENTRY_PENDING);
@@ -123,7 +124,7 @@ class StrategyV2OrderActionBuilderTest {
                 null
         ));
 
-        builder.routeEntry(fixedSharesStrategy(), context(), ExecutionMode.TESTING);
+        builder.routeEntry(fixedSharesStrategy(), context());
 
         ArgumentCaptor<TradeIntent> intent = ArgumentCaptor.forClass(TradeIntent.class);
         verify(orderGateway).submitOrder(intent.capture(), any(), any());
@@ -150,7 +151,7 @@ class StrategyV2OrderActionBuilderTest {
         StrategyV2Properties.Strategy strategy = fixedSharesStrategy();
         strategy.getEntry().getAction().getSize().setShares(null);
 
-        builder.routeEntry(strategy, context(), ExecutionMode.TESTING);
+        builder.routeEntry(strategy, context());
 
         ArgumentCaptor<TradeIntent> intent = ArgumentCaptor.forClass(TradeIntent.class);
         verify(orderGateway).submitOrder(intent.capture(), any(), any());
@@ -174,7 +175,7 @@ class StrategyV2OrderActionBuilderTest {
                 "rejected"
         ));
 
-        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context(), ExecutionMode.LIVE_TINY);
+        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context());
 
         assertThat(result.accepted()).isFalse();
         assertThat(result.error()).isEqualTo("rejected");
@@ -195,7 +196,7 @@ class StrategyV2OrderActionBuilderTest {
         action.setOrderType(orderType.name());
         action.setPostOnly(orderType.canRestOnBook());
         StrategyV2Properties.Size size = new StrategyV2Properties.Size();
-        size.setPaperUsd(new BigDecimal("1.00"));
+        size.setUsd(new BigDecimal("1.00"));
         action.setSize(size);
         entry.setAction(action);
         strategy.setEntry(entry);

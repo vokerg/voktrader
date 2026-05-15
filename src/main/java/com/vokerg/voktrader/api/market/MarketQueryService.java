@@ -8,8 +8,9 @@ import com.vokerg.voktrader.market.MarketEntity;
 import com.vokerg.voktrader.market.MarketRepository;
 import com.vokerg.voktrader.market.MarketResolutionStatus;
 import com.vokerg.voktrader.market.MarketTrackingStatus;
-import com.vokerg.voktrader.marketdata.MarketDepthSnapshotRepository;
-import com.vokerg.voktrader.marketdata.PriceSnapshotRepository;
+import com.vokerg.voktrader.marketdata.persistence.MarketDepthSnapshotRepository;
+import com.vokerg.voktrader.marketdata.persistence.PriceSnapshotRepository;
+
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;

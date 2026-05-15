@@ -7,18 +7,17 @@ import com.vokerg.voktrader.strategy.StrategyMarketDataProvider;
 import com.vokerg.voktrader.strategy.StrategyMarketView;
 import com.vokerg.voktrader.strategy.StrategyOutcomeView;
 import com.vokerg.voktrader.time.TimeMachine;
-import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.OrderGateway;
 import com.vokerg.voktrader.trade.OrderLifecycleResult;
 import com.vokerg.voktrader.trade.OrderRuntimeState;
 import com.vokerg.voktrader.trade.StrategyInstanceKey;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
-import com.vokerg.voktrader.trade.TradeOrderPhase;
-import com.vokerg.voktrader.trade.TradeOrderStatus;
 import com.vokerg.voktrader.trade.TradeOrderType;
 import com.vokerg.voktrader.trade.TradeStateProvider;
-import com.vokerg.voktrader.trade.TradeStatus;
-import com.vokerg.voktrader.trade.TradingProperties;
+import com.vokerg.voktrader.trade.model.TradeOrderPhase;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeStatus;
+
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -47,17 +46,15 @@ class StrategyV2RuntimeStateAwarenessTest {
     private final StrategyV2DiagnosticsRecorder diagnosticsRecorder = mock(StrategyV2DiagnosticsRecorder.class);
     private final TradeStateProvider tradeStateProvider = mock(TradeStateProvider.class);
     private final OrderGateway orderGateway = mock(OrderGateway.class);
-    private final TradingProperties tradingProperties = new TradingProperties();
-
     @Test
-    void flagDisabledStillUsesStateAwarePaperFlow() {
+    void flagDisabledStillUsesStateAwareFlow() {
         EngineFixture fixture = fixture(false, StrategyRuntimeState.empty(StrategyInstanceKey.of(null, "strategy-test"), "market-id"));
 
         fixture.engine.tick();
 
         verify(tradeStateProvider).getState(any(), any());
         verify(featureResolver).contexts(any(), any(), any(), any());
-        verify(entryEvaluator).evaluate(eq(fixture.strategy), anyList(), eq(featureResolver), eq(ExecutionMode.PAPER));
+        verify(entryEvaluator).evaluate(eq(fixture.strategy), anyList(), eq(featureResolver));
     }
 
     @Test
@@ -67,7 +64,7 @@ class StrategyV2RuntimeStateAwarenessTest {
         fixture.engine.tick();
 
         verify(tradeStateProvider).getState(any(StrategyInstanceKey.class), eq("market-id"));
-        verify(entryEvaluator).evaluate(eq(fixture.strategy), anyList(), eq(featureResolver), eq(ExecutionMode.PAPER));
+        verify(entryEvaluator).evaluate(eq(fixture.strategy), anyList(), eq(featureResolver));
     }
 
     @Test
@@ -76,7 +73,7 @@ class StrategyV2RuntimeStateAwarenessTest {
 
         fixture.engine.tick();
 
-        verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
+        verify(entryEvaluator, never()).evaluate(any(), anyList(), any());
         verify(orderGateway, never()).cancelOrder(any(), any());
     }
 
@@ -90,7 +87,7 @@ class StrategyV2RuntimeStateAwarenessTest {
 
         fixture.engine.tick();
 
-        verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
+        verify(entryEvaluator, never()).evaluate(any(), anyList(), any());
         verify(orderGateway).cancelOrder(eq("entry-local"), any());
     }
 
@@ -109,7 +106,7 @@ class StrategyV2RuntimeStateAwarenessTest {
 
         fixture.engine.tick();
 
-        verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
+        verify(entryEvaluator, never()).evaluate(any(), anyList(), any());
         verify(orderGateway).cancelOrder(
                 eq("entry-local"),
                 org.mockito.ArgumentMatchers.contains("maker best bid moved away")
@@ -137,8 +134,7 @@ class StrategyV2RuntimeStateAwarenessTest {
             verify(entryEvaluator).evaluate(
                     eq(fixture.strategy),
                     argThat(List::isEmpty),
-                    eq(featureResolver),
-                    eq(ExecutionMode.PAPER)
+                    eq(featureResolver)
             );
         });
     }
@@ -150,8 +146,8 @@ class StrategyV2RuntimeStateAwarenessTest {
 
         fixture.engine.tick();
 
-        verify(exitEvaluator).evaluate(eq(fixture.strategy), any(), any(), eq(state), eq(ExecutionMode.PAPER));
-        verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
+        verify(exitEvaluator).evaluate(eq(fixture.strategy), any(), any(), eq(state));
+        verify(entryEvaluator, never()).evaluate(any(), anyList(), any());
     }
 
     @Test
@@ -160,8 +156,8 @@ class StrategyV2RuntimeStateAwarenessTest {
 
         fixture.engine.tick();
 
-        verify(exitEvaluator, never()).evaluate(any(), any(), any(), any(StrategyRuntimeState.class), any());
-        verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
+        verify(exitEvaluator, never()).evaluate(any(), any(), any(), any(StrategyRuntimeState.class));
+        verify(entryEvaluator, never()).evaluate(any(), anyList(), any());
         verify(orderGateway, never()).cancelOrder(any(), any());
     }
 
@@ -172,8 +168,8 @@ class StrategyV2RuntimeStateAwarenessTest {
 
         fixture.engine.tick();
 
-        verify(exitEvaluator).evaluate(eq(fixture.strategy), any(), any(), eq(state), eq(ExecutionMode.PAPER));
-        verify(entryEvaluator, never()).evaluate(any(), anyList(), any(), any());
+        verify(exitEvaluator).evaluate(eq(fixture.strategy), any(), any(), eq(state));
+        verify(entryEvaluator, never()).evaluate(any(), anyList(), any());
     }
 
     private EngineFixture fixture(boolean useOrderLayer, StrategyRuntimeState state) {
@@ -181,7 +177,6 @@ class StrategyV2RuntimeStateAwarenessTest {
         StrategyV2Properties.Strategy strategy = strategy();
         properties.setStrategies(List.of(strategy));
         executionProperties.setUseOrderLayer(useOrderLayer);
-        tradingProperties.setMode(ExecutionMode.PAPER);
         StrategyV2Registry registry = new StrategyV2Registry(properties);
         StrategyMarketView marketView = marketView();
         when(trackedMarketState.currentMarket()).thenReturn(Optional.of(market()));
@@ -190,7 +185,7 @@ class StrategyV2RuntimeStateAwarenessTest {
         List<StrategyV2FeatureContext> contexts = List.of(context());
         when(featureResolver.contexts(any(), any(), any())).thenReturn(contexts);
         when(featureResolver.contexts(any(), any(), any(), any())).thenReturn(contexts);
-        when(entryEvaluator.evaluate(any(), anyList(), eq(featureResolver), any())).thenReturn(Optional.empty());
+        when(entryEvaluator.evaluate(any(), anyList(), eq(featureResolver))).thenReturn(Optional.empty());
         StrategyV2SetCatalog configCatalog = mock(StrategyV2SetCatalog.class);
         when(configCatalog.propertiesFor(any())).thenReturn(Optional.empty());
         StrategyV2Engine engine = new StrategyV2Engine(
@@ -205,7 +200,6 @@ class StrategyV2RuntimeStateAwarenessTest {
                 executionProperties,
                 tradeStateProvider,
                 orderGateway,
-                tradingProperties,
                 configCatalog
         );
         return new EngineFixture(engine, strategy, marketView);
@@ -218,7 +212,7 @@ class StrategyV2RuntimeStateAwarenessTest {
         StrategyV2Properties.Action action = new StrategyV2Properties.Action();
         action.setOrderType(TradeOrderType.FOK.name());
         StrategyV2Properties.Size size = new StrategyV2Properties.Size();
-        size.setPaperUsd(new BigDecimal("1.00"));
+        size.setUsd(new BigDecimal("1.00"));
         action.setSize(size);
         entry.setAction(action);
         strategy.setEntry(entry);
@@ -331,4 +325,3 @@ class StrategyV2RuntimeStateAwarenessTest {
     private record EngineFixture(StrategyV2Engine engine, StrategyV2Properties.Strategy strategy, StrategyMarketView marketView) {
     }
 }
-

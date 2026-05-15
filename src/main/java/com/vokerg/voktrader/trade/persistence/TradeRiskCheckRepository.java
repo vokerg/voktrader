@@ -1,8 +1,8 @@
 package com.vokerg.voktrader.trade.persistence;
 
-import com.vokerg.voktrader.trade.TradeRiskCheckEntity;
-
 import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.vokerg.voktrader.trade.model.TradeRiskCheckEntity;
 
 import java.util.List;
 

@@ -7,25 +7,25 @@ import com.vokerg.voktrader.marketdata.OrderBookLevel;
 import com.vokerg.voktrader.marketdata.OrderBookState;
 import com.vokerg.voktrader.marketdata.OutcomeOrderBook;
 import com.vokerg.voktrader.time.TimeMachine;
-import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.OrderGateway;
 import com.vokerg.voktrader.trade.OrderLifecycleResult;
 import com.vokerg.voktrader.trade.OrderRuntimeState;
 import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
 import com.vokerg.voktrader.trade.StrategyInstanceKey;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
-import com.vokerg.voktrader.trade.TradeEntity;
-import com.vokerg.voktrader.trade.TradeFillEntity;
 import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.TradeOrderEntity;
-import com.vokerg.voktrader.trade.TradeOrderPhase;
-import com.vokerg.voktrader.trade.TradeOrderStatus;
 import com.vokerg.voktrader.trade.TradeOrderType;
-import com.vokerg.voktrader.trade.TradeSide;
 import com.vokerg.voktrader.trade.TradeStateProvider;
-import com.vokerg.voktrader.trade.TradeStatus;
-import com.vokerg.voktrader.trade.TradeVenue;
 import com.vokerg.voktrader.trade.TradingProperties;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeFillEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderPhase;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeSide;
+import com.vokerg.voktrader.trade.model.TradeStatus;
+import com.vokerg.voktrader.trade.model.TradeVenue;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
@@ -90,7 +90,7 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
         TradeOrderEntity order = tradeOrderRepository.save(TradeOrderEntity.fromIntent(
                 trade.getId(),
                 intent,
-                ExecutionMode.TESTING,
+                ExecutionMode.BACKTEST,
                 TradeVenue.BACKTEST_SIM,
                 localOrderId
         ));
@@ -411,7 +411,7 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
     }
 
     private TradeEntity createEntryTrade(TradeIntent intent) {
-        TradeEntity trade = TradeEntity.fromIntent(intent, ExecutionMode.TESTING);
+        TradeEntity trade = TradeEntity.fromIntent(intent, ExecutionMode.BACKTEST);
         trade.attachBacktestRun(runId);
         return tradeRepository.save(trade);
     }

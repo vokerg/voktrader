@@ -16,7 +16,7 @@ import java.util.Optional;
  *
  * <p>Order style note: strategies can now express both immediate taker-style orders and resting maker-style
  * orders through {@link StrategyEntrySupport.EntrySignal}. FOK/FAK should be treated as executable-now taker
- * intents. GTC/GTD maker intents can rest on the book and may avoid taker fees, but live use requires order
+ * intents. GTC/GTD maker intents can rest on the book and may avoid taker fees, but use requires order
  * reconciliation and cancellation policy because a resting order may remain unfilled.</p>
  */
 public interface StrategyMarketView {

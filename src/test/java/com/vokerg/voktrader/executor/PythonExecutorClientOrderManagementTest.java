@@ -1,8 +1,9 @@
 package com.vokerg.voktrader.executor;
 
-import com.vokerg.voktrader.trade.TradeSide;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
+
+import com.vokerg.voktrader.trade.model.TradeSide;
 
 import java.math.BigDecimal;
 

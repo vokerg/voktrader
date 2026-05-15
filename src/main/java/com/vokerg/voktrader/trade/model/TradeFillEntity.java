@@ -1,4 +1,4 @@
-package com.vokerg.voktrader.trade;
+package com.vokerg.voktrader.trade.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

@@ -2,6 +2,8 @@ package com.vokerg.voktrader.trade;
 
 import org.junit.jupiter.api.Test;
 
+import com.vokerg.voktrader.trade.model.TradeStatus;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class TradeStatusTest {

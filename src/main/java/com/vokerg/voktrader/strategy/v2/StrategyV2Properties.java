@@ -37,7 +37,7 @@ public class StrategyV2Properties {
         private boolean requireMidSumSane = true;
         private BigDecimal minMidSum = new BigDecimal("0.97");
         private BigDecimal maxMidSum = new BigDecimal("1.03");
-        private String defaultProfile = "conservative_paper";
+        private String defaultProfile = "conservative";
         private Safety safety = new Safety();
 
         public boolean isEnabled() { return enabled; }
@@ -66,18 +66,12 @@ public class StrategyV2Properties {
 
     public static class Safety {
         private boolean killSwitchRespected = true;
-        private boolean liveRequiresExplicitAllowlist = true;
-        private boolean blockLiveMakerWithoutReconciliation = true;
         private boolean blockUnknownOrderType = true;
         private boolean blockMissingFeeModel = true;
         private boolean blockMissingBookForBookRules = true;
 
         public boolean isKillSwitchRespected() { return killSwitchRespected; }
         public void setKillSwitchRespected(boolean killSwitchRespected) { this.killSwitchRespected = killSwitchRespected; }
-        public boolean isLiveRequiresExplicitAllowlist() { return liveRequiresExplicitAllowlist; }
-        public void setLiveRequiresExplicitAllowlist(boolean liveRequiresExplicitAllowlist) { this.liveRequiresExplicitAllowlist = liveRequiresExplicitAllowlist; }
-        public boolean isBlockLiveMakerWithoutReconciliation() { return blockLiveMakerWithoutReconciliation; }
-        public void setBlockLiveMakerWithoutReconciliation(boolean blockLiveMakerWithoutReconciliation) { this.blockLiveMakerWithoutReconciliation = blockLiveMakerWithoutReconciliation; }
         public boolean isBlockUnknownOrderType() { return blockUnknownOrderType; }
         public void setBlockUnknownOrderType(boolean blockUnknownOrderType) { this.blockUnknownOrderType = blockUnknownOrderType; }
         public boolean isBlockMissingFeeModel() { return blockMissingFeeModel; }
@@ -93,7 +87,6 @@ public class StrategyV2Properties {
         private String description;
         private String hypothesis;
         private List<String> tags = new ArrayList<>();
-        private List<String> allowedExecutionModes = new ArrayList<>();
         private CandidateSelection candidateSelection = new CandidateSelection();
         private Entry entry = new Entry();
         private Exit exit = new Exit();
@@ -121,8 +114,6 @@ public class StrategyV2Properties {
         public void setHypothesis(String hypothesis) { this.hypothesis = hypothesis; }
         public List<String> getTags() { return tags; }
         public void setTags(List<String> tags) { this.tags = tags == null ? new ArrayList<>() : tags; }
-        public List<String> getAllowedExecutionModes() { return allowedExecutionModes; }
-        public void setAllowedExecutionModes(List<String> allowedExecutionModes) { this.allowedExecutionModes = allowedExecutionModes == null ? new ArrayList<>() : allowedExecutionModes; }
         public CandidateSelection getCandidateSelection() { return candidateSelection; }
         public void setCandidateSelection(CandidateSelection candidateSelection) { this.candidateSelection = candidateSelection == null ? new CandidateSelection() : candidateSelection; }
         public Entry getEntry() { return entry; }
@@ -203,16 +194,13 @@ public class StrategyV2Properties {
     }
 
     public static class Sizing {
-        private BigDecimal paperSizeUsd = new BigDecimal("1.00");
-        private BigDecimal liveSizeUsd = new BigDecimal("5.00");
+        private BigDecimal orderSizeUsd = new BigDecimal("1.00");
         private BigDecimal maxOrderUsd = new BigDecimal("5.00");
         private BigDecimal minOrderUsd = new BigDecimal("1.00");
         private BigDecimal priceTick = new BigDecimal("0.01");
         private int roundSharesScale = 4;
-        public BigDecimal getPaperSizeUsd() { return paperSizeUsd; }
-        public void setPaperSizeUsd(BigDecimal paperSizeUsd) { this.paperSizeUsd = paperSizeUsd; }
-        public BigDecimal getLiveSizeUsd() { return liveSizeUsd; }
-        public void setLiveSizeUsd(BigDecimal liveSizeUsd) { this.liveSizeUsd = liveSizeUsd; }
+        public BigDecimal getOrderSizeUsd() { return orderSizeUsd; }
+        public void setOrderSizeUsd(BigDecimal orderSizeUsd) { this.orderSizeUsd = orderSizeUsd; }
         public BigDecimal getMaxOrderUsd() { return maxOrderUsd; }
         public void setMaxOrderUsd(BigDecimal maxOrderUsd) { this.maxOrderUsd = maxOrderUsd; }
         public BigDecimal getMinOrderUsd() { return minOrderUsd; }
@@ -226,13 +214,13 @@ public class StrategyV2Properties {
     public static class Fees {
         private BigDecimal makerFeeRate = BigDecimal.ZERO;
         private BigDecimal takerFeeRate = new BigDecimal("0.072");
-        private boolean estimateLiveFeesWhenMissing = true;
+        private boolean estimateFeesWhenMissing = true;
         public BigDecimal getMakerFeeRate() { return makerFeeRate; }
         public void setMakerFeeRate(BigDecimal makerFeeRate) { this.makerFeeRate = makerFeeRate; }
         public BigDecimal getTakerFeeRate() { return takerFeeRate; }
         public void setTakerFeeRate(BigDecimal takerFeeRate) { this.takerFeeRate = takerFeeRate; }
-        public boolean isEstimateLiveFeesWhenMissing() { return estimateLiveFeesWhenMissing; }
-        public void setEstimateLiveFeesWhenMissing(boolean estimateLiveFeesWhenMissing) { this.estimateLiveFeesWhenMissing = estimateLiveFeesWhenMissing; }
+        public boolean isEstimateFeesWhenMissing() { return estimateFeesWhenMissing; }
+        public void setEstimateFeesWhenMissing(boolean estimateFeesWhenMissing) { this.estimateFeesWhenMissing = estimateFeesWhenMissing; }
     }
 
     public static class Execution {
@@ -420,17 +408,14 @@ public class StrategyV2Properties {
 
     public static class Size {
         private String type = "fixed_usd";
-        private BigDecimal paperUsd = new BigDecimal("1.00");
-        private BigDecimal liveUsd = new BigDecimal("5.00");
+        private BigDecimal usd = new BigDecimal("1.00");
         private BigDecimal maxUsd = new BigDecimal("5.00");
         private BigDecimal minUsd = new BigDecimal("1.00");
         private BigDecimal shares;
         public String getType() { return type; }
         public void setType(String type) { this.type = type; }
-        public BigDecimal getPaperUsd() { return paperUsd; }
-        public void setPaperUsd(BigDecimal paperUsd) { this.paperUsd = paperUsd; }
-        public BigDecimal getLiveUsd() { return liveUsd; }
-        public void setLiveUsd(BigDecimal liveUsd) { this.liveUsd = liveUsd; }
+        public BigDecimal getUsd() { return usd; }
+        public void setUsd(BigDecimal usd) { this.usd = usd; }
         public BigDecimal getMaxUsd() { return maxUsd; }
         public void setMaxUsd(BigDecimal maxUsd) { this.maxUsd = maxUsd; }
         public BigDecimal getMinUsd() { return minUsd; }

@@ -5,7 +5,7 @@ strategy-v2:
   engine:
     enabled: true
     active-strategy-ids:
-      - MK_GTD_EDGE_LIVE_TINY_A
+      - MK_GTD_EDGE_A
     tick-ms: 1000
     decision-mode: single_market_single_position
     decimal-scale: 8
@@ -13,25 +13,22 @@ strategy-v2:
     require-mid-sum-sane: true
     min-mid-sum: "0.985"
     max-mid-sum: "1.015"
-    default-profile: deep_research_paper
+    default-profile: deep_research
     safety:
       kill-switch-respected: true
-      live-requires-explicit-allowlist: true
-      block-live-maker-without-reconciliation: true
       block-unknown-order-type: true
       block-missing-fee-model: true
       block-missing-book-for-book-rules: true
 
   defaults:
-    deep_research_paper:
+    deep_research:
       data:
         max-price-age-ms: 1200
         max-book-age-ms: 1200
         warmup-seconds: 20
         min-samples-per-window: 3
       sizing:
-        paper-size-usd: "1.00"
-        live-size-usd: "5.00"
+        order-size-usd: "1.00"
         max-order-usd: "3.25"
         min-order-usd: "1.00"
         price-tick: "0.01"
@@ -39,7 +36,7 @@ strategy-v2:
       fees:
         maker-fee-rate: "0"
         taker-fee-rate: "0.072"
-        estimate-live-fees-when-missing: true
+        estimate-fees-when-missing: true
       execution:
         default-entry-order-type: GTD
         default-exit-order-type: FAK
@@ -53,10 +50,10 @@ strategy-v2:
         maker-fee-rate: "0"
 
   strategies:
-    - strategy-id: MK_GTD_EDGE_LIVE_TINY_A
+    - strategy-id: MK_GTD_EDGE_A
       enabled: true
-      profile: deep_research_paper
-      description: Live-tiny passive maker GTD edge capture, 5-share minimum order.
+      profile: deep_research
+      description: Passive maker GTD edge capture, 5-share minimum order.
       hypothesis: >
         Post a small post-only maker bid when spread is at least one tick,
         book pressure is supportive, volatility is low, and the order can be
@@ -68,16 +65,9 @@ strategy-v2:
         - maker
         - gtd
         - passive
-        - live-tiny
         - five-shares
         - post-only
-        - not-live-proven
 
-      allowed-execution-modes:
-        - PAPER
-        - TESTING
-        - LIVE_SHADOW
-        - LIVE_TINY
 
       candidate-selection:
         type: score
@@ -106,7 +96,7 @@ strategy-v2:
 
       entry:
         enabled: true
-        rule-id: mk-gtd-edge-live-tiny-a-entry
+        rule-id: mk-gtd-edge-a-entry
         when:
           all:
             - feature: market.accepting_orders
@@ -201,14 +191,14 @@ strategy-v2:
             max-usd: "3.25"
 
           maker-lifecycle:
-            cancel-after-seconds: 2
-            cooldown-after-no-fill-cancel-seconds: 20
+            cancel-after-seconds: 3
+            cooldown-after-no-fill-cancel-seconds: 7
             replace-if-best-bid-moves-ticks: 1
             max-reposts: 1
             require-reconciliation: true
 
           reason-template: >
-            MK_GTD_EDGE_LIVE_TINY_A maker bid {{candidate.outcome}}
+            MK_GTD_EDGE_A maker bid {{candidate.outcome}}
             bid={{candidate.bid}} ask={{candidate.ask}}
             spread={{candidate.spread}}
             micro={{candidate.microprice_edge}}
@@ -217,7 +207,7 @@ strategy-v2:
 
       exit:
         enabled: true
-        rule-id: mk-gtd-edge-live-tiny-a-exit
+        rule-id: mk-gtd-edge-a-exit
         default-action: HOLD
         rules:
           - name: net-take-profit

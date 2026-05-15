@@ -1,6 +1,10 @@
 package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.economy.LiquidityRole;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderPhase;
+import com.vokerg.voktrader.trade.model.TradeStatus;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import org.springframework.stereotype.Service;

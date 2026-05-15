@@ -30,11 +30,10 @@ price:
     formula: {status: config_only, warning: "Defined in config but not evaluated by current order builder."}
 size:
   types:
-    fixed_usd: {status: implemented, description: "Uses paper-usd, then clamps min/max USD."}
+    fixed_usd: {status: implemented, description: "Uses usd, then clamps min/max USD."}
     fixed_shares: {status: implemented, description: "Uses shares and derives amountUsd from shares * price."}
   fields:
-    paper-usd: {status: implemented}
-    live-usd: {status: config_only}
+    usd: {status: implemented}
     max-usd: {status: implemented}
     min-usd: {status: implemented}
     shares: {status: implemented}

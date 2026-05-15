@@ -1,8 +1,8 @@
 package com.vokerg.voktrader.api.trade.dto;
 
-import com.vokerg.voktrader.trade.TradeEventEntity;
-
 import java.time.Instant;
+
+import com.vokerg.voktrader.trade.model.TradeEventEntity;
 
 public record TradeEventResponse(
         Long id,
