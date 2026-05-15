@@ -60,7 +60,7 @@ import { TradeSummaryResponse, DashboardOptionsResponse } from '../../models/api
         <thead>
           <tr>
             <th>Time</th>
-            <th>Bot / Mode</th>
+            <th>Trade / Bot</th>
             <th>Strategy</th>
             <th>Market</th>
             <th>Side</th>
@@ -76,8 +76,11 @@ import { TradeSummaryResponse, DashboardOptionsResponse } from '../../models/api
               <div class="time-sub">{{ trade.decisionAt | date:'ss' }}s</div>
             </td>
             <td>
-              <div class="bot-id">#{{ trade.botId }}</div>
-              <div class="mode-badge" [attr.data-mode]="trade.mode">{{ trade.mode }}</div>
+              <div class="trade-id">Trade #{{ trade.id }}</div>
+              <div class="bot-info">
+                <span class="bot-id">Bot #{{ trade.botId }}</span>
+                <span class="mode-badge" [attr.data-mode]="trade.mode">{{ trade.mode }}</span>
+              </div>
             </td>
             <td>
               <div class="strategy-id">{{ trade.strategyId }}</div>
@@ -152,7 +155,9 @@ import { TradeSummaryResponse, DashboardOptionsResponse } from '../../models/api
     .time-main { font-weight: 600; }
     .time-sub { font-size: 11px; color: #9ca3af; }
 
-    .bot-id { font-weight: 700; }
+    .trade-id { font-weight: 700; font-size: 14px; }
+    .bot-info { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+    .bot-id { font-size: 11px; color: #6b7280; font-weight: 600; }
     .mode-badge { 
       font-size: 10px; 
       font-weight: 800; 

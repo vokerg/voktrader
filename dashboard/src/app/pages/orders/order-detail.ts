@@ -121,7 +121,7 @@ import { TradeOrderDetailResponse } from '../../models/api.models';
       <div class="card mt-4">
         <h2>Order Events</h2>
         <div class="events-list">
-          <div *ngFor="let event of d.events" class="event-item">
+          <div *ngFor="let event of d.events" class="event-item clickable-row" [routerLink]="['/events', event.id]">
             <span class="event-time">{{ event.createdAt | date:'mediumTime' }}</span>
             <span class="event-type">{{ event.eventType }}</span>
             <span class="event-message">{{ event.message }}</span>
@@ -186,6 +186,9 @@ import { TradeOrderDetailResponse } from '../../models/api.models';
     td { padding: 12px 8px; border-bottom: 1px solid #f3f4f6; font-size: 14px; }
     .id-cell { font-family: monospace; font-size: 12px; color: #6b7280; }
     .text-center { text-align: center; color: #9ca3af; padding: 16px; }
+
+    .clickable-row { cursor: pointer; transition: background-color 0.2s; }
+    .clickable-row:hover { background-color: #f9fafb; }
 
     .side-buy { color: #10b981; font-weight: 600; }
     .side-sell { color: #3b82f6; font-weight: 600; }

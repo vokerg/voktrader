@@ -71,6 +71,12 @@ public class TradeQueryService {
         return TradeDetailResponse.from(trade, fills, orders, events);
     }
 
+    public TradeEventResponse getEvent(Long id) {
+        return tradeEventRepository.findById(id)
+                .map(TradeEventResponse::from)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown event id: " + id));
+    }
+
     private int normalizeLimit(Integer limit) {
         if (limit == null) {
             return DEFAULT_LIMIT;

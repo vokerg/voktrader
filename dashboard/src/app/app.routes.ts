@@ -4,6 +4,7 @@ import { Bots } from './pages/bots/bots';
 import { BotCreate } from './pages/bots/bot-create';
 import { Trades } from './pages/trades/trades';
 import { TradeDetail } from './pages/trades/trade-detail';
+import { EventDetail } from './pages/trades/event-detail';
 import { Orders } from './pages/orders/orders';
 import { OrderDetail } from './pages/orders/order-detail';
 import { Markets } from './pages/markets/markets';
@@ -21,6 +22,7 @@ export const routes: Routes = [
       { path: 'bots/create', component: BotCreate },
       { path: 'trades', component: Trades },
       { path: 'trades/:id', component: TradeDetail },
+      { path: 'events/:id', component: EventDetail },
       { path: 'orders', component: Orders },
       { path: 'orders/:id', component: OrderDetail },
       { path: 'markets', component: Markets },

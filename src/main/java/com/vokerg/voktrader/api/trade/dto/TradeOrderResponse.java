@@ -57,6 +57,8 @@ public record TradeOrderResponse(
         Instant lastReconciledAt,
         Instant expiresAt,
         Long latencyMs,
+        String rawRequest,
+        String rawResponse,
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -106,6 +108,8 @@ public record TradeOrderResponse(
                 entity.getLastReconciledAt(),
                 entity.getExpiresAt(),
                 entity.getLatencyMs(),
+                entity.getRawRequest(),
+                entity.getRawResponse(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );

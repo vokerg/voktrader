@@ -115,7 +115,7 @@ import { TradeDetailResponse } from '../../models/api.models';
       <div class="card mt-4">
         <h2>Events</h2>
         <div class="events-list">
-          <div *ngFor="let event of t.events" class="event-item">
+          <div *ngFor="let event of t.events" class="event-item clickable-row" [routerLink]="['/events', event.id]">
             <span class="event-time">{{ event.createdAt | date:'mediumTime' }}</span>
             <span class="event-type">{{ event.eventType }}</span>
             <span class="event-message">{{ event.message }}</span>

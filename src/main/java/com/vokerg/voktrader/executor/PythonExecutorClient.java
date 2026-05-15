@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.executor;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -19,10 +20,12 @@ public class PythonExecutorClient {
 
     private final ExecutorProperties properties;
     private final WebClient.Builder webClientBuilder;
+    private final ObjectMapper objectMapper;
 
-    public PythonExecutorClient(ExecutorProperties properties, WebClient.Builder webClientBuilder) {
+    public PythonExecutorClient(ExecutorProperties properties, WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
         this.properties = properties;
         this.webClientBuilder = webClientBuilder;
+        this.objectMapper = objectMapper;
     }
 
     public ExecutorOrderResponse submit(ExecutorOrderCommand command) {
@@ -31,7 +34,7 @@ public class PythonExecutorClient {
         }
 
         try {
-            return webClientBuilder
+            String body = webClientBuilder
                     .baseUrl(properties.getBaseUrl())
                     .build()
                     .post()
@@ -39,9 +42,12 @@ public class PythonExecutorClient {
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.getApiToken())
                     .bodyValue(command)
                     .retrieve()
-                    .bodyToMono(ExecutorOrderResponse.class)
+                    .bodyToMono(String.class)
                     .timeout(properties.getTimeout())
                     .block();
+            
+            ExecutorOrderResponse response = objectMapper.readValue(body, ExecutorOrderResponse.class);
+            return copyWithRawResponse(response, body);
         } catch (WebClientResponseException e) {
             log.warn("Python executor rejected order: status={} body={}", e.getStatusCode(), e.getResponseBodyAsString());
             return ExecutorOrderResponse.rejected("Python executor HTTP " + e.getStatusCode() + ": " + e.getResponseBodyAsString());
@@ -53,6 +59,22 @@ public class PythonExecutorClient {
             log.warn("Python executor call failed", e);
             return ExecutorOrderResponse.rejected("Python executor call failed: " + e.getMessage());
         }
+    }
+
+    private ExecutorOrderResponse copyWithRawResponse(ExecutorOrderResponse response, String body) {
+        return new ExecutorOrderResponse(
+                response.accepted(),
+                response.filled(),
+                response.status(),
+                response.exchangeOrderId(),
+                response.averagePrice(),
+                response.filledShares(),
+                response.filledAmountUsd(),
+                response.feeUsd(),
+                response.message(),
+                body,
+                response.exchangeTimestamp()
+        );
     }
 
     public ExecutorCancelOrderResponse cancelOrder(String remoteOrderId) {

@@ -1,5 +1,7 @@
 package com.vokerg.voktrader.trade;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeEventEntity;
@@ -47,6 +49,7 @@ public class LiveExecutionService {
     private final TradingProperties tradingProperties;
     private final PolymarketFeeCalculator feeCalculator;
     private final TradingEventLogger eventLogger;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public TradeExecutionResult execute(TradeIntent intent, ExecutionMode mode) {
@@ -105,7 +108,7 @@ public class LiveExecutionService {
         tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "ORDER_CREATED", mode + " order created", null));
 
         ExecutorOrderCommand command = ExecutorOrderCommand.fromIntent(intent, idempotencyKey, executorProperties.isDryRun());
-        order.markSubmitting(command.idempotencyKey(), command.toString());
+        order.markSubmitting(command.idempotencyKey(), toJson(command));
         order = tradeOrderRepository.save(order);
 
         ExecutorOrderResponse response = pythonExecutorClient.submit(command);
@@ -221,7 +224,7 @@ public class LiveExecutionService {
         tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "EXIT_ORDER_CREATED", mode + " exit order created", null));
 
         ExecutorOrderCommand command = ExecutorOrderCommand.fromIntent(intent, idempotencyKey, executorProperties.isDryRun());
-        order.markSubmitting(command.idempotencyKey(), command.toString());
+        order.markSubmitting(command.idempotencyKey(), toJson(command));
         order = tradeOrderRepository.save(order);
 
         ExecutorOrderResponse response = pythonExecutorClient.submit(command);

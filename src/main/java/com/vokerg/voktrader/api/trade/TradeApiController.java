@@ -1,6 +1,7 @@
 package com.vokerg.voktrader.api.trade;
 
 import com.vokerg.voktrader.api.trade.dto.TradeDetailResponse;
+import com.vokerg.voktrader.api.trade.dto.TradeEventResponse;
 import com.vokerg.voktrader.api.trade.dto.TradeSummaryResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,5 +35,10 @@ public class TradeApiController {
     @GetMapping("/{id}")
     public TradeDetailResponse get(@PathVariable Long id) {
         return tradeQueryService.get(id);
+    }
+
+    @GetMapping("/events/{id}")
+    public TradeEventResponse getEvent(@PathVariable Long id) {
+        return tradeQueryService.getEvent(id);
     }
 }

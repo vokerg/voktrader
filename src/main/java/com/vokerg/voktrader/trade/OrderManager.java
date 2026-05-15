@@ -1,5 +1,7 @@
 package com.vokerg.voktrader.trade;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
@@ -30,6 +32,7 @@ public class OrderManager {
     private final ExecutorProperties executorProperties;
     private final OrderReconciliationService reconciliationService;
     private final OrderCancellationEventEmitter cancellationEventEmitter;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public OrderLifecycleResult submitOrder(TradeIntent intent, ExecutionMode mode) {
