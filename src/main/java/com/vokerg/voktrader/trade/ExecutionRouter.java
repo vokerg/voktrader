@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor

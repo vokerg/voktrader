@@ -15,7 +15,8 @@ import com.vokerg.voktrader.trade.OrderRuntimeState;
 import com.vokerg.voktrader.trade.StrategyInstanceKey;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
 import com.vokerg.voktrader.trade.TradeStateProvider;
-import com.vokerg.voktrader.trade.TradeStatus;
+import com.vokerg.voktrader.trade.model.TradeStatus;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -379,7 +380,7 @@ public class StrategyV2Engine implements TradingStrategy {
 
     private boolean noFillMakerEntryOrder(StrategyV2Properties.Strategy strategy, StrategyRuntimeState state) {
         OrderRuntimeState order = state == null ? null : state.activeEntryOrder();
-        if (strategy == null || order == null || order.phase() != com.vokerg.voktrader.trade.TradeOrderPhase.ENTRY) {
+        if (strategy == null || order == null || order.phase() != com.vokerg.voktrader.trade.model.TradeOrderPhase.ENTRY) {
             return false;
         }
         BigDecimal filledShares = order.filledShares();

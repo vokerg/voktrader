@@ -5,7 +5,8 @@ import com.vokerg.voktrader.marketdata.FillEstimate;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.time.TimeMachine;
-import com.vokerg.voktrader.trade.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 

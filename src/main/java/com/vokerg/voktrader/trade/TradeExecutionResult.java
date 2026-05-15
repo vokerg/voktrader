@@ -1,5 +1,9 @@
 package com.vokerg.voktrader.trade;
 
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeStatus;
+
 public record TradeExecutionResult(
         boolean accepted,
         ExecutionMode mode,

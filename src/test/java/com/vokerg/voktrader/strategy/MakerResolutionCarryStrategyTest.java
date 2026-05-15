@@ -1,5 +1,9 @@
 package com.vokerg.voktrader.strategy;
-
+import com.vokerg.voktrader.trade.ExecutionRouter;
+import com.vokerg.voktrader.trade.TradeExecutionResult;
+import com.vokerg.voktrader.trade.TradeIntent;
+import com.vokerg.voktrader.trade.TradeOrderType;
+import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import com.vokerg.voktrader.economy.ExitEconomy;
 import com.vokerg.voktrader.economy.LiquidityRole;
 import com.vokerg.voktrader.economy.TradeEconomy;
@@ -9,15 +13,11 @@ import com.vokerg.voktrader.marketdata.OutcomeOrderBook;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
-import com.vokerg.voktrader.trade.ExecutionMode;
-import com.vokerg.voktrader.trade.ExecutionRouter;
-import com.vokerg.voktrader.trade.TradeEntity;
-import com.vokerg.voktrader.trade.TradeExecutionResult;
-import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.TradeOrderStatus;
-import com.vokerg.voktrader.trade.TradeOrderType;
-import com.vokerg.voktrader.trade.persistence.TradeRepository;
-import com.vokerg.voktrader.trade.TradeStatus;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeStatus;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

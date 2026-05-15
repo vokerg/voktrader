@@ -1,7 +1,7 @@
 package com.vokerg.voktrader.executor;
 
-import com.vokerg.voktrader.trade.TradeOrderStatus;
-import com.vokerg.voktrader.trade.TradeSide;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeSide;
 
 import java.math.BigDecimal;
 import java.time.Instant;

@@ -1,13 +1,13 @@
 package com.vokerg.voktrader.api.trade.dto;
 
 import com.vokerg.voktrader.economy.LiquidityRole;
-import com.vokerg.voktrader.trade.ExecutionMode;
-import com.vokerg.voktrader.trade.TradeOrderEntity;
-import com.vokerg.voktrader.trade.TradeOrderPhase;
-import com.vokerg.voktrader.trade.TradeOrderStatus;
 import com.vokerg.voktrader.trade.TradeOrderType;
-import com.vokerg.voktrader.trade.TradeSide;
-import com.vokerg.voktrader.trade.TradeVenue;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderPhase;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeSide;
+import com.vokerg.voktrader.trade.model.TradeVenue;
 
 import java.math.BigDecimal;
 import java.time.Instant;

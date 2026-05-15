@@ -2,6 +2,8 @@ package com.vokerg.voktrader.trade;
 
 import org.springframework.stereotype.Service;
 
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+
 @Service
 public class LiveOrderGateway implements OrderGateway {
     private final OrderManager orderManager;

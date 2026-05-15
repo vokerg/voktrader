@@ -1,10 +1,11 @@
 package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
-import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.trade.TradeHistoryScopeContext;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
-import com.vokerg.voktrader.trade.TradeStatus;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeStatus;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

@@ -1,4 +1,4 @@
-package com.vokerg.voktrader.trade;
+package com.vokerg.voktrader.trade.model;
 
 import com.vokerg.voktrader.economy.LiquidityRole;
 import jakarta.persistence.Column;
@@ -17,6 +17,8 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import com.vokerg.voktrader.time.TimeMachine;
+import com.vokerg.voktrader.trade.TradeIntent;
+import com.vokerg.voktrader.trade.TradeOrderType;
 
 @Entity
 @Table(

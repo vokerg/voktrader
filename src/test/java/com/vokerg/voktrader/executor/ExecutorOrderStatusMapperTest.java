@@ -1,7 +1,8 @@
 package com.vokerg.voktrader.executor;
 
-import com.vokerg.voktrader.trade.TradeOrderStatus;
 import org.junit.jupiter.api.Test;
+
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

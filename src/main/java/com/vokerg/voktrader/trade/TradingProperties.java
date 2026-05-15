@@ -3,6 +3,8 @@ package com.vokerg.voktrader.trade;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+
 import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.Set;

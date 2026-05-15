@@ -3,9 +3,10 @@ package com.vokerg.voktrader.economy;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
-import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradingProperties;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -58,7 +59,7 @@ class EconomyServiceTest {
                 "cost-aware-momentum",
                 "cost-aware-momentum",
                 "test"
-        ), com.vokerg.voktrader.trade.ExecutionMode.PAPER);
+        ), com.vokerg.voktrader.trade.model.ExecutionMode.PAPER);
         trade.markOpen(
                 new BigDecimal("0.50"),
                 new BigDecimal("2.00"),

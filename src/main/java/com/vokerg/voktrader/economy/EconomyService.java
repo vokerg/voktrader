@@ -1,8 +1,9 @@
 package com.vokerg.voktrader.economy;
 
 import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
-import com.vokerg.voktrader.trade.TradeEntity;
 import com.vokerg.voktrader.trade.TradingProperties;
+import com.vokerg.voktrader.trade.model.TradeEntity;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

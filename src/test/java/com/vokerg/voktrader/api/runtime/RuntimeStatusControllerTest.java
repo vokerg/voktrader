@@ -6,9 +6,10 @@ import com.vokerg.voktrader.bot.MarketFamily;
 import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.strategy.StrategyProperties;
 import com.vokerg.voktrader.strategy.v2.StrategyV2Properties;
-import com.vokerg.voktrader.trade.ExecutionMode;
 import com.vokerg.voktrader.trade.OrderLayerProperties;
 import com.vokerg.voktrader.trade.TradingProperties;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 

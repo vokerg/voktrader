@@ -1,5 +1,10 @@
 package com.vokerg.voktrader.trade;
 
+import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeStatus;
+
 public record OrderLifecycleResult(
         boolean success,
         Long tradeId,
