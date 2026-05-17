@@ -52,7 +52,7 @@ public class OrderQueryService {
                 eqEnum("phase", phase, TradeOrderPhase.class),
                 eqEnum("mode", mode, ExecutionMode.class)
         );
-        return tradeOrderRepository.findAll(specification, PageRequest.of(0, size, Sort.by(Sort.Direction.DESC, "createdAt"))).stream()
+        return tradeOrderRepository.findAll(specification, PageRequest.of(0, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")))).stream()
                 .map(TradeOrderResponse::from)
                 .toList();
     }
@@ -61,7 +61,7 @@ public class OrderQueryService {
         TradeOrderEntity order = tradeOrderRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown order id: " + id));
         
-        List<TradeFillResponse> fills = tradeFillRepository.findByOrderId(order.getId()).stream()
+        List<TradeFillResponse> fills = tradeFillRepository.findByOrderIdOrderByIdAsc(order.getId()).stream()
                 .map(TradeFillResponse::from)
                 .toList();
         

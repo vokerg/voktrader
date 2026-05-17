@@ -20,7 +20,8 @@ import com.vokerg.voktrader.time.TimeMachine;
         name = "trade_fills",
         indexes = {
                 @Index(name = "idx_trade_fills_trade", columnList = "tradeId"),
-                @Index(name = "idx_trade_fills_order", columnList = "orderId")
+                @Index(name = "idx_trade_fills_order", columnList = "orderId"),
+                @Index(name = "idx_trade_fills_remote_key", columnList = "remoteFillKey", unique = true)
         }
 )
 public class TradeFillEntity {
@@ -33,6 +34,7 @@ public class TradeFillEntity {
     private Long tradeOrderId;
     private String exchangeOrderId;
     private String remoteFillId;
+    private String remoteFillKey;
     private String marketId;
     private String tokenId;
 
@@ -160,6 +162,7 @@ public class TradeFillEntity {
         entity.tradeOrderId = orderId;
         entity.exchangeOrderId = exchangeOrderId;
         entity.remoteFillId = remoteFillId;
+        entity.remoteFillKey = remoteFillKey(exchangeOrderId, tradeId, remoteFillId, marketId, tokenId, side, price, shares, filledAt);
         entity.marketId = marketId;
         entity.tokenId = tokenId;
         entity.venue = TradeVenue.POLYMARKET;
@@ -181,6 +184,19 @@ public class TradeFillEntity {
     void prePersist() {
         if (this.tradeOrderId == null) {
             this.tradeOrderId = this.orderId;
+        }
+        if (this.remoteFillKey == null && this.venue == TradeVenue.POLYMARKET) {
+            this.remoteFillKey = remoteFillKey(
+                    this.exchangeOrderId,
+                    this.tradeId,
+                    this.remoteFillId,
+                    this.marketId,
+                    this.tokenId,
+                    this.side,
+                    this.price,
+                    this.shares,
+                    this.filledAt
+            );
         }
         if (this.filledAt == null) {
             this.filledAt = TimeMachine.now();
@@ -216,6 +232,10 @@ public class TradeFillEntity {
 
     public String getRemoteFillId() {
         return remoteFillId;
+    }
+
+    public String getRemoteFillKey() {
+        return remoteFillKey;
     }
 
     public String getMarketId() {
@@ -276,5 +296,33 @@ public class TradeFillEntity {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public static String remoteFillKey(
+            String remoteOrderId,
+            Long tradeId,
+            String remoteFillId,
+            String marketId,
+            String tokenId,
+            TradeSide side,
+            BigDecimal price,
+            BigDecimal shares,
+            Instant timestamp
+    ) {
+        return String.join(":",
+                normalize(remoteOrderId),
+                normalize(tradeId),
+                normalize(remoteFillId),
+                normalize(marketId),
+                normalize(tokenId),
+                normalize(side),
+                normalize(price),
+                normalize(shares),
+                normalize(timestamp)
+        );
+    }
+
+    private static String normalize(Object value) {
+        return value == null ? "_" : value.toString();
     }
 }

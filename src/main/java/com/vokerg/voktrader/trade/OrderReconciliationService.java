@@ -6,11 +6,10 @@ import com.vokerg.voktrader.trade.model.TradeOrderEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderPhase;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeOrderType;
-import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
+import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
-import com.vokerg.voktrader.trade.persistence.TradeRiskCheckRepository;
 import com.vokerg.voktrader.economy.LiquidityRole;
 import com.vokerg.voktrader.executor.ExecutorFillResponse;
 import com.vokerg.voktrader.executor.ExecutorFillsResponse;
@@ -26,6 +25,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -38,10 +38,31 @@ public class OrderReconciliationService {
     private final LiveExecutionService liveExecutionService;
     private final OrderLayerProperties properties;
     private final OrderCancellationEventEmitter cancellationEventEmitter;
+    private final OrderReconciliationEventEmitter reconciliationEventEmitter;
 
     @Transactional
     public OrderLifecycleResult reconcileOrder(TradeOrderEntity order) {
+        return reconcileOrder(order, OrderReconciliationSource.AUTO_WORKER);
+    }
+
+    @Transactional
+    public OrderLifecycleResult reconcileOrder(TradeOrderEntity order, OrderReconciliationSource source) {
+        OrderReconciliationResult result = reconcileOrderDetailed(order, source);
+        return OrderLifecycleResult.of(
+                tradeRepository.findById(order.getTradeId()).orElse(null),
+                order,
+                result.remoteStatusSuccess() || result.remoteFillsSuccess(),
+                result.resolvedStatus().name()
+        );
+    }
+
+    @Transactional
+    public OrderReconciliationResult reconcileOrderDetailed(TradeOrderEntity order, OrderReconciliationSource source) {
+        OrderReconciliationSource resolvedSource = source == null ? OrderReconciliationSource.AUTO_WORKER : source;
         TradeEntity trade = tradeRepository.findById(order.getTradeId()).orElse(null);
+        OrderReconciliationBeforeState before = OrderReconciliationBeforeState.from(order);
+        reconciliationEventEmitter.emitRequested(resolvedSource, order, before, "reconcile order");
+
         ExecutorOrderStatusResponse remoteStatus = order.getRemoteOrderId() == null
                 ? ExecutorOrderStatusResponse.failure(null, "UNKNOWN_RESPONSE", "order has no remoteOrderId")
                 : liveExecutionService.fetchRemoteOrderStatus(order.getRemoteOrderId());
@@ -54,27 +75,63 @@ public class OrderReconciliationService {
                 order.getRequestedShares(),
                 fillLookupSince(order)
         );
+        Instant pulledAt = TimeMachine.now();
 
+        List<ImportedFill> importedFills = List.of();
         if (fills.success()) {
-            saveNewFills(order, fills);
+            importedFills = saveNewFills(order, fills);
+        }
+        reconciliationEventEmitter.emitPulled(resolvedSource, order, before, remoteStatus, fills, importedFills.size(), "remote pull completed", pulledAt);
+        for (ImportedFill importedFill : importedFills) {
+            reconciliationEventEmitter.emitFillImported(
+                    resolvedSource,
+                    order,
+                    before,
+                    importedFill.entity(),
+                    importedFill.remote(),
+                    remoteStatus,
+                    fills,
+                    "new remote fill imported",
+                    pulledAt
+            );
         }
 
-        TradeOrderStatus previousStatus = order.getStatus();
         TradeOrderStatus status = resolveStatus(remoteStatus, fills, order);
         applyOrderState(order, status, remoteStatus, fills);
         reconcileTradeAfterOrderState(trade, order);
-        emitCancellationIfNew(trade, order, previousStatus, status, remoteStatus);
+        emitCancellationIfNew(trade, order, before.status(), status, remoteStatus);
         logReconciliation(order, remoteStatus, fills, status);
         order.markReconciled();
         tradeOrderRepository.save(order);
         if (trade != null) {
             tradeRepository.save(trade);
         }
-        return OrderLifecycleResult.of(trade, order, remoteStatus.success() || fills.success(), status.name());
+        if (!remoteStatus.success() && !fills.success()) {
+            reconciliationEventEmitter.emitFailed(resolvedSource, order, before, remoteStatus, fills, "remote status and fills both failed", pulledAt);
+        } else if (before.status() != order.getStatus()) {
+            reconciliationEventEmitter.emitStatusChanged(resolvedSource, order, before, order.getStatus(), remoteStatus, fills, importedFills.size(), "local order status changed", pulledAt);
+        } else {
+            reconciliationEventEmitter.emitNoChange(resolvedSource, order, before, remoteStatus, fills, importedFills.size(), "local order status unchanged", pulledAt);
+        }
+        return OrderReconciliationResult.from(
+                order,
+                before.status(),
+                remoteStatus.success(),
+                fills.success(),
+                remoteStatus.status(),
+                fills.fills().size(),
+                importedFills.size(),
+                warnings(remoteStatus, fills)
+        );
     }
 
     @Transactional
     public int reconcileOpenOrders() {
+        return reconcileOpenOrders(OrderReconciliationSource.AUTO_WORKER);
+    }
+
+    @Transactional
+    public int reconcileOpenOrders(OrderReconciliationSource source) {
         List<TradeOrderStatus> activeStatuses = List.of(
                 TradeOrderStatus.CREATED,
                 TradeOrderStatus.SUBMITTING,
@@ -85,8 +142,22 @@ public class OrderReconciliationService {
                 TradeOrderStatus.UNKNOWN
         );
         List<TradeOrderEntity> orders = tradeOrderRepository.findReconcilableRemoteOrders(activeStatuses);
-        orders.forEach(this::reconcileOrder);
+        orders.forEach(order -> reconcileOrder(order, source));
         return orders.size();
+    }
+
+    @Transactional
+    public OrderLifecycleResult reconcileOrder(String localOrRemoteOrderId, OrderReconciliationSource source) {
+        TradeOrderEntity order = tradeOrderRepository.findByLocalOrderId(localOrRemoteOrderId)
+                .or(() -> tradeOrderRepository.findByClientOrderId(localOrRemoteOrderId))
+                .or(() -> tradeOrderRepository.findByRemoteOrderId(localOrRemoteOrderId))
+                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + localOrRemoteOrderId));
+        return reconcileOrder(order, source);
+    }
+
+    @Transactional
+    public OrderLifecycleResult reconcileOrder(String localOrRemoteOrderId) {
+        return reconcileOrder(localOrRemoteOrderId, OrderReconciliationSource.AUTO_WORKER);
     }
 
     @Transactional
@@ -125,20 +196,39 @@ public class OrderReconciliationService {
         }
     }
 
-    private void saveNewFills(TradeOrderEntity order, ExecutorFillsResponse fills) {
+    private List<ImportedFill> saveNewFills(TradeOrderEntity order, ExecutorFillsResponse fills) {
+        List<ImportedFill> imported = new ArrayList<>();
         for (ExecutorFillResponse fill : fills.fills()) {
             String fillId = remoteFillId(fill);
             if (fillId != null && tradeFillRepository.findByRemoteFillId(fillId).isPresent()) {
                 continue;
             }
-            tradeFillRepository.save(TradeFillEntity.remote(
+            String remoteOrderId = fill.remoteOrderId() == null ? order.getRemoteOrderId() : fill.remoteOrderId();
+            String marketId = fill.marketId() == null ? order.getMarketId() : fill.marketId();
+            String tokenId = fill.tokenId() == null ? order.getTokenId() : fill.tokenId();
+            TradeSide side = fill.side() == null ? order.getSide() : fill.side();
+            String remoteFillKey = TradeFillEntity.remoteFillKey(
+                    remoteOrderId,
+                    order.getTradeId(),
+                    fillId,
+                    marketId,
+                    tokenId,
+                    side,
+                    fill.price(),
+                    fill.shares(),
+                    fill.timestamp()
+            );
+            if (tradeFillRepository.findByRemoteFillKey(remoteFillKey).isPresent()) {
+                continue;
+            }
+            TradeFillEntity entity = tradeFillRepository.save(TradeFillEntity.remote(
                     order.getTradeId(),
                     order.getId(),
-                    fill.remoteOrderId() == null ? order.getRemoteOrderId() : fill.remoteOrderId(),
+                    remoteOrderId,
                     fillId,
-                    fill.marketId() == null ? order.getMarketId() : fill.marketId(),
-                    fill.tokenId() == null ? order.getTokenId() : fill.tokenId(),
-                    fill.side() == null ? order.getSide() : fill.side(),
+                    marketId,
+                    tokenId,
+                    side,
                     fill.price(),
                     fill.shares(),
                     fill.fee(),
@@ -146,25 +236,50 @@ public class OrderReconciliationService {
                     fill.timestamp(),
                     fill.rawResponse()
             ));
+            imported.add(new ImportedFill(entity, fill));
         }
+        return imported;
     }
 
     private TradeOrderStatus resolveStatus(ExecutorOrderStatusResponse remoteStatus, ExecutorFillsResponse fills, TradeOrderEntity order) {
         BigDecimal filled = aggregate(order).filledShares();
-        if (remoteStatus.success() && remoteStatus.lifecycleStatus() != TradeOrderStatus.UNKNOWN) {
-            return remoteStatus.lifecycleStatus() == TradeOrderStatus.SUBMITTED ? TradeOrderStatus.RESTING : remoteStatus.lifecycleStatus();
-        }
         if (filled.compareTo(BigDecimal.ZERO) > 0) {
             BigDecimal requested = requestedShares(order);
             return requested != null && filled.compareTo(requested) >= 0
                     ? TradeOrderStatus.FILLED
                     : TradeOrderStatus.PARTIALLY_FILLED;
         }
+        if (remoteStatus.success()) {
+            BigDecimal remoteFilled = remoteStatus.filledSize();
+            if (remoteFilled != null && remoteFilled.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal requested = requestedShares(order);
+                if (requested == null) {
+                    requested = remoteStatus.originalSize();
+                }
+                return requested != null && remoteFilled.compareTo(requested) >= 0
+                        ? TradeOrderStatus.FILLED
+                        : TradeOrderStatus.PARTIALLY_FILLED;
+            }
+            if (remoteStatus.lifecycleStatus() == TradeOrderStatus.FILLED) {
+                return TradeOrderStatus.FILLED;
+            }
+        }
+        if (remoteStatus.success()) {
+            TradeOrderStatus remoteLifecycle = remoteStatus.lifecycleStatus();
+            if (remoteLifecycle == TradeOrderStatus.CANCELLED
+                    || remoteLifecycle == TradeOrderStatus.EXPIRED
+                    || remoteLifecycle == TradeOrderStatus.REJECTED
+                    || remoteLifecycle == TradeOrderStatus.FAILED) {
+                return remoteLifecycle;
+            }
+            if (remoteLifecycle == TradeOrderStatus.SUBMITTED
+                    || remoteLifecycle == TradeOrderStatus.RESTING
+                    || remoteLifecycle == TradeOrderStatus.OPEN) {
+                return TradeOrderStatus.RESTING;
+            }
+        }
         if (isExpiredUnfilledGtd(order, remoteStatus, fills)) {
             return TradeOrderStatus.EXPIRED;
-        }
-        if (fills.success()) {
-            return TradeOrderStatus.UNKNOWN;
         }
         return TradeOrderStatus.UNKNOWN;
     }
@@ -403,6 +518,20 @@ public class OrderReconciliationService {
 
     private String firstNonBlank(String first, String fallback) {
         return first == null || first.isBlank() ? fallback : first;
+    }
+
+    private List<String> warnings(ExecutorOrderStatusResponse remoteStatus, ExecutorFillsResponse fills) {
+        List<String> warnings = new ArrayList<>();
+        if (!remoteStatus.success() && remoteStatus.error() != null) {
+            warnings.add("remote status failed: " + remoteStatus.error().message());
+        }
+        if (!fills.success() && fills.error() != null) {
+            warnings.add("remote fills failed: " + fills.error().message());
+        }
+        return warnings;
+    }
+
+    private record ImportedFill(TradeFillEntity entity, ExecutorFillResponse remote) {
     }
 
     private record FillTotals(

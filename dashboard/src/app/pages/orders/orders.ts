@@ -12,6 +12,7 @@ import { TradeOrderResponse, DashboardOptionsResponse } from '../../models/api.m
   template: `
     <div class="header">
       <h1>Order History</h1>
+      <button class="btn btn-secondary" (click)="reconcileAll()">Reconcile All Open</button>
     </div>
 
     <div class="card filters-card">
@@ -138,8 +139,24 @@ import { TradeOrderResponse, DashboardOptionsResponse } from '../../models/api.m
     </div>
   `,
   styles: `
-    .header { margin-bottom: 24px; }
-    h1 { font-size: 24px; font-weight: 700; }
+    .header { margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
+    h1 { font-size: 24px; font-weight: 700; margin: 0; }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s;
+    }
+    .btn-secondary {
+      background-color: #f3f4f6;
+      color: #374151;
+      border-color: #d1d5db;
+    }
+    .btn-secondary:hover { background-color: #e5e7eb; }
 
     .card {
       background-color: #fff;
@@ -246,6 +263,18 @@ export class Orders implements OnInit {
   ngOnInit() {
     this.apiService.getDashboardOptions().subscribe(opt => this.options.set(opt));
     this.loadOrders();
+  }
+
+  reconcileAll() {
+    if (confirm('Reconcile all open orders?')) {
+      this.apiService.reconcileOpenOrders().subscribe({
+        next: (res) => {
+          alert(`Reconciled ${res.reconciled} orders`);
+          this.loadOrders();
+        },
+        error: (err) => alert('Reconciliation failed: ' + (err.error?.message || err.message))
+      });
+    }
   }
 
   loadOrders() {

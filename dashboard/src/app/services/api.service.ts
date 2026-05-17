@@ -71,6 +71,14 @@ export class ApiService {
     return this.http.get<TradeOrderDetailResponse>(`${this.baseUrl}/orders/${id}`);
   }
 
+  reconcileOrder(id: number): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/orders/${id}/reconcile`, {});
+  }
+
+  reconcileOpenOrders(): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/orders/reconcile-open`, {});
+  }
+
   pauseBot(id: number): Observable<BotConfigResponse> {
     return this.http.post<BotConfigResponse>(`${this.baseUrl}/bots/${id}/pause`, {});
   }

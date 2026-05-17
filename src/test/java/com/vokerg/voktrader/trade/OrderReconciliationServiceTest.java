@@ -55,13 +55,18 @@ class OrderReconciliationServiceTest {
             tradeEventRepository,
             new ObjectMapper()
     );
+    private final OrderReconciliationEventEmitter reconciliationEventEmitter = new OrderReconciliationEventEmitter(
+            tradeEventRepository,
+            new ObjectMapper()
+    );
     private final OrderReconciliationService service = new OrderReconciliationService(
             tradeRepository,
             tradeOrderRepository,
             tradeFillRepository,
             liveExecutionService,
             properties,
-            cancellationEventEmitter
+            cancellationEventEmitter,
+            reconciliationEventEmitter
     );
 
     @BeforeEach
@@ -79,6 +84,10 @@ class OrderReconciliationServiceTest {
         when(tradeFillRepository.findByRemoteFillId(any())).thenAnswer(invocation -> {
             String remoteFillId = invocation.getArgument(0);
             return savedFills.stream().filter(fill -> remoteFillId.equals(fill.getRemoteFillId())).findFirst();
+        });
+        when(tradeFillRepository.findByRemoteFillKey(any())).thenAnswer(invocation -> {
+            String remoteFillKey = invocation.getArgument(0);
+            return savedFills.stream().filter(fill -> remoteFillKey.equals(fill.getRemoteFillKey())).findFirst();
         });
         when(tradeEventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> {
             TradeEventEntity event = invocation.getArgument(0);
@@ -105,6 +114,35 @@ class OrderReconciliationServiceTest {
 
         assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.RESTING);
         assertThat(trade.getStatus()).isEqualTo(TradeStatus.ENTRY_PENDING);
+        assertThat(savedEvents)
+                .extracting(TradeEventEntity::getEventType)
+                .contains(
+                        OrderReconciliationEventEmitter.REQUESTED,
+                        OrderReconciliationEventEmitter.PULLED,
+                        OrderReconciliationEventEmitter.STATUS_CHANGED
+                );
+    }
+
+    @Test
+    void reconcileEmitsPulledEveryTimeAndNoChangeWhenStatusIsStable() {
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        order.markResting("{}");
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("OPEN"));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
+
+        service.reconcileOrder(order);
+        service.reconcileOrder(order);
+
+        assertThat(savedEvents)
+                .extracting(TradeEventEntity::getEventType)
+                .filteredOn(OrderReconciliationEventEmitter.PULLED::equals)
+                .hasSize(2);
+        assertThat(savedEvents)
+                .extracting(TradeEventEntity::getEventType)
+                .contains(OrderReconciliationEventEmitter.NO_CHANGE);
     }
 
     @Test
@@ -117,11 +155,14 @@ class OrderReconciliationServiceTest {
 
         service.reconcileOrder(order);
 
-        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.FILLED);
         assertThat(order.getFilledShares()).isEqualByComparingTo("2");
         assertThat(order.getRealizedFeeUsd()).isEqualByComparingTo("0.01");
         assertThat(order.getFeeKnown()).isTrue();
-        assertThat(trade.getStatus()).isEqualTo(TradeStatus.PARTIALLY_OPEN);
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(savedEvents)
+                .extracting(TradeEventEntity::getEventType)
+                .contains(OrderReconciliationEventEmitter.FILL_IMPORTED);
     }
 
     @Test
@@ -137,6 +178,23 @@ class OrderReconciliationServiceTest {
 
         assertThat(savedFills).hasSize(1);
         assertThat(order.getFilledShares()).isEqualByComparingTo("2");
+    }
+
+    @Test
+    void missingRemoteFillIdUsesFallbackKeyForDedupe() {
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        ExecutorFillResponse fill = fill(null, "1", "0.50", "0.01");
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("PARTIALLY_FILLED"));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(fill), "{}", null));
+
+        service.reconcileOrder(order);
+        service.reconcileOrder(order);
+
+        assertThat(savedFills).hasSize(1);
+        assertThat(savedFills.getFirst().getRemoteFillKey()).isNotBlank();
     }
 
     @Test
@@ -276,6 +334,21 @@ class OrderReconciliationServiceTest {
     }
 
     @Test
+    void remoteCancelledWithPartialFillsResolvesPartiallyFilled() {
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("CANCELLED"));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(fill("fill-1", "1", "0.50", "0.01")), "{}", null));
+
+        service.reconcileOrder(order);
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.PARTIALLY_OPEN);
+    }
+
+    @Test
     void cancelledEntryWithNoFillCancelsTrade() {
         TradeEntity trade = trade();
         TradeOrderEntity order = order(trade, TradeSide.BUY);
@@ -290,9 +363,13 @@ class OrderReconciliationServiceTest {
         assertThat(trade.getStatus()).isEqualTo(TradeStatus.CANCELLED);
         assertThat(savedEvents)
                 .extracting(TradeEventEntity::getEventType)
-                .containsExactly(OrderCancellationEventEmitter.CANCELLED_EVENT);
-        assertThat(savedEvents.getFirst().getTradeOrderId()).isEqualTo(6358L);
-        assertThat(savedEvents.getFirst().getPayloadJson())
+                .contains(OrderCancellationEventEmitter.CANCELLED_EVENT);
+        TradeEventEntity cancelEvent = savedEvents.stream()
+                .filter(event -> OrderCancellationEventEmitter.CANCELLED_EVENT.equals(event.getEventType()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(cancelEvent.getTradeOrderId()).isEqualTo(6358L);
+        assertThat(cancelEvent.getPayloadJson())
                 .contains("\"previousStatus\":\"SUBMITTED\"")
                 .contains("\"resolvedStatus\":\"CANCELLED\"")
                 .contains("\"cancelReason\":\"remote cancelled\"")
@@ -313,7 +390,7 @@ class OrderReconciliationServiceTest {
 
         assertThat(savedEvents)
                 .extracting(TradeEventEntity::getEventType)
-                .containsExactly(OrderCancellationEventEmitter.CANCELLED_EVENT);
+                .containsOnlyOnce(OrderCancellationEventEmitter.CANCELLED_EVENT);
     }
 
     @Test

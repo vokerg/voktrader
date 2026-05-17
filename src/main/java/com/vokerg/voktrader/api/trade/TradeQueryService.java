@@ -51,7 +51,7 @@ public class TradeQueryService {
                 eqEnum("status", status, TradeStatus.class),
                 eqEnum("mode", mode, ExecutionMode.class)
         );
-        return tradeRepository.findAll(specification, PageRequest.of(0, size, Sort.by(Sort.Direction.DESC, "updatedAt"))).stream()
+        return tradeRepository.findAll(specification, PageRequest.of(0, size, Sort.by(Sort.Order.desc("decisionAt"), Sort.Order.desc("id")))).stream()
                 .map(TradeSummaryResponse::from)
                 .toList();
     }
@@ -59,10 +59,10 @@ public class TradeQueryService {
     public TradeDetailResponse get(Long id) {
         TradeEntity trade = tradeRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown trade id: " + id));
-        List<TradeFillResponse> fills = tradeFillRepository.findByTradeId(trade.getId()).stream()
+        List<TradeFillResponse> fills = tradeFillRepository.findByTradeIdOrderByIdAsc(trade.getId()).stream()
                 .map(TradeFillResponse::from)
                 .toList();
-        List<TradeOrderResponse> orders = tradeOrderRepository.findByTradeId(trade.getId()).stream()
+        List<TradeOrderResponse> orders = tradeOrderRepository.findByTradeIdOrderByIdAsc(trade.getId()).stream()
                 .map(TradeOrderResponse::from)
                 .toList();
         List<TradeEventResponse> events = tradeEventRepository.findByTradeIdOrderByCreatedAtAsc(trade.getId()).stream()

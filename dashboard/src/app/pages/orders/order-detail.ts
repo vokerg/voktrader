@@ -11,9 +11,12 @@ import { TradeOrderDetailResponse } from '../../models/api.models';
   template: `
     <div *ngIf="detail() as d" class="container">
       <div class="header">
-        <a [routerLink]="['/trades', d.order.tradeId]" class="back-link">← Back to Trade #{{ d.order.tradeId }}</a>
-        <h1>Order Details #{{ d.order.id }}</h1>
-        <div class="status-badge" [attr.data-status]="d.order.status">{{ d.order.status }}</div>
+        <div class="header-left">
+          <a [routerLink]="['/trades', d.order.tradeId]" class="back-link">← Back to Trade #{{ d.order.tradeId }}</a>
+          <h1>Order Details #{{ d.order.id }}</h1>
+          <div class="status-badge" [attr.data-status]="d.order.status">{{ d.order.status }}</div>
+        </div>
+        <button class="btn btn-secondary" (click)="reconcile()">Reconcile</button>
       </div>
 
       <div class="grid">
@@ -133,10 +136,27 @@ import { TradeOrderDetailResponse } from '../../models/api.models';
   `,
   styles: `
     .container { padding: 24px; }
-    .header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+    .header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+    .header-left { display: flex; align-items: center; gap: 16px; }
     .back-link { text-decoration: none; color: #3b82f6; font-weight: 500; }
     h1 { font-size: 24px; font-weight: 700; margin: 0; }
     
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s;
+    }
+    .btn-secondary {
+      background-color: #f3f4f6;
+      color: #374151;
+      border-color: #d1d5db;
+    }
+    .btn-secondary:hover { background-color: #e5e7eb; }
+
     .status-badge {
       padding: 4px 12px;
       border-radius: 9999px;
@@ -223,6 +243,10 @@ export class OrderDetail implements OnInit {
   detail = signal<TradeOrderDetailResponse | null>(null);
 
   ngOnInit() {
+    this.loadDetail();
+  }
+
+  loadDetail() {
     this.route.params.subscribe(params => {
       const id = +params['id'];
       if (id) {
@@ -231,5 +255,17 @@ export class OrderDetail implements OnInit {
         });
       }
     });
+  }
+
+  reconcile() {
+    const d = this.detail();
+    if (d) {
+      this.apiService.reconcileOrder(d.order.id).subscribe({
+        next: () => {
+          this.loadDetail();
+        },
+        error: (err) => alert('Reconciliation failed: ' + (err.error?.message || err.message))
+      });
+    }
   }
 }

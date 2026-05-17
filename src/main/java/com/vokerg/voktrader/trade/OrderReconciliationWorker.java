@@ -20,7 +20,7 @@ public class OrderReconciliationWorker {
         if (!properties.isEnabled() || !properties.getReconciliation().isEnabled()) {
             return;
         }
-        int reconciled = orderManager.reconcileOpenOrders();
+        int reconciled = orderManager.reconcileOpenOrders(OrderReconciliationSource.AUTO_WORKER);
         if (reconciled > 0) {
             log.info("Order layer reconciled open orders count={}", reconciled);
         }

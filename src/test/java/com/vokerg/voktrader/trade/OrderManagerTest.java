@@ -33,7 +33,9 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class OrderManagerTest {
@@ -98,6 +100,7 @@ class OrderManagerTest {
         assertThat(result.success()).isTrue();
         assertThat(result.tradeStatus()).isEqualTo(TradeStatus.ENTRY_PENDING);
         assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.SUBMITTED);
+        verify(reconciliationService).reconcileOrder(any(TradeOrderEntity.class), eq(OrderReconciliationSource.POST_SUBMIT));
     }
 
     @Test
@@ -133,6 +136,7 @@ class OrderManagerTest {
         org.mockito.Mockito.verify(reconciliationService).applyImmediateFill(any(TradeEntity.class), orderCaptor.capture(), any(ExecutorOrderResponse.class));
         assertThat(orderCaptor.getValue().getStatus()).isEqualTo(TradeOrderStatus.FILLED);
         assertThat(orderCaptor.getValue().getRemoteOrderId()).isEqualTo("remote-1");
+        verify(reconciliationService).reconcileOrder(any(TradeOrderEntity.class), eq(OrderReconciliationSource.POST_FILL_AUDIT));
     }
 
     @Test
@@ -144,21 +148,19 @@ class OrderManagerTest {
         when(tradeOrderRepository.findByLocalOrderId("local-1")).thenReturn(Optional.of(order));
         when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
         when(pythonExecutorClient.cancelOrder("remote-1")).thenReturn(new ExecutorCancelOrderResponse(true, "remote-1", "CANCELLED", "{}", null));
+        when(reconciliationService.reconcileOrder(eq(order), eq(OrderReconciliationSource.POST_CANCEL))).thenAnswer(invocation -> {
+            order.markCancelled("manual/explicit cancel requested", "{}");
+            return OrderLifecycleResult.of(trade, order, true, "CANCELLED");
+        });
 
         OrderLifecycleResult result = orderManager.cancelOrder("local-1");
 
         assertThat(result.success()).isTrue();
         assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.CANCELLED);
+        verify(reconciliationService).reconcileOrder(order, OrderReconciliationSource.POST_CANCEL);
         assertThat(savedEvents)
                 .extracting(TradeEventEntity::getEventType)
-                .containsExactly(
-                        OrderCancellationEventEmitter.CANCEL_REQUESTED_EVENT,
-                        OrderCancellationEventEmitter.CANCELLED_EVENT
-                );
-        assertThat(savedEvents.getLast().getPayloadJson())
-                .contains("\"previousStatus\":\"CANCEL_REQUESTED\"")
-                .contains("\"resolvedStatus\":\"CANCELLED\"")
-                .contains("\"cancelReason\":\"manual/explicit cancel requested\"");
+                .containsExactly(OrderCancellationEventEmitter.CANCEL_REQUESTED_EVENT);
     }
 
     private TradeIntent intent(TradeSide side) {

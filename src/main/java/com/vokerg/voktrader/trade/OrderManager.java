@@ -3,7 +3,6 @@ package com.vokerg.voktrader.trade;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
-import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeVenue;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
@@ -11,7 +10,6 @@ import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import com.vokerg.voktrader.executor.ExecutorCancelOrderResponse;
 import com.vokerg.voktrader.executor.ExecutorOrderCommand;
 import com.vokerg.voktrader.executor.ExecutorOrderResponse;
-import com.vokerg.voktrader.executor.ExecutorOrderStatusMapper;
 import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.executor.PythonExecutorClient;
 import lombok.RequiredArgsConstructor;
@@ -63,6 +61,11 @@ public class OrderManager {
             order.markFilled(response.exchangeOrderId(), response.averagePrice(), response.filledShares(), response.filledAmountUsd());
             tradeOrderRepository.save(order);
             reconciliationService.applyImmediateFill(trade, order, response);
+            try {
+                reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_FILL_AUDIT);
+            } catch (RuntimeException ignored) {
+                // Post-fill audit is observability; the accepted fill path must not depend on remote history lag.
+            }
             return OrderLifecycleResult.of(trade, order, true, response.safeMessage());
         }
 
@@ -74,6 +77,7 @@ public class OrderManager {
         }
         tradeOrderRepository.save(order);
         tradeRepository.save(trade);
+        reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_SUBMIT);
         return OrderLifecycleResult.of(trade, order, true, response.safeMessage());
     }
 
@@ -93,32 +97,13 @@ public class OrderManager {
         cancellationEventEmitter.emitCancelRequested(trade, order, cancelReason, null);
 
         ExecutorCancelOrderResponse response = pythonExecutorClient.cancelOrder(order.getRemoteOrderId());
-        if (response.success()) {
-            TradeOrderStatus resolvedStatus = ExecutorOrderStatusMapper.toLifecycleStatus(response.status());
-            if (resolvedStatus == TradeOrderStatus.CANCELLED) {
-                order.markCancelled(cancelReason, response.rawResponse());
-                if (trade != null && zeroIfNull(order.getFilledShares()).compareTo(java.math.BigDecimal.ZERO) == 0) {
-                    trade.markCancelled();
-                    tradeRepository.save(trade);
-                }
-                cancellationEventEmitter.emitCancelled(
-                        trade,
-                        order,
-                        TradeOrderStatus.CANCEL_REQUESTED,
-                        TradeOrderStatus.CANCELLED,
-                        order.getCancelReason(),
-                        response.rawResponse()
-                );
-            } else {
-                order.markCancelRequested("cancel accepted");
-            }
-            tradeOrderRepository.save(order);
-            return OrderLifecycleResult.of(trade, order, true, response.status());
-        }
-
-        order.markUnknown(response.error() == null ? response.status() : response.error().message());
+        order.attachExecutorResponse(null, response.rawResponse());
         tradeOrderRepository.save(order);
-        return OrderLifecycleResult.of(trade, order, false, response.status());
+        if (!response.success()) {
+            order.markUnknown(response.error() == null ? response.status() : response.error().message());
+            tradeOrderRepository.save(order);
+        }
+        return reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_CANCEL);
     }
 
     @Transactional(readOnly = true)
@@ -128,14 +113,38 @@ public class OrderManager {
 
     @Transactional
     public OrderLifecycleResult reconcileOrder(String localOrRemoteOrderId) {
+        return reconcileOrder(localOrRemoteOrderId, OrderReconciliationSource.AUTO_WORKER);
+    }
+
+    @Transactional
+    public OrderLifecycleResult reconcileOrder(String localOrRemoteOrderId, OrderReconciliationSource source) {
         TradeOrderEntity order = findOrder(localOrRemoteOrderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + localOrRemoteOrderId));
-        return reconciliationService.reconcileOrder(order);
+        return reconciliationService.reconcileOrder(order, source);
+    }
+
+    @Transactional
+    public OrderReconciliationResult reconcileOrderDetailed(String localOrRemoteOrderId, OrderReconciliationSource source) {
+        TradeOrderEntity order = findOrder(localOrRemoteOrderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + localOrRemoteOrderId));
+        return reconciliationService.reconcileOrderDetailed(order, source);
+    }
+
+    @Transactional
+    public OrderReconciliationResult reconcileOrderDetailed(Long orderId, OrderReconciliationSource source) {
+        TradeOrderEntity order = tradeOrderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+        return reconciliationService.reconcileOrderDetailed(order, source);
     }
 
     @Transactional
     public int reconcileOpenOrders() {
-        return reconciliationService.reconcileOpenOrders();
+        return reconcileOpenOrders(OrderReconciliationSource.AUTO_WORKER);
+    }
+
+    @Transactional
+    public int reconcileOpenOrders(OrderReconciliationSource source) {
+        return reconciliationService.reconcileOpenOrders(source);
     }
 
     private Optional<TradeOrderEntity> findOrder(String localOrRemoteOrderId) {
