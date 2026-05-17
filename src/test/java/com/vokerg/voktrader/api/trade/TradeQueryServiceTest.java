@@ -37,8 +37,8 @@ class TradeQueryServiceTest {
         TradeOrderRepository orderRepository = mock(TradeOrderRepository.class);
         TradeEventRepository eventRepository = mock(TradeEventRepository.class);
         when(tradeRepository.findById(5298L)).thenReturn(Optional.of(trade));
-        when(fillRepository.findByTradeId(5298L)).thenReturn(List.of());
-        when(orderRepository.findByTradeId(5298L)).thenReturn(List.of(order));
+        when(fillRepository.findByTradeIdOrderByIdAsc(5298L)).thenReturn(List.of());
+        when(orderRepository.findByTradeIdOrderByIdAsc(5298L)).thenReturn(List.of(order));
         when(eventRepository.findByTradeIdOrderByCreatedAtAsc(5298L)).thenReturn(List.of(event));
 
         TradeQueryService service = new TradeQueryService(

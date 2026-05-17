@@ -163,6 +163,23 @@ class OrderManagerTest {
                 .containsExactly(OrderCancellationEventEmitter.CANCEL_REQUESTED_EVENT);
     }
 
+    @Test
+    void cancelOrderDoesNotOverwriteRawResponseWithStringNull() {
+        TradeOrderEntity order = TradeOrderEntity.fromIntent(1L, intent(TradeSide.BUY), ExecutionMode.LIVE, TradeVenue.POLYMARKET, "local-1");
+        order.markSubmitted("remote-1", "{\"submitted\":true}");
+        TradeEntity trade = TradeEntity.fromIntent(intent(TradeSide.BUY), ExecutionMode.LIVE);
+        when(tradeOrderRepository.findByLocalOrderId("local-1")).thenReturn(Optional.of(order));
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(pythonExecutorClient.cancelOrder("remote-1")).thenReturn(new ExecutorCancelOrderResponse(true, "remote-1", "CANCELLED", "null", null));
+        when(reconciliationService.reconcileOrder(eq(order), eq(OrderReconciliationSource.POST_CANCEL)))
+                .thenReturn(OrderLifecycleResult.of(trade, order, true, "CANCELLED"));
+
+        orderManager.cancelOrder("local-1");
+
+        assertThat(order.getRawResponse()).isEqualTo("{\"submitted\":true}");
+        verify(reconciliationService).reconcileOrder(order, OrderReconciliationSource.POST_CANCEL);
+    }
+
     private TradeIntent intent(TradeSide side) {
         return side == TradeSide.BUY
                 ? TradeIntent.buy(null, market(), price(), new BigDecimal("1.00"), TradeOrderType.GTC, true, new BigDecimal("0.50"), "strategy", "rule", "entry")

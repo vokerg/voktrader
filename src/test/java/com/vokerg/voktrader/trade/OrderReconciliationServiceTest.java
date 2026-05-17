@@ -429,7 +429,56 @@ class OrderReconciliationServiceTest {
         TimeMachine.runAt(now, () -> service.reconcileOrder(order));
 
         assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.EXPIRED);
-        assertThat(trade.getStatus()).isEqualTo(TradeStatus.ENTRY_PENDING);
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.CREATED);
+    }
+
+    @Test
+    void oldCancelledGtdWithWeakLatePullStaysCancelledAndKeepsTradeCancelledAndRawResponse() {
+        Instant now = Instant.parse("2026-05-13T12:00:00Z");
+        TradeEntity[] tradeHolder = new TradeEntity[1];
+        TradeOrderEntity[] orderHolder = new TradeOrderEntity[1];
+        TimeMachine.runAt(now.minus(Duration.ofMinutes(121)), () -> {
+            TradeIntent intent = TradeIntent.buy(null, market(), price(), new BigDecimal("1.00"), TradeOrderType.GTD, true, new BigDecimal("0.50"), "strategy", "rule", "entry");
+            tradeHolder[0] = TradeEntity.fromIntent(intent, ExecutionMode.LIVE);
+            tradeHolder[0].markCancelled();
+            orderHolder[0] = TradeOrderEntity.fromIntent(1L, intent, ExecutionMode.LIVE, TradeVenue.POLYMARKET, "local-1");
+            orderHolder[0].markSubmitting("local-1", "{\"submit\":true}");
+            orderHolder[0].markSubmitted("remote-1", "{\"submitted\":true}");
+            orderHolder[0].markCancelled("old cancel", "{\"cancelled\":true}");
+        });
+        TradeEntity trade = tradeHolder[0];
+        TradeOrderEntity order = orderHolder[0];
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(
+                ExecutorOrderStatusResponse.failure("remote-1", "UNKNOWN_RESPONSE", "not found")
+        );
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(), "null", null));
+
+        TimeMachine.runAt(now, () -> service.reconcileOrder(order));
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.CANCELLED);
+        assertThat(order.getRawResponse()).isEqualTo("{\"cancelled\":true}");
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.CANCELLED);
+    }
+
+    @Test
+    void oldFilledOrderWithWeakLatePullStaysFilledAndKeepsRawResponse() {
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        order.markFilled("remote-1", new BigDecimal("0.50"), new BigDecimal("2"), new BigDecimal("1.00"));
+        order.attachExecutorResponse(null, "{\"filled\":true}");
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(
+                ExecutorOrderStatusResponse.failure("remote-1", "UNKNOWN_RESPONSE", "not found")
+        );
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(), "null", null));
+
+        service.reconcileOrder(order);
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.FILLED);
+        assertThat(order.getRawResponse()).isEqualTo("{\"filled\":true}");
     }
 
     @Test

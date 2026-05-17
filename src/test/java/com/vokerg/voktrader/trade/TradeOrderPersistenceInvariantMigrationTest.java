@@ -23,4 +23,16 @@ class TradeOrderPersistenceInvariantMigrationTest {
                 .contains("entry.exchange_order_id IS NOT NULL")
                 .contains("RAISE EXCEPTION");
     }
+
+    @Test
+    void remoteFillKeyMigrationRepairsColumnLengthForExistingDatabases() throws Exception {
+        String sql = Files.readString(Path.of(
+                "src/main/resources/db/migration/V19__trade_fill_remote_key.sql"
+        ));
+
+        assertThat(sql)
+                .contains("ADD COLUMN IF NOT EXISTS remote_fill_key VARCHAR(1000)")
+                .contains("ALTER COLUMN remote_fill_key VARCHAR(1000)")
+                .contains("idx_trade_fills_remote_key");
+    }
 }

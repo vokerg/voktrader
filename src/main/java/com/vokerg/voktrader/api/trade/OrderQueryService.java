@@ -52,7 +52,7 @@ public class OrderQueryService {
                 eqEnum("phase", phase, TradeOrderPhase.class),
                 eqEnum("mode", mode, ExecutionMode.class)
         );
-        return tradeOrderRepository.findAll(specification, PageRequest.of(0, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")))).stream()
+        return tradeOrderRepository.findAll(specification, PageRequest.of(0, size, Sort.by("id").descending())).stream()
                 .map(TradeOrderResponse::from)
                 .toList();
     }

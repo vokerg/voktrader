@@ -34,6 +34,7 @@ public class TradeFillEntity {
     private Long tradeOrderId;
     private String exchangeOrderId;
     private String remoteFillId;
+    @Column(length = 1000)
     private String remoteFillKey;
     private String marketId;
     private String tokenId;

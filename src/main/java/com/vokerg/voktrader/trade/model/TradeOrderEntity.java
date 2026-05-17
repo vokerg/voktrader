@@ -181,7 +181,7 @@ public class TradeOrderEntity {
 
     public void markResting(String rawResponse) {
         this.status = TradeOrderStatus.RESTING;
-        this.rawResponse = rawResponse;
+        setRawResponseIfUseful(rawResponse);
         touch();
     }
 
@@ -194,14 +194,14 @@ public class TradeOrderEntity {
     public void markCancelled(String reason, String rawResponse) {
         this.status = TradeOrderStatus.CANCELLED;
         this.cancelReason = reason;
-        this.rawResponse = rawResponse;
+        setRawResponseIfUseful(rawResponse);
         this.completedAt = TimeMachine.now();
         touch();
     }
 
     public void markExpired(String rawResponse) {
         this.status = TradeOrderStatus.EXPIRED;
-        this.rawResponse = rawResponse;
+        setRawResponseIfUseful(rawResponse);
         this.completedAt = TimeMachine.now();
         touch();
     }
@@ -210,14 +210,14 @@ public class TradeOrderEntity {
         this.status = TradeOrderStatus.REJECTED;
         this.rejectReason = reason;
         this.rejectionReason = reason;
-        this.rawResponse = rawResponse;
+        setRawResponseIfUseful(rawResponse);
         this.completedAt = TimeMachine.now();
         touch();
     }
 
     public void markUnknown(String rawResponse) {
         this.status = TradeOrderStatus.UNKNOWN;
-        this.rawResponse = rawResponse;
+        setRawResponseIfUseful(rawResponse);
         touch();
     }
 
@@ -226,7 +226,7 @@ public class TradeOrderEntity {
             this.exchangeOrderId = exchangeOrderId;
             this.remoteOrderId = exchangeOrderId;
         }
-        this.rawResponse = rawResponse;
+        setRawResponseIfUseful(rawResponse);
         this.acknowledgedAt = TimeMachine.now();
         if (this.submittedAt != null) {
             this.latencyMs = Duration.between(this.submittedAt, this.acknowledgedAt).toMillis();
@@ -279,9 +279,7 @@ public class TradeOrderEntity {
         this.realizedFeeUsd = feeUsd;
         this.feeKnown = feeKnown;
         this.fillRole = fillRole;
-        if (rawResponse != null) {
-            this.rawResponse = rawResponse;
-        }
+        setRawResponseIfUseful(rawResponse);
         if (status.isTerminal()) {
             this.completedAt = TimeMachine.now();
         }
@@ -289,7 +287,7 @@ public class TradeOrderEntity {
     }
 
     public void markFailed(String errorMessage, String rawResponse) {
-        this.rawResponse = rawResponse;
+        setRawResponseIfUseful(rawResponse);
         markFailed(errorMessage);
     }
 
@@ -300,6 +298,12 @@ public class TradeOrderEntity {
 
     private void touch() {
         this.updatedAt = TimeMachine.now();
+    }
+
+    private void setRawResponseIfUseful(String rawResponse) {
+        if (rawResponse != null && !rawResponse.isBlank() && !"null".equalsIgnoreCase(rawResponse.trim())) {
+            this.rawResponse = rawResponse;
+        }
     }
 
     @PrePersist

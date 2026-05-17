@@ -264,6 +264,9 @@ public class OrderReconciliationService {
                 return TradeOrderStatus.FILLED;
             }
         }
+        if (isStickyTerminal(order.getStatus())) {
+            return order.getStatus();
+        }
         if (remoteStatus.success()) {
             TradeOrderStatus remoteLifecycle = remoteStatus.lifecycleStatus();
             if (remoteLifecycle == TradeOrderStatus.CANCELLED
@@ -289,6 +292,9 @@ public class OrderReconciliationService {
             ExecutorOrderStatusResponse remoteStatus,
             ExecutorFillsResponse fills
     ) {
+        if (isStickyTerminal(order.getStatus()) || !order.getStatus().isActive()) {
+            return false;
+        }
         if (order.getOrderType() != TradeOrderType.GTD || !fills.success() || !fills.fills().isEmpty()) {
             return false;
         }
@@ -319,6 +325,14 @@ public class OrderReconciliationService {
             ExecutorFillsResponse fills
     ) {
         FillTotals totals = aggregate(order);
+        boolean remoteFillEvidence = hasRemoteFillEvidence(remoteStatus);
+        boolean pulledFillEvidence = fills.success() && !fills.fills().isEmpty();
+        if (status == order.getStatus()
+                && isStickyTerminal(status)
+                && !remoteFillEvidence
+                && !pulledFillEvidence) {
+            return;
+        }
         BigDecimal filledShares = totals.filledShares();
         BigDecimal filledAmountUsd = totals.filledAmountUsd();
         BigDecimal avgPrice = totals.avgPrice();
@@ -357,14 +371,14 @@ public class OrderReconciliationService {
                     totals.feeUsd(),
                     totals.feeKnown(),
                     role,
-                    coalesce(remoteStatus.rawResponse(), fills.rawResponse())
+                    usefulRaw(remoteStatus.rawResponse(), fills.rawResponse())
             );
-            case RESTING, SUBMITTED -> order.markResting(remoteStatus.rawResponse());
-            case CANCELLED -> order.markCancelled(firstNonBlank(order.getCancelReason(), "remote cancelled"), remoteStatus.rawResponse());
-            case EXPIRED -> order.markExpired(remoteStatus.rawResponse());
-            case REJECTED -> order.markRejected(errorMessage(remoteStatus), remoteStatus.rawResponse());
-            case FAILED -> order.markFailed(errorMessage(remoteStatus), remoteStatus.rawResponse());
-            default -> order.markUnknown(coalesce(remoteStatus.rawResponse(), fills.rawResponse()));
+            case RESTING, SUBMITTED -> order.markResting(usefulRaw(remoteStatus.rawResponse()));
+            case CANCELLED -> order.markCancelled(firstNonBlank(order.getCancelReason(), "remote cancelled"), usefulRaw(remoteStatus.rawResponse()));
+            case EXPIRED -> order.markExpired(usefulRaw(remoteStatus.rawResponse()));
+            case REJECTED -> order.markRejected(errorMessage(remoteStatus), usefulRaw(remoteStatus.rawResponse()));
+            case FAILED -> order.markFailed(errorMessage(remoteStatus), usefulRaw(remoteStatus.rawResponse()));
+            default -> order.markUnknown(usefulRaw(remoteStatus.rawResponse(), fills.rawResponse()));
         }
     }
 
@@ -378,10 +392,16 @@ public class OrderReconciliationService {
                 trade.markCancelled();
             }
         } else if (order.getStatus() == TradeOrderStatus.EXPIRED) {
-            trade.markEntryPending();
+            return;
         } else if (order.getStatus() == TradeOrderStatus.REJECTED || order.getStatus() == TradeOrderStatus.FAILED) {
+            if (trade.getStatus() != null && trade.getStatus().isTerminal()) {
+                return;
+            }
             trade.markFailed(order.getFailureReason());
         } else if (order.getStatus() == TradeOrderStatus.RESTING || order.getStatus() == TradeOrderStatus.SUBMITTED) {
+            if (trade.getStatus() != null && trade.getStatus().isTerminal()) {
+                return;
+            }
             trade.markEntryPending();
         }
     }
@@ -512,8 +532,36 @@ public class OrderReconciliationService {
         return response.error() == null ? response.status() : response.error().message();
     }
 
-    private String coalesce(String first, String second) {
-        return first != null ? first : second;
+    private boolean isStickyTerminal(TradeOrderStatus status) {
+        return status == TradeOrderStatus.CANCELLED
+                || status == TradeOrderStatus.FILLED
+                || status == TradeOrderStatus.REJECTED
+                || status == TradeOrderStatus.FAILED
+                || status == TradeOrderStatus.EXPIRED;
+    }
+
+    private boolean hasRemoteFillEvidence(ExecutorOrderStatusResponse remoteStatus) {
+        if (remoteStatus == null || !remoteStatus.success()) {
+            return false;
+        }
+        return (remoteStatus.filledSize() != null && remoteStatus.filledSize().compareTo(BigDecimal.ZERO) > 0)
+                || remoteStatus.lifecycleStatus() == TradeOrderStatus.FILLED;
+    }
+
+    private String usefulRaw(String... candidates) {
+        if (candidates == null) {
+            return null;
+        }
+        for (String candidate : candidates) {
+            if (isUsefulRaw(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private boolean isUsefulRaw(String value) {
+        return value != null && !value.isBlank() && !"null".equalsIgnoreCase(value.trim());
     }
 
     private String firstNonBlank(String first, String fallback) {

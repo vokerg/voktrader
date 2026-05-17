@@ -51,7 +51,7 @@ public class TradeQueryService {
                 eqEnum("status", status, TradeStatus.class),
                 eqEnum("mode", mode, ExecutionMode.class)
         );
-        return tradeRepository.findAll(specification, PageRequest.of(0, size, Sort.by(Sort.Order.desc("decisionAt"), Sort.Order.desc("id")))).stream()
+        return tradeRepository.findAll(specification, PageRequest.of(0, size, Sort.by("id").descending())).stream()
                 .map(TradeSummaryResponse::from)
                 .toList();
     }

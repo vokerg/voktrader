@@ -97,7 +97,9 @@ public class OrderManager {
         cancellationEventEmitter.emitCancelRequested(trade, order, cancelReason, null);
 
         ExecutorCancelOrderResponse response = pythonExecutorClient.cancelOrder(order.getRemoteOrderId());
-        order.attachExecutorResponse(null, response.rawResponse());
+        if (isUsefulRaw(response.rawResponse())) {
+            order.attachExecutorResponse(null, response.rawResponse());
+        }
         tradeOrderRepository.save(order);
         if (!response.success()) {
             order.markUnknown(response.error() == null ? response.status() : response.error().message());
@@ -161,5 +163,9 @@ public class OrderManager {
 
     private java.math.BigDecimal zeroIfNull(java.math.BigDecimal value) {
         return value == null ? java.math.BigDecimal.ZERO : value;
+    }
+
+    private boolean isUsefulRaw(String value) {
+        return value != null && !value.isBlank() && !"null".equalsIgnoreCase(value.trim());
     }
 }
