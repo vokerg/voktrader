@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.trade;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeEventEntity;
@@ -23,7 +24,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
-import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -46,15 +46,17 @@ class OrderManagerTest {
     private final List<TradeEventEntity> savedEvents = new ArrayList<>();
     private final OrderCancellationEventEmitter cancellationEventEmitter = new OrderCancellationEventEmitter(
             tradeEventRepository,
-            new ObjectMapper()
+            new tools.jackson.databind.ObjectMapper()
     );
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final OrderManager orderManager = new OrderManager(
             tradeRepository,
             tradeOrderRepository,
             pythonExecutorClient,
             executorProperties,
             reconciliationService,
-            cancellationEventEmitter
+            cancellationEventEmitter,
+            objectMapper
     );
 
     @BeforeEach

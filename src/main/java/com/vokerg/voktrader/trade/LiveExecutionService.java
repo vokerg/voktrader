@@ -416,4 +416,13 @@ public class LiveExecutionService {
     private static <T> T firstNonNull(T primary, T fallback) {
         return primary != null ? primary : fallback;
     }
+
+    private String toJson(Object obj) {
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize object to JSON: {}", obj, e);
+            return "{\"error\": \"serialization failed\"}";
+        }
+    }
 }

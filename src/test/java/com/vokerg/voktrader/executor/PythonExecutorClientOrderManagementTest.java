@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.executor;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -13,7 +14,7 @@ class PythonExecutorClientOrderManagementTest {
     @Test
     void disabledClientReturnsStructuredErrorsForOrderManagementCalls() {
         ExecutorProperties properties = new ExecutorProperties();
-        PythonExecutorClient client = new PythonExecutorClient(properties, WebClient.builder());
+        PythonExecutorClient client = new PythonExecutorClient(properties, WebClient.builder(), new ObjectMapper());
 
         ExecutorCancelOrderResponse cancel = client.cancelOrder("remote-1");
         ExecutorOrderStatusResponse status = client.getOrderStatus("remote-1");

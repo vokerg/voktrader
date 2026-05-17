@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.trade;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeEventEntity;
@@ -52,6 +53,7 @@ class LiveExecutionServiceTest {
     private final PythonExecutorClient pythonExecutorClient = mock(PythonExecutorClient.class);
     private final ExecutorProperties executorProperties = new ExecutorProperties();
     private final TradingProperties tradingProperties = new TradingProperties();
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final LiveExecutionService service = new LiveExecutionService(
             riskCheckService,
             riskCheckRepository,
@@ -63,7 +65,8 @@ class LiveExecutionServiceTest {
             executorProperties,
             tradingProperties,
             new PolymarketFeeCalculator(),
-            mock(TradingEventLogger.class)
+            mock(TradingEventLogger.class),
+            objectMapper
     );
 
     @BeforeEach
