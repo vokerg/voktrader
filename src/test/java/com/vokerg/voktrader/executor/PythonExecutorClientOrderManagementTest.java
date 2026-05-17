@@ -1,8 +1,8 @@
 package com.vokerg.voktrader.executor;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
+import tools.jackson.databind.ObjectMapper;
 
 import com.vokerg.voktrader.trade.model.TradeSide;
 
