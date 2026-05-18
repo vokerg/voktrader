@@ -1,6 +1,7 @@
 package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.RiskSeverity;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeEventEntity;
 import com.vokerg.voktrader.trade.model.TradeFillEntity;

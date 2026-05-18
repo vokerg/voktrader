@@ -4,7 +4,8 @@ import com.vokerg.voktrader.api.trade.dto.OrderReconciliationResponse;
 import com.vokerg.voktrader.api.trade.dto.TradeOrderDetailResponse;
 import com.vokerg.voktrader.api.trade.dto.TradeOrderResponse;
 import com.vokerg.voktrader.trade.OrderManager;
-import com.vokerg.voktrader.trade.OrderReconciliationSource;
+import com.vokerg.voktrader.trade.model.OrderReconciliationSource;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;

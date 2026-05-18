@@ -1,16 +1,14 @@
 package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.RiskSeverity;
 import com.vokerg.voktrader.trade.model.TradeOrderPhase;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeRiskCheckEntity;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeStatus;
-import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
-import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
-import com.vokerg.voktrader.trade.persistence.TradeRiskCheckRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

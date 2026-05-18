@@ -4,8 +4,6 @@ import jakarta.persistence.*;
 
 import java.time.Instant;
 
-import com.vokerg.voktrader.trade.RiskSeverity;
-
 @Entity
 @Table(name = "trade_risk_checks", indexes = {
         @Index(name = "idx_trade_risk_checks_trade", columnList = "trade_id"),
