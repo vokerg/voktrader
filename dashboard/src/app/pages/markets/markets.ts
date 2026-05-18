@@ -10,6 +10,16 @@ import { MarketSummaryResponse } from '../../models/api.models';
   template: `
     <div class="header">
       <h1>Markets</h1>
+      <div class="header-actions">
+        <label class="filter-toggle">
+          <input
+            type="checkbox"
+            [checked]="showResolved()"
+            (change)="toggleShowResolved($event)"
+          />
+          Include resolved
+        </label>
+      </div>
     </div>
 
     <div class="card">
@@ -38,7 +48,7 @@ import { MarketSummaryResponse } from '../../models/api.models';
             </td>
             <td>
               <span class="badge" [class.badge-success]="market.active" [class.badge-gray]="!market.active">
-                {{ market.active ? 'ACTIVE' : 'INACTIVE' }}
+                {{ market.active ? 'ACTIVE' : (market.resolved ? 'RESOLVED' : 'INACTIVE') }}
               </span>
             </td>
           </tr>
@@ -47,8 +57,38 @@ import { MarketSummaryResponse } from '../../models/api.models';
     </div>
   `,
   styles: `
-    .header { margin-bottom: 24px; }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      gap: 16px;
+    }
+
     h1 { font-size: 24px; font-weight: 700; }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .filter-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #374151;
+      user-select: none;
+    }
+
+    .filter-toggle input {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+    }
 
     .card {
       background-color: #fff;
@@ -93,9 +133,24 @@ import { MarketSummaryResponse } from '../../models/api.models';
 export class Markets implements OnInit {
   private apiService = inject(ApiService);
   markets = signal<MarketSummaryResponse[]>([]);
+  showResolved = signal(false);
 
   ngOnInit() {
-    this.apiService.getMarkets({ active: true, limit: 50 }).subscribe(markets => {
+    this.fetchMarkets();
+  }
+
+  toggleShowResolved(event: Event) {
+    const input = event.target as HTMLInputElement;
+    this.showResolved.set(input.checked);
+    this.fetchMarkets();
+  }
+
+  private fetchMarkets() {
+    const params: any = { limit: 50 };
+    if (!this.showResolved()) {
+      params.active = true;
+    }
+    this.apiService.getMarkets(params).subscribe(markets => {
       this.markets.set(markets);
     });
   }

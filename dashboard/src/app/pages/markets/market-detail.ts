@@ -73,26 +73,50 @@ import { MarketDetailResponse } from '../../models/api.models';
         <div *ngIf="!m.latestOrderBook">No order book data available</div>
       </div>
 
-      <div class="card mt-4">
-        <h2>Recent Price History (UP)</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Bid</th>
-              <th>Ask</th>
-              <th>Spread</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let p of m.recentPrices">
-              <td>{{ p.capturedAt | date:'mediumTime' }}</td>
-              <td>$ {{ p.upBid | number:'1.3-3' }}</td>
-              <td>$ {{ p.upAsk | number:'1.3-3' }}</td>
-              <td>$ {{ p.upSpread | number:'1.3-3' }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="history-grid mt-4">
+        <div class="card">
+          <h2>Price History (UP)</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Bid</th>
+                <th>Ask</th>
+                <th>Spread</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let p of m.recentPrices">
+                <td>{{ p.capturedAt | date:'mediumTime' }}</td>
+                <td>$ {{ p.upBid | number:'1.3-3' }}</td>
+                <td>$ {{ p.upAsk | number:'1.3-3' }}</td>
+                <td>$ {{ p.upSpread | number:'1.3-3' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h2>Price History (DOWN)</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Bid</th>
+                <th>Ask</th>
+                <th>Spread</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let p of m.recentPrices">
+                <td>{{ p.capturedAt | date:'mediumTime' }}</td>
+                <td>$ {{ p.downBid | number:'1.3-3' }}</td>
+                <td>$ {{ p.downAsk | number:'1.3-3' }}</td>
+                <td>$ {{ p.downSpread | number:'1.3-3' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   `,
@@ -108,22 +132,25 @@ import { MarketDetailResponse } from '../../models/api.models';
     .slug { font-size: 14px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
     .question { font-size: 20px; font-weight: 700; color: #111827; margin-top: 4px; }
 
-    .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-    .info-item { display: flex; justify-content: space-between; font-size: 14px; padding: 4px 0; border-bottom: 1px solid #f3f4f6; }
-    .info-item label { color: #6b7280; }
-    .info-item span { font-weight: 500; }
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+    .info-item { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-bottom: 1px solid #f3f4f6; }
+    .info-item label { color: #4b5563; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .info-item span { font-weight: 500; color: #111827; font-size: 15px; word-break: break-all; line-height: 1.5; }
 
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-    h2 { font-size: 18px; font-weight: 600; margin-top: 0; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 24px; }
+    h2 { font-size: 18px; font-weight: 700; margin-top: 0; margin-bottom: 20px; color: #374151; }
 
-    .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; background: #fee2e2; color: #991b1b; }
+    .status-badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; background: #fee2e2; color: #991b1b; width: fit-content; text-transform: uppercase; }
     .status-badge.active { background: #d1fae5; color: #065f46; }
 
-    .winner { color: #059669; font-weight: 700; }
+    .winner { color: #059669; font-weight: 800; font-size: 18px; }
+
+    .history-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 
     table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 12px 8px; border-bottom: 2px solid #f3f4f6; color: #6b7280; font-size: 12px; }
-    td { padding: 12px 8px; border-bottom: 1px solid #f3f4f6; font-size: 14px; }
+    th { text-align: left; padding: 12px 8px; border-bottom: 2px solid #f3f4f6; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase; }
+    td { padding: 12px 8px; border-bottom: 1px solid #f3f4f6; font-size: 14px; color: #374151; }
+    tr:hover { background-color: #f9fafb; }
   `
 })
 export class MarketDetail implements OnInit {
