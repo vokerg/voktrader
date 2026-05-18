@@ -5,7 +5,7 @@ import com.vokerg.voktrader.market.MarketPersistenceService;
 import com.vokerg.voktrader.marketdata.MarketPriceFeedService;
 import com.vokerg.voktrader.polymarket.client.GammaClient;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
-import com.vokerg.voktrader.resolution.MarketResolutionService;
+import com.vokerg.voktrader.market.MarketResolutionService;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;

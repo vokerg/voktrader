@@ -16,18 +16,18 @@ import java.util.List;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class TradeLifecycleService {
+public class TradeSettlementService {
     private final TradeRepository tradeRepository;
     private final TradeEventRepository eventRepository;
 
     @Transactional
-    public void resolveMarket(String marketId, String winningOutcome) {
+    public void settleOpenTradesForResolvedMarket(String marketId, String winningOutcome) {
         if (marketId == null || marketId.isBlank() || winningOutcome == null || winningOutcome.isBlank()) {
             return;
         }
         List<TradeEntity> openTrades = tradeRepository.findByMarketIdAndStatus(marketId, TradeStatus.OPEN);
         if (openTrades.isEmpty()) {
-            log.info("No OPEN trades to resolve for marketId={}", marketId);
+            log.info("No OPEN trades to settle for resolved marketId={}", marketId);
             return;
         }
         Instant now = Instant.now();
@@ -36,10 +36,10 @@ public class TradeLifecycleService {
             tradeRepository.save(trade);
             eventRepository.save(TradeEventEntity.of(
                     trade.getId(), null, null, "MARKET_RESOLVED",
-                    "trade resolved from market resolution winningOutcome=" + winningOutcome,
+                    "trade settled from market resolution winningOutcome=" + winningOutcome,
                     null));
             log.info(
-                    "TRADE RESOLVED: tradeId={} marketId={} outcome={} winningOutcome={} status={} entryPrice={} amountUsd={} shares={} finalPnl={}",
+                    "TRADE SETTLED: tradeId={} marketId={} outcome={} winningOutcome={} status={} entryPrice={} amountUsd={} shares={} finalPnl={}",
                     trade.getId(), trade.getMarketId(), trade.getOutcome(), trade.getWinningOutcome(), trade.getStatus(),
                     trade.getEntryAvgPrice(), trade.getEntryFilledUsd(), trade.getEntryFilledShares(), trade.getFinalPnlUsd());
         }

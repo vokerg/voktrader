@@ -4,7 +4,7 @@ import com.vokerg.voktrader.config.MarketSelectionProperties;
 import com.vokerg.voktrader.market.MarketPersistenceService;
 import com.vokerg.voktrader.marketdata.MarketPriceFeedService;
 import com.vokerg.voktrader.polymarket.client.GammaClient;
-import com.vokerg.voktrader.resolution.MarketResolutionService;
+import com.vokerg.voktrader.market.MarketResolutionService;
 import com.vokerg.voktrader.strategy.StrategyRegistry;
 import com.vokerg.voktrader.strategy.TradingStrategy;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;

@@ -7,6 +7,7 @@ import com.vokerg.voktrader.trade.model.TradeStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.Collection;
 import java.util.List;
@@ -20,6 +21,8 @@ public interface TradeRepository extends JpaRepository<TradeEntity, Long>, JpaSp
     long countByStrategyIdAndMarketId(String strategyId, String marketId);
     List<TradeEntity> findByMarketIdAndStatus(String marketId, TradeStatus status);
     List<TradeEntity> findByStatus(TradeStatus status);
+    @Query("select distinct t.marketId from TradeEntity t where t.status = :status")
+    List<String> findDistinctMarketIdByStatus(TradeStatus status);
     List<TradeEntity> findByStrategyIdAndStatus(String strategyId, TradeStatus status);
     Optional<TradeEntity> findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(String strategyId, String marketId, String tokenId, TradeStatus status);
     Optional<TradeEntity> findFirstByStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(String strategyId, String marketId, TradeStatus status);

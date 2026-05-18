@@ -1,11 +1,7 @@
-package com.vokerg.voktrader.resolution;
+package com.vokerg.voktrader.market;
 
 import com.vokerg.voktrader.common.LogColors;
 import com.vokerg.voktrader.config.ResolutionProperties;
-import com.vokerg.voktrader.market.MarketEntity;
-import com.vokerg.voktrader.market.MarketRepository;
-import com.vokerg.voktrader.market.MarketResolutionStatus;
-import com.vokerg.voktrader.market.MarketPersistenceService;
 import com.vokerg.voktrader.polymarket.client.GammaClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,14 +48,24 @@ public class ExpiredMarketResolutionPoller {
                     .blockOptional()
                     .flatMap(gammaMarket -> gammaMarket.resolvedOutcome(objectMapper))
                     .ifPresentOrElse(
-                            winner -> marketResolutionService.resolveMarket(
-                                    market.getPolymarketMarketId(),
-                                    winner.winningAssetId(),
-                                    winner.winningOutcome(),
-                                    "gamma_poll"),
+                            winner -> {
+                                log.info(
+                                        "{}EMERGENCY MARKET RESOLUTION found via gamma_poll: marketId={} winningOutcome={} winningAssetId={} attempts={}{}",
+                                        LogColors.TRADE,
+                                        market.getPolymarketMarketId(),
+                                        winner.winningOutcome(),
+                                        winner.winningAssetId(),
+                                        nextAttempts(market),
+                                        LogColors.RESET);
+                                marketResolutionService.resolveMarket(
+                                        market.getPolymarketMarketId(),
+                                        winner.winningAssetId(),
+                                        winner.winningOutcome(),
+                                        "gamma_poll");
+                            },
                             () -> recordNoResolution(market));
         } catch (Exception ex) {
-            marketPersistenceService.recordResolutionCheck(market.getPolymarketMarketId(), false);
+            marketPersistenceService.recordResolutionCheck(market.getPolymarketMarketId(), true);
             log.warn(
                     "{}No resolution yet: marketId={} attempts={}{}",
                     LogColors.TRADE,

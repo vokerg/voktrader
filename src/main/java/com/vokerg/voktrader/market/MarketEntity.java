@@ -59,6 +59,8 @@ public class MarketEntity {
 
     private String winningAssetId;
 
+    private String resolutionSource;
+
     private Instant resolvedAt;
 
     private Instant lastResolutionCheckAt;
@@ -175,6 +177,14 @@ public class MarketEntity {
 
     public void setWinningAssetId(String winningAssetId) {
         this.winningAssetId = winningAssetId;
+    }
+
+    public String getResolutionSource() {
+        return resolutionSource;
+    }
+
+    public void setResolutionSource(String resolutionSource) {
+        this.resolutionSource = resolutionSource;
     }
 
     public Instant getResolvedAt() {

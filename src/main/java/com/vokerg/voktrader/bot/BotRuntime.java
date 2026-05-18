@@ -12,7 +12,7 @@ import com.vokerg.voktrader.marketdata.MarketTokenMap;
 import com.vokerg.voktrader.marketdata.OrderBookState;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.polymarket.dto.MarketWsMessageDto;
-import com.vokerg.voktrader.resolution.MarketResolutionService;
+import com.vokerg.voktrader.market.MarketResolutionService;
 import com.vokerg.voktrader.telemetry.TelemetryData;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import lombok.extern.slf4j.Slf4j;
@@ -409,6 +409,13 @@ public class BotRuntime {
                 ),
                 true
         );
+        log.info("{}NORMAL MARKET RESOLUTION received via websocket: botId={} marketId={} winningOutcome={} winningAssetId={}{}",
+                LogColors.TRADE,
+                botId(),
+                resolvedMarketId,
+                message.winningOutcome(),
+                message.winningAssetId(),
+                LogColors.RESET);
         marketResolutionService.resolveMarket(resolvedMarketId, message.winningAssetId(), message.winningOutcome(), "websocket");
         if (!trackedMarketState.isCurrentMarket(resolvedMarketId)) {
             return;
