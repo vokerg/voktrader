@@ -63,16 +63,7 @@ class PaperOrderGatewayTest {
 
     @BeforeEach
     void setUp() {
-        gateway = new PaperOrderGateway(
-                tradeRepository,
-                orderRepository,
-                fillRepository,
-                new PolymarketFeeCalculator(),
-                tradingProperties,
-                executionProperties,
-                new BookOrderFillSimulator(),
-                new TradeExecutionSafetyService(orderRepository, eventRepository, eventLogger, new ObjectMapper())
-        );
+        gateway = newGateway();
         when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> {
             TradeEntity trade = invocation.getArgument(0);
             if (trade.getId() == null) {
@@ -102,6 +93,18 @@ class PaperOrderGatewayTest {
                 .filter(order -> invocation.getArgument(0).equals(order.getClientOrderId()))
                 .findFirst());
         when(orderRepository.findByRemoteOrderId(any())).thenReturn(Optional.empty());
+        when(orderRepository.findByModeAndVenueAndStatusInOrderByUpdatedAtAsc(any(), any(), any())).thenAnswer(invocation -> {
+            ExecutionMode mode = invocation.getArgument(0);
+            var venue = invocation.getArgument(1);
+            @SuppressWarnings("unchecked")
+            List<TradeOrderStatus> statuses = invocation.getArgument(2);
+            return orders.values().stream()
+                    .filter(order -> order.getMode() == mode)
+                    .filter(order -> order.getVenue() == venue)
+                    .filter(order -> statuses.contains(order.getStatus()))
+                    .sorted(java.util.Comparator.comparing(TradeOrderEntity::getUpdatedAt, java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder())))
+                    .toList();
+        });
         when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> trades.values().stream()
                         .filter(trade -> invocation.getArgument(0).equals(trade.getBotId()))
@@ -119,9 +122,28 @@ class PaperOrderGatewayTest {
     }
 
     @Test
+    void restingOrderAdvancesAfterGatewayRecreation() {
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
+        ));
+
+        gateway = newGateway();
+
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.49", "10", () -> {
+            gateway.advanceOpenOrders();
+            return null;
+        }));
+
+        TradeOrderEntity order = orders.values().iterator().next();
+        TradeEntity trade = trades.values().iterator().next();
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.FILLED);
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.OPEN);
+    }
+
+    @Test
     void gtcBuyRestsWhenAskStaysAboveLimit() {
-        OrderLifecycleResult result = withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.PAPER)
+        OrderLifecycleResult result = withBook(1L, "market-id", "0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
         );
 
         assertThat(result.success()).isTrue();
@@ -131,11 +153,11 @@ class PaperOrderGatewayTest {
 
     @Test
     void gtcBuyFillsWhenFutureAskCrossesBelowLimit() {
-        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.PAPER)
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
         ));
 
-        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook("0.49", "10", "0.49", "10", () -> {
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.49", "10", () -> {
             gateway.advanceOpenOrders();
             return null;
         }));
@@ -150,11 +172,11 @@ class PaperOrderGatewayTest {
     void makerTouchPartiallyFillsAtTouch() {
         executionProperties.setFillModel("maker_touch");
         executionProperties.setMakerTouchFillRatio(new BigDecimal("0.25"));
-        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "50.00", null), owner(), ExecutionMode.PAPER)
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.GTC, TradeSide.BUY, "0.50", "50.00", null), owner(1L), ExecutionMode.PAPER)
         ));
 
-        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook("0.49", "10", "0.50", "40", () -> {
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.50", "40", () -> {
             gateway.advanceOpenOrders();
             return null;
         }));
@@ -171,11 +193,13 @@ class PaperOrderGatewayTest {
         executionProperties.setFillModel("maker_no_fill");
         executionProperties.setDefaultGtdSeconds(2);
         Instant start = Instant.parse("2026-05-09T12:00:00Z");
-        TimeMachine.runAt(start, () -> withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTD, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.PAPER)
+        TimeMachine.runAt(start, () -> withBook(1L, "market-id", "0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.GTD, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
         ));
 
-        TimeMachine.runAt(start.plusSeconds(3), () -> withBook("0.49", "10", "0.51", "10", () -> {
+        gateway = newGateway();
+
+        TimeMachine.runAt(start.plusSeconds(3), () -> withBook(1L, "market-id", "0.49", "10", "0.51", "10", () -> {
             gateway.advanceOpenOrders();
             return null;
         }));
@@ -188,13 +212,13 @@ class PaperOrderGatewayTest {
 
     @Test
     void cancelledOrderDoesNotFillLater() {
-        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.PAPER)
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
         ));
         String localOrderId = orders.values().iterator().next().getLocalOrderId();
         gateway.cancelOrder(localOrderId, "test cancel");
 
-        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook("0.49", "10", "0.49", "10", () -> {
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.49", "10", () -> {
             gateway.advanceOpenOrders();
             return null;
         }));
@@ -207,28 +231,83 @@ class PaperOrderGatewayTest {
 
     @Test
     void fokAndFakStillUseImmediateTakerBehavior() {
-        OrderLifecycleResult fok = withBook("0.49", "2", "0.50", "2", () ->
-                gateway.submitOrder(intent(TradeOrderType.FOK, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.PAPER)
+        OrderLifecycleResult fok = withBook(1L, "market-id", "0.49", "2", "0.50", "2", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.FOK, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
         );
-        OrderLifecycleResult fak = withBook("0.49", "1", "0.50", "1", () ->
-                gateway.submitOrder(intent(TradeOrderType.FAK, TradeSide.BUY, "0.50", "10.00", null), owner(), ExecutionMode.PAPER)
+        OrderLifecycleResult fak = withBook(1L, "market-id", "0.49", "1", "0.50", "1", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.FAK, TradeSide.BUY, "0.50", "10.00", null), owner(1L), ExecutionMode.PAPER)
         );
 
         assertThat(fok.orderStatus()).isEqualTo(TradeOrderStatus.FILLED);
         assertThat(fak.orderStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
     }
 
-    private StrategyInstanceKey owner() {
-        return StrategyInstanceKey.of(1L, "MK_GTD_EDGE_A");
+    @Test
+    void differentBotOrderIsNotAdvancedUnderCurrentBotContext() {
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
+        ));
+
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook(2L, "market-id", "0.49", "10", "0.49", "10", () -> {
+            gateway.advanceOpenOrders();
+            return null;
+        }));
+
+        assertThat(orders.values().iterator().next().getStatus()).isEqualTo(TradeOrderStatus.RESTING);
     }
 
-    private TradeIntent intent(TradeOrderType type, TradeSide side, String price, String amountUsd, String shares) {
+    @Test
+    void matchingBotOrderAdvances() {
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
+        ));
+
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.49", "10", () -> {
+            gateway.advanceOpenOrders();
+            return null;
+        }));
+
+        assertThat(orders.values().iterator().next().getStatus()).isEqualTo(TradeOrderStatus.FILLED);
+    }
+
+    @Test
+    void differentMarketOrderIsNotAdvanced() {
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook(1L, "market-a", "0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(1L, "market-a", TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
+        ));
+
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook(1L, "market-b", "0.49", "10", "0.49", "10", () -> {
+            gateway.advanceOpenOrders();
+            return null;
+        }));
+
+        assertThat(orders.values().iterator().next().getStatus()).isEqualTo(TradeOrderStatus.RESTING);
+    }
+
+    private PaperOrderGateway newGateway() {
+        return new PaperOrderGateway(
+                tradeRepository,
+                orderRepository,
+                fillRepository,
+                new PolymarketFeeCalculator(),
+                tradingProperties,
+                executionProperties,
+                new BookOrderFillSimulator(),
+                new TradeExecutionSafetyService(orderRepository, eventRepository, eventLogger, new ObjectMapper())
+        );
+    }
+
+    private StrategyInstanceKey owner(Long botId) {
+        return StrategyInstanceKey.of(botId, "MK_GTD_EDGE_A");
+    }
+
+    private TradeIntent intent(Long botId, String marketId, TradeOrderType type, TradeSide side, String price, String amountUsd, String shares) {
         BigDecimal limit = new BigDecimal(price);
         return new TradeIntent(
-                1L,
+                botId,
                 "MK_GTD_EDGE_A",
                 side == TradeSide.BUY ? "entry" : "exit",
-                "market-id",
+                marketId,
                 "slug",
                 "Question",
                 "condition-id",
@@ -254,7 +333,15 @@ class PaperOrderGatewayTest {
         );
     }
 
-    private <T> T withBook(String bid, String bidSize, String ask, String askSize, java.util.concurrent.Callable<T> callable) {
+    private <T> T withBook(
+            Long botId,
+            String marketId,
+            String bid,
+            String bidSize,
+            String ask,
+            String askSize,
+            java.util.concurrent.Callable<T> callable
+    ) {
         OrderBookState orderBookState = new OrderBookState();
         orderBookState.update(
                 "token-up",
@@ -263,13 +350,29 @@ class PaperOrderGatewayTest {
                 List.of(new PriceLevelDto(ask, askSize)),
                 TimeMachine.now()
         );
+        TrackedMarketState trackedMarketState = new TrackedMarketState();
+        trackedMarketState.setCurrentMarket(new com.vokerg.voktrader.polymarket.dto.GammaMarketDto(
+                marketId,
+                "Question",
+                "condition-id",
+                "slug",
+                TimeMachine.now().plusSeconds(60),
+                true,
+                false,
+                true,
+                false,
+                null,
+                null,
+                null,
+                null
+        ));
         BotRuntimeContext context = new BotRuntimeContext(
-                1L,
+                botId,
                 null,
                 "strategy-v2",
                 null,
                 null,
-                new TrackedMarketState(),
+                trackedMarketState,
                 new LatestPriceState(),
                 orderBookState
         );
