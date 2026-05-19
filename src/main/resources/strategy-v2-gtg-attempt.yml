@@ -56,7 +56,7 @@ strategy-v2:
       description: Passive maker GTD edge capture, 5-share minimum order.
       hypothesis: >
         Post a small post-only maker bid when spread is at least one tick,
-        book pressure is supportive, volatility is low, and the order can be
+        book pressure is supportive, volatility is controlled, and the order can be
         cancelled quickly if the signal deteriorates. Entry is passive; exit is
         aggressive taker/FAK using net PnL thresholds. Defensive pressure exits
         require a short minimum hold and stronger adverse signals to avoid
@@ -68,14 +68,13 @@ strategy-v2:
         - five-shares
         - post-only
 
-
       candidate-selection:
         type: score
         candidates:
           - Up
           - Down
         choose: highest_score
-        min-score: "0.014"
+        min-score: "0.010"
         score:
           Up:
             expression: >
@@ -113,41 +112,41 @@ strategy-v2:
               op: between
               values:
                 - "55"
-                - "270"
+                - "280"
 
             - feature: candidate.price_age_ms
               op: "<="
-              value: "900"
+              value: "1000"
 
             - feature: candidate.book_age_ms
               op: "<="
-              value: "900"
+              value: "1000"
 
             - feature: candidate.spread
               op: between
               values:
                 - "0.010"
-                - "0.06"
+                - "0.075"
 
             - feature: candidate.mid
               op: between
               values:
-                - "0.35"
-                - "0.72"
+                - "0.33"
+                - "0.75"
 
             - feature: candidate.bid
               op: between
               values:
-                - "0.29"
-                - "0.67"
+                - "0.27"
+                - "0.70"
 
             - feature: candidate.microprice_edge
               op: ">="
-              value: "0.0015"
+              value: "0.0008"
 
             - feature: candidate.depth_imbalance_0_03
               op: ">="
-              value: "0.050"
+              value: "0.025"
 
             - feature: candidate.bid_depth_within_0_03
               op: ">="
@@ -156,20 +155,20 @@ strategy-v2:
             - feature: candidate.mid_move_5s
               op: between
               values:
-                - "-0.015"
-                - "0.030"
+                - "-0.025"
+                - "0.040"
 
             - feature: candidate.bid_move_3s
               op: ">="
-              value: "-0.001"
+              value: "-0.006"
 
             - feature: candidate.volatility_10s
               op: "<="
-              value: "0.030"
+              value: "0.050"
 
             - feature: opposite.bid_move_5s
               op: "<="
-              value: "0.004"
+              value: "0.010"
 
         action:
           side: BUY
@@ -182,7 +181,7 @@ strategy-v2:
             tick-size: "0.01"
             rounding: floor_to_tick
             min-price: "0.05"
-            max-price: "0.65"
+            max-price: "0.70"
             do-not-cross-spread: true
 
           size:
