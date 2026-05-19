@@ -1,4 +1,4 @@
-package com.vokerg.voktrader.trade;
+package com.vokerg.voktrader.trade.paper;
 
 import com.vokerg.voktrader.backtest.BacktestFillModel;
 import org.springframework.boot.context.properties.ConfigurationProperties;

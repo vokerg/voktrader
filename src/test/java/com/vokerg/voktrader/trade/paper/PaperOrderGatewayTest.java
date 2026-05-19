@@ -1,4 +1,4 @@
-package com.vokerg.voktrader.trade;
+package com.vokerg.voktrader.trade.paper;
 
 import com.vokerg.voktrader.bot.BotRuntimeContext;
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
@@ -7,6 +7,13 @@ import com.vokerg.voktrader.marketdata.LatestPriceState;
 import com.vokerg.voktrader.marketdata.OrderBookState;
 import com.vokerg.voktrader.polymarket.dto.PriceLevelDto;
 import com.vokerg.voktrader.time.TimeMachine;
+import com.vokerg.voktrader.trade.OrderLifecycleResult;
+import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
+import com.vokerg.voktrader.trade.StrategyInstanceKey;
+import com.vokerg.voktrader.trade.StrategyRuntimeState;
+import com.vokerg.voktrader.trade.TradeExecutionSafetyService;
+import com.vokerg.voktrader.trade.TradeIntent;
+import com.vokerg.voktrader.trade.TradingProperties;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeEventEntity;
@@ -20,6 +27,7 @@ import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
+import com.vokerg.voktrader.trade.simulation.BookOrderFillSimulator;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

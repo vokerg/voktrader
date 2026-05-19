@@ -4,6 +4,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 import com.vokerg.voktrader.strategy.v2.StrategyV2ExecutionProperties;
+import com.vokerg.voktrader.trade.paper.PaperOrderGateway;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 
 @Primary

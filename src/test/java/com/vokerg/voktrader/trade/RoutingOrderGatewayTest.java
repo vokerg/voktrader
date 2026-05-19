@@ -1,6 +1,7 @@
 package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.strategy.v2.StrategyV2ExecutionProperties;
+import com.vokerg.voktrader.trade.paper.PaperOrderGateway;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeStatus;

@@ -22,7 +22,6 @@ import com.vokerg.voktrader.strategy.v2.StrategyV2Properties;
 import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.ExecutionOverrideContext;
 import com.vokerg.voktrader.trade.BacktestTradeStateContext;
-import com.vokerg.voktrader.trade.BookOrderFillSimulator;
 import com.vokerg.voktrader.trade.OrderGatewayContext;
 import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
@@ -30,6 +29,7 @@ import com.vokerg.voktrader.trade.TradeHistoryScopeContext;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import com.vokerg.voktrader.trade.TradingProperties;
+import com.vokerg.voktrader.trade.simulation.BookOrderFillSimulator;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeStatus;
 

@@ -1,9 +1,10 @@
-package com.vokerg.voktrader.trade;
+package com.vokerg.voktrader.trade.simulation;
 
 import com.vokerg.voktrader.backtest.BacktestFillModel;
 import com.vokerg.voktrader.marketdata.FillEstimate;
 import com.vokerg.voktrader.marketdata.OrderBookLevel;
 import com.vokerg.voktrader.marketdata.OutcomeOrderBook;
+import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import org.springframework.stereotype.Component;
