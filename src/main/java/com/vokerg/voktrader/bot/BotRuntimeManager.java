@@ -8,6 +8,7 @@ import com.vokerg.voktrader.market.MarketResolutionService;
 import com.vokerg.voktrader.strategy.StrategyRegistry;
 import com.vokerg.voktrader.strategy.TradingStrategy;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
+import com.vokerg.voktrader.trade.OrderGateway;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +40,7 @@ public class BotRuntimeManager implements CommandLineRunner {
     private final StrategyRegistry strategyRegistry;
     private final TradingEventLogger eventLogger;
     private final BotRuntimeProperties botRuntimeProperties;
+    private final OrderGateway orderGateway;
 
     private final Map<Long, BotRuntime> runtimes = new ConcurrentHashMap<>();
 
@@ -66,7 +68,10 @@ public class BotRuntimeManager implements CommandLineRunner {
             }
             TradingStrategy strategy = strategyRegistry.strategy(runtime.config().getStrategyId());
             try {
-                BotRuntimeContextHolder.runWith(runtime.context(), strategy::tick);
+                BotRuntimeContextHolder.runWith(runtime.context(), () -> {
+                    strategy.tick();
+                    orderGateway.advanceOpenOrders();
+                });
             } catch (Exception ex) {
                 log.error("Strategy tick failed botId={} strategyId={}", runtime.botId(), strategy.id(), ex);
                 configService.markError(runtime.botId(), ex);

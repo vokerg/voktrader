@@ -103,7 +103,8 @@ class TradeQueryServiceTest {
                 now,
                 now.plusSeconds(197),
                 197L,
-                "reason"
+                "reason",
+                null
         );
     }
 }

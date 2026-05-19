@@ -185,6 +185,11 @@ public class TradeOrderEntity {
         touch();
     }
 
+    public void setExpiresAt(Instant expiresAt) {
+        this.expiresAt = expiresAt;
+        touch();
+    }
+
     public void markCancelRequested(String reason) {
         this.status = TradeOrderStatus.CANCEL_REQUESTED;
         this.cancelReason = reason;

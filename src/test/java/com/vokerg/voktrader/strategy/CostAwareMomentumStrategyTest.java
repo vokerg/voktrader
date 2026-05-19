@@ -525,7 +525,8 @@ class CostAwareMomentumStrategyTest {
                 clock.instant().minusSeconds(secondsAgo),
                 market.endDate(),
                 60L,
-                "test"
+                "test",
+                null
         ), ExecutionMode.PAPER);
         trade.markOpen(
                 new BigDecimal(entryPrice),

@@ -1,4 +1,4 @@
-package com.vokerg.voktrader.backtest;
+package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.bot.BotRuntimeContext;
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
@@ -7,27 +7,24 @@ import com.vokerg.voktrader.marketdata.LatestPriceState;
 import com.vokerg.voktrader.marketdata.OrderBookState;
 import com.vokerg.voktrader.polymarket.dto.PriceLevelDto;
 import com.vokerg.voktrader.time.TimeMachine;
-import com.vokerg.voktrader.trade.OrderLifecycleResult;
-import com.vokerg.voktrader.trade.BookOrderFillSimulator;
-import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
-import com.vokerg.voktrader.trade.StrategyInstanceKey;
-import com.vokerg.voktrader.trade.StrategyRuntimeState;
-import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.TradingProperties;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeEventEntity;
 import com.vokerg.voktrader.trade.model.TradeFillEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeStatus;
+import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
+import com.vokerg.voktrader.telemetry.TradingEventLogger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -42,29 +39,31 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class BacktestOrderGatewayTest {
+class PaperOrderGatewayTest {
     private final TradeRepository tradeRepository = mock(TradeRepository.class);
     private final TradeOrderRepository orderRepository = mock(TradeOrderRepository.class);
     private final TradeFillRepository fillRepository = mock(TradeFillRepository.class);
+    private final TradeEventRepository eventRepository = mock(TradeEventRepository.class);
+    private final TradingEventLogger eventLogger = mock(TradingEventLogger.class);
     private final TradingProperties tradingProperties = new TradingProperties();
-    private final BacktestExecutionProperties executionProperties = new BacktestExecutionProperties();
+    private final PaperExecutionProperties executionProperties = new PaperExecutionProperties();
     private final Map<Long, TradeEntity> trades = new LinkedHashMap<>();
     private final Map<Long, TradeOrderEntity> orders = new LinkedHashMap<>();
     private long nextTradeId = 1;
     private long nextOrderId = 1;
-    private BacktestOrderGateway gateway;
+    private PaperOrderGateway gateway;
 
     @BeforeEach
     void setUp() {
-        gateway = new BacktestOrderGateway(
-                "run-1",
+        gateway = new PaperOrderGateway(
                 tradeRepository,
                 orderRepository,
                 fillRepository,
                 new PolymarketFeeCalculator(),
                 tradingProperties,
                 executionProperties,
-                new BookOrderFillSimulator()
+                new BookOrderFillSimulator(),
+                new TradeExecutionSafetyService(orderRepository, eventRepository, eventLogger, new ObjectMapper())
         );
         when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> {
             TradeEntity trade = invocation.getArgument(0);
@@ -83,6 +82,7 @@ class BacktestOrderGatewayTest {
             return order;
         });
         when(fillRepository.save(any(TradeFillEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(eventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(tradeRepository.findById(any())).thenAnswer(invocation -> Optional.ofNullable(trades.get(invocation.getArgument(0))));
         when(orderRepository.findByTradeId(any())).thenAnswer(invocation -> orders.values().stream()
                 .filter(order -> invocation.getArgument(0).equals(order.getTradeId()))
@@ -94,70 +94,40 @@ class BacktestOrderGatewayTest {
                 .filter(order -> invocation.getArgument(0).equals(order.getClientOrderId()))
                 .findFirst());
         when(orderRepository.findByRemoteOrderId(any())).thenReturn(Optional.empty());
-        when(tradeRepository.findByBacktestRunId("run-1")).thenAnswer(invocation -> new ArrayList<>(trades.values()));
+        when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> trades.values().stream()
+                        .filter(trade -> invocation.getArgument(0).equals(trade.getBotId()))
+                        .filter(trade -> invocation.getArgument(1).equals(trade.getStrategyId()))
+                        .filter(trade -> invocation.getArgument(2).equals(trade.getMarketId()))
+                        .filter(trade -> invocation.getArgument(3).equals(trade.getTokenId()))
+                        .filter(trade -> ((List<TradeStatus>) invocation.getArgument(4)).contains(trade.getStatus()))
+                        .max(java.util.Comparator.comparing(TradeEntity::getUpdatedAt)));
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(any(), any(), any()))
+                .thenAnswer(invocation -> trades.values().stream()
+                        .filter(trade -> invocation.getArgument(0).equals(trade.getStrategyId()))
+                        .filter(trade -> invocation.getArgument(1).equals(trade.getMarketId()))
+                        .filter(trade -> ((List<TradeStatus>) invocation.getArgument(2)).contains(trade.getStatus()))
+                        .max(java.util.Comparator.comparing(TradeEntity::getUpdatedAt)));
     }
 
     @Test
-    void fokFillsWhenDepthIsAvailable() {
-        OrderLifecycleResult result = withBook("0.49", "10", "0.50", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.FOK, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.BACKTEST)
+    void gtcBuyRestsWhenAskStaysAboveLimit() {
+        OrderLifecycleResult result = withBook("0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.PAPER)
         );
 
         assertThat(result.success()).isTrue();
-        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.FILLED);
-        assertThat(result.tradeStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.RESTING);
+        assertThat(result.tradeStatus()).isEqualTo(TradeStatus.ENTRY_PENDING);
     }
 
     @Test
-    void fokDoesNotFillWhenDepthIsInsufficient() {
-        OrderLifecycleResult result = withBook("0.49", "1", "0.50", "1", () ->
-                gateway.submitOrder(intent(TradeOrderType.FOK, TradeSide.BUY, "0.50", "10.00", null), owner(), ExecutionMode.BACKTEST)
-        );
-
-        assertThat(result.success()).isFalse();
-        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.CANCELLED);
-        assertThat(result.tradeStatus()).isEqualTo(TradeStatus.CANCELLED);
-    }
-
-    @Test
-    void fakPartiallyFillsAndLeavesTradePartiallyOpen() {
-        OrderLifecycleResult result = withBook("0.49", "1", "0.50", "1", () ->
-                gateway.submitOrder(intent(TradeOrderType.FAK, TradeSide.BUY, "0.50", "10.00", null), owner(), ExecutionMode.BACKTEST)
-        );
-
-        assertThat(result.success()).isTrue();
-        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
-        assertThat(result.tradeStatus()).isEqualTo(TradeStatus.PARTIALLY_OPEN);
-    }
-
-    @Test
-    void gtdMakerNoFillRestsThenExpires() {
-        executionProperties.setFillModel("maker_no_fill");
-        executionProperties.setDefaultGtdSeconds(8);
-        Instant start = Instant.parse("2026-05-09T12:00:00Z");
-        TimeMachine.runAt(start, () -> withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTD, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.BACKTEST)
-        ));
-
-        TimeMachine.runAt(start.plusSeconds(9), () -> withBook("0.49", "10", "0.51", "10", () -> {
-            gateway.advanceOpenOrders();
-            return null;
-        }));
-
-        TradeOrderEntity order = orders.values().iterator().next();
-        TradeEntity trade = trades.values().iterator().next();
-        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.EXPIRED);
-        assertThat(trade.getStatus()).isEqualTo(TradeStatus.CANCELLED);
-    }
-
-    @Test
-    void makerTouchBuyFillsWhenFutureAskTouchesLimit() {
-        executionProperties.setFillModel("maker_touch");
+    void gtcBuyFillsWhenFutureAskCrossesBelowLimit() {
         TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.BACKTEST)
+                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.PAPER)
         ));
 
-        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook("0.49", "10", "0.50", "10", () -> {
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook("0.49", "10", "0.49", "10", () -> {
             gateway.advanceOpenOrders();
             return null;
         }));
@@ -169,11 +139,11 @@ class BacktestOrderGatewayTest {
     }
 
     @Test
-    void makerTouchBuyPartiallyFillsAtTouchUsingConfiguredRatio() {
+    void makerTouchPartiallyFillsAtTouch() {
         executionProperties.setFillModel("maker_touch");
         executionProperties.setMakerTouchFillRatio(new BigDecimal("0.25"));
         TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "50.00", null), owner(), ExecutionMode.BACKTEST)
+                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "50.00", null), owner(), ExecutionMode.PAPER)
         ));
 
         TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook("0.49", "10", "0.50", "40", () -> {
@@ -185,42 +155,33 @@ class BacktestOrderGatewayTest {
         TradeEntity trade = trades.values().iterator().next();
         assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
         assertThat(order.getFilledShares()).isEqualByComparingTo("10.00000000");
-        assertThat(order.getRemainingShares()).isEqualByComparingTo("90.00000000");
         assertThat(trade.getStatus()).isEqualTo(TradeStatus.PARTIALLY_OPEN);
-
-        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:02Z"), () -> withBook("0.49", "10", "0.49", "40", () -> {
-            gateway.advanceOpenOrders();
-            return null;
-        }));
-
-        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.FILLED);
-        assertThat(order.getFilledShares()).isEqualByComparingTo("100.00000000");
-        assertThat(trade.getStatus()).isEqualTo(TradeStatus.OPEN);
     }
 
     @Test
-    void makerCrossPessimisticBuyRequiresFutureAskBelowLimit() {
-        executionProperties.setFillModel("maker_cross_pessimistic");
-        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.BACKTEST)
+    void gtdExpiresAfterConfiguredTimeout() {
+        executionProperties.setFillModel("maker_no_fill");
+        executionProperties.setDefaultGtdSeconds(2);
+        Instant start = Instant.parse("2026-05-09T12:00:00Z");
+        TimeMachine.runAt(start, () -> withBook("0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(TradeOrderType.GTD, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.PAPER)
         ));
-        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook("0.49", "10", "0.50", "10", () -> {
-            gateway.advanceOpenOrders();
-            return null;
-        }));
-        assertThat(orders.values().iterator().next().getStatus()).isEqualTo(TradeOrderStatus.RESTING);
 
-        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:02Z"), () -> withBook("0.49", "10", "0.49", "10", () -> {
+        TimeMachine.runAt(start.plusSeconds(3), () -> withBook("0.49", "10", "0.51", "10", () -> {
             gateway.advanceOpenOrders();
             return null;
         }));
-        assertThat(orders.values().iterator().next().getStatus()).isEqualTo(TradeOrderStatus.FILLED);
+
+        TradeOrderEntity order = orders.values().iterator().next();
+        TradeEntity trade = trades.values().iterator().next();
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.EXPIRED);
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.CANCELLED);
     }
 
     @Test
-    void cancelledOrderDoesNotFillLaterAndStateShowsNoActiveTrade() {
+    void cancelledOrderDoesNotFillLater() {
         TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook("0.49", "10", "0.51", "10", () ->
-                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.BACKTEST)
+                gateway.submitOrder(intent(TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.PAPER)
         ));
         String localOrderId = orders.values().iterator().next().getLocalOrderId();
         gateway.cancelOrder(localOrderId, "test cancel");
@@ -230,20 +191,34 @@ class BacktestOrderGatewayTest {
             return null;
         }));
 
-        assertThat(orders.values().iterator().next().getStatus()).isEqualTo(TradeOrderStatus.CANCELLED);
-        StrategyRuntimeState state = gateway.getState(owner(), "market-id");
-        assertThat(state.currentTradeStatus()).isEqualTo(TradeStatus.NEW);
+        TradeOrderEntity order = orders.values().iterator().next();
+        TradeEntity trade = trades.values().iterator().next();
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.CANCELLED);
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.CANCELLED);
+    }
+
+    @Test
+    void fokAndFakStillUseImmediateTakerBehavior() {
+        OrderLifecycleResult fok = withBook("0.49", "2", "0.50", "2", () ->
+                gateway.submitOrder(intent(TradeOrderType.FOK, TradeSide.BUY, "0.50", "1.00", null), owner(), ExecutionMode.PAPER)
+        );
+        OrderLifecycleResult fak = withBook("0.49", "1", "0.50", "1", () ->
+                gateway.submitOrder(intent(TradeOrderType.FAK, TradeSide.BUY, "0.50", "10.00", null), owner(), ExecutionMode.PAPER)
+        );
+
+        assertThat(fok.orderStatus()).isEqualTo(TradeOrderStatus.FILLED);
+        assertThat(fak.orderStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
     }
 
     private StrategyInstanceKey owner() {
-        return StrategyInstanceKey.of(1L, "strategy-test");
+        return StrategyInstanceKey.of(1L, "MK_GTD_EDGE_A");
     }
 
     private TradeIntent intent(TradeOrderType type, TradeSide side, String price, String amountUsd, String shares) {
         BigDecimal limit = new BigDecimal(price);
         return new TradeIntent(
                 1L,
-                "strategy-test",
+                "MK_GTD_EDGE_A",
                 side == TradeSide.BUY ? "entry" : "exit",
                 "market-id",
                 "slug",
@@ -283,7 +258,7 @@ class BacktestOrderGatewayTest {
         BotRuntimeContext context = new BotRuntimeContext(
                 1L,
                 null,
-                "strategy-test",
+                "strategy-v2",
                 null,
                 null,
                 new TrackedMarketState(),

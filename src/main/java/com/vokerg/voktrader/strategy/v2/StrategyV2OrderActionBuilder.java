@@ -54,6 +54,10 @@ public class StrategyV2OrderActionBuilder {
         BigDecimal price = price(action, context);
         BigDecimal shares = shares(action, orderType, postOnly);
         BigDecimal amountUsd = amountUsd(action, price, shares);
+        if (amountUsd == null && "fixed_shares".equalsIgnoreCase(action.getSize().getType())) {
+            return TradeExecutionResult.rejected(mode, null, null, null, null,
+                    fixedSharesRejectionMessage(action, price, shares));
+        }
         OutcomePrice outcomePrice = new OutcomePrice(
                 context.candidate().tokenId(),
                 context.candidate().outcome(),
@@ -74,7 +78,7 @@ public class StrategyV2OrderActionBuilder {
                 strategy.getStrategyId(),
                 strategy.getEntry().getRuleId(),
                 reason(strategy, context)
-        );
+        ).withRestingTtlSeconds(restingTtlSeconds(action, orderType));
         if (executionProperties.isUseOrderLayer()) {
             OrderGateway gateway = OrderGatewayContext.current().orElse(orderGateway);
             return TradeExecutionResult.fromOrderLifecycle(
@@ -142,7 +146,14 @@ public class StrategyV2OrderActionBuilder {
             if (shares == null || price == null) {
                 return null;
             }
-            return shares.multiply(price).setScale(SCALE, RoundingMode.HALF_UP);
+            BigDecimal value = shares.multiply(price).setScale(SCALE, RoundingMode.HALF_UP);
+            if (size.getMaxUsd() != null && value.compareTo(size.getMaxUsd()) > 0) {
+                return null;
+            }
+            if (size.getMinUsd() != null && value.compareTo(size.getMinUsd()) < 0) {
+                return null;
+            }
+            return value;
         }
         BigDecimal value = size.getUsd() == null ? new BigDecimal("1.00") : size.getUsd();
         if (size.getMaxUsd() != null && value.compareTo(size.getMaxUsd()) > 0) {
@@ -166,6 +177,32 @@ public class StrategyV2OrderActionBuilder {
             return tradingProperties.getMinMakerOrderShares();
         }
         return BigDecimal.ONE;
+    }
+
+    private Integer restingTtlSeconds(StrategyV2Properties.Action action, TradeOrderType orderType) {
+        if (action == null || orderType != TradeOrderType.GTD) {
+            return null;
+        }
+        StrategyV2Properties.MakerLifecycle lifecycle = action.getMakerLifecycle();
+        if (lifecycle == null || lifecycle.getCancelAfterSeconds() <= 0) {
+            return null;
+        }
+        return lifecycle.getCancelAfterSeconds();
+    }
+
+    private String fixedSharesRejectionMessage(StrategyV2Properties.Action action, BigDecimal price, BigDecimal shares) {
+        if (shares == null || price == null) {
+            return "Strategy V2 fixed_shares entry requires both shares and price";
+        }
+        StrategyV2Properties.Size size = action.getSize();
+        BigDecimal notional = shares.multiply(price).setScale(SCALE, RoundingMode.HALF_UP);
+        if (size.getMaxUsd() != null && notional.compareTo(size.getMaxUsd()) > 0) {
+            return "Strategy V2 fixed_shares entry exceeds size.max-usd: notional=" + notional + " maxUsd=" + size.getMaxUsd();
+        }
+        if (size.getMinUsd() != null && notional.compareTo(size.getMinUsd()) < 0) {
+            return "Strategy V2 fixed_shares entry is below size.min-usd: notional=" + notional + " minUsd=" + size.getMinUsd();
+        }
+        return "Strategy V2 fixed_shares entry is invalid";
     }
 
     private BigDecimal price(StrategyV2Properties.Action action, StrategyV2FeatureContext context) {
