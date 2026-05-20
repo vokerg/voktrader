@@ -181,6 +181,35 @@ class OrderReconciliationServiceTest {
     }
 
     @Test
+    void immediateExecutorFillPreventsPostFillAuditDuplicateImport() {
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        TradeFillEntity immediateFill = TradeFillEntity.polymarket(
+                1L,
+                order.getId(),
+                "remote-1",
+                TradeSide.BUY,
+                new BigDecimal("0.50"),
+                new BigDecimal("2"),
+                new BigDecimal("1.00"),
+                new BigDecimal("0.01"),
+                "{\"immediate\":true}"
+        );
+        savedFills.add(immediateFill);
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("FILLED"));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(fill("fill-1", "2", "0.50", "0.01")), "{}", null));
+
+        service.reconcileOrder(order);
+
+        assertThat(savedFills).hasSize(1);
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.FILLED);
+        assertThat(order.getFilledShares()).isEqualByComparingTo("2");
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.OPEN);
+    }
+
+    @Test
     void missingRemoteFillIdUsesFallbackKeyForDedupe() {
         TradeEntity trade = trade();
         TradeOrderEntity order = order(trade, TradeSide.BUY);

@@ -3,9 +3,11 @@ package com.vokerg.voktrader.trade;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.OrderReconciliationSource;
 import com.vokerg.voktrader.trade.model.TradeEntity;
+import com.vokerg.voktrader.trade.model.TradeFillEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeVenue;
+import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import com.vokerg.voktrader.executor.ExecutorCancelOrderResponse;
@@ -26,6 +28,7 @@ import java.util.Optional;
 public class OrderManager {
     private final TradeRepository tradeRepository;
     private final TradeOrderRepository tradeOrderRepository;
+    private final TradeFillRepository tradeFillRepository;
     private final PythonExecutorClient pythonExecutorClient;
     private final ExecutorProperties executorProperties;
     private final OrderReconciliationService reconciliationService;
@@ -61,6 +64,7 @@ public class OrderManager {
         if (response.filled()) {
             order.markFilled(response.exchangeOrderId(), response.averagePrice(), response.filledShares(), response.filledAmountUsd());
             tradeOrderRepository.save(order);
+            persistImmediateFillIfAbsent(trade, order, intent, response);
             reconciliationService.applyImmediateFill(trade, order, response);
             try {
                 reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_FILL_AUDIT);
@@ -80,6 +84,33 @@ public class OrderManager {
         tradeRepository.save(trade);
         reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_SUBMIT);
         return OrderLifecycleResult.of(trade, order, true, response.safeMessage());
+    }
+
+    private void persistImmediateFillIfAbsent(
+            TradeEntity trade,
+            TradeOrderEntity order,
+            TradeIntent intent,
+            ExecutorOrderResponse response
+    ) {
+        boolean alreadyRecorded = tradeFillRepository.findByOrderId(order.getId()).stream()
+                .anyMatch(fill -> equalString(response.exchangeOrderId(), fill.getExchangeOrderId())
+                        && intent.side() == fill.getSide()
+                        && equalByValue(response.averagePrice(), fill.getPrice())
+                        && equalByValue(response.filledShares(), fill.getShares()));
+        if (alreadyRecorded) {
+            return;
+        }
+        tradeFillRepository.save(TradeFillEntity.polymarket(
+                trade.getId(),
+                order.getId(),
+                response.exchangeOrderId(),
+                intent.side(),
+                response.averagePrice(),
+                response.filledShares(),
+                response.filledAmountUsd(),
+                response.feeUsd(),
+                response.rawResponse()
+        ));
     }
 
     @Transactional
@@ -164,6 +195,20 @@ public class OrderManager {
 
     private java.math.BigDecimal zeroIfNull(java.math.BigDecimal value) {
         return value == null ? java.math.BigDecimal.ZERO : value;
+    }
+
+    private boolean equalByValue(java.math.BigDecimal left, java.math.BigDecimal right) {
+        if (left == null || right == null) {
+            return left == right;
+        }
+        return left.compareTo(right) == 0;
+    }
+
+    private boolean equalString(String left, String right) {
+        if (left == null || right == null) {
+            return left == right;
+        }
+        return left.equals(right);
     }
 
     private boolean isUsefulRaw(String value) {

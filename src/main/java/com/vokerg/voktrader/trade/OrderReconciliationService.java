@@ -8,6 +8,7 @@ import com.vokerg.voktrader.trade.model.TradeOrderPhase;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeSide;
+import com.vokerg.voktrader.trade.model.TradeVenue;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
@@ -199,6 +200,10 @@ public class OrderReconciliationService {
 
     private List<ImportedFill> saveNewFills(TradeOrderEntity order, ExecutorFillsResponse fills) {
         List<ImportedFill> imported = new ArrayList<>();
+        List<TradeFillEntity> existingOrderFills = tradeFillRepository.findByOrderId(order.getId());
+        if (hasImmediateExecutorFill(existingOrderFills, order)) {
+            return imported;
+        }
         for (ExecutorFillResponse fill : fills.fills()) {
             String fillId = remoteFillId(fill);
             if (fillId != null && tradeFillRepository.findByRemoteFillId(fillId).isPresent()) {
@@ -240,6 +245,17 @@ public class OrderReconciliationService {
             imported.add(new ImportedFill(entity, fill));
         }
         return imported;
+    }
+
+    private boolean hasImmediateExecutorFill(List<TradeFillEntity> existingOrderFills, TradeOrderEntity order) {
+        return existingOrderFills.stream().anyMatch(fill ->
+                fill.getVenue() == TradeVenue.POLYMARKET
+                        && fill.getRemoteFillId() == null
+                        && order.getRemoteOrderId() != null
+                        && order.getRemoteOrderId().equals(fill.getExchangeOrderId())
+                        && fill.getShares() != null
+                        && fill.getShares().compareTo(BigDecimal.ZERO) > 0
+        );
     }
 
     private TradeOrderStatus resolveStatus(ExecutorOrderStatusResponse remoteStatus, ExecutorFillsResponse fills, TradeOrderEntity order) {

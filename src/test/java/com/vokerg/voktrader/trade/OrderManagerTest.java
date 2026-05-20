@@ -4,6 +4,7 @@ import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.OrderReconciliationSource;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeEventEntity;
+import com.vokerg.voktrader.trade.model.TradeFillEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeOrderType;
@@ -11,6 +12,7 @@ import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeStatus;
 import com.vokerg.voktrader.trade.model.TradeVenue;
 import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
+import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import com.vokerg.voktrader.executor.ExecutorOrderCommand;
@@ -42,6 +44,7 @@ import static org.mockito.Mockito.when;
 class OrderManagerTest {
     private final TradeRepository tradeRepository = mock(TradeRepository.class);
     private final TradeOrderRepository tradeOrderRepository = mock(TradeOrderRepository.class);
+    private final TradeFillRepository tradeFillRepository = mock(TradeFillRepository.class);
     private final TradeEventRepository tradeEventRepository = mock(TradeEventRepository.class);
     private final PythonExecutorClient pythonExecutorClient = mock(PythonExecutorClient.class);
     private final OrderReconciliationService reconciliationService = mock(OrderReconciliationService.class);
@@ -55,6 +58,7 @@ class OrderManagerTest {
     private final OrderManager orderManager = new OrderManager(
             tradeRepository,
             tradeOrderRepository,
+            tradeFillRepository,
             pythonExecutorClient,
             executorProperties,
             reconciliationService,
@@ -65,8 +69,22 @@ class OrderManagerTest {
     @BeforeEach
     void setUp() {
         savedEvents.clear();
-        when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(tradeOrderRepository.save(any(TradeOrderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> {
+            TradeEntity trade = invocation.getArgument(0);
+            if (trade.getId() == null) {
+                ReflectionTestUtils.setField(trade, "id", 1L);
+            }
+            return trade;
+        });
+        when(tradeOrderRepository.save(any(TradeOrderEntity.class))).thenAnswer(invocation -> {
+            TradeOrderEntity order = invocation.getArgument(0);
+            if (order.getId() == null) {
+                ReflectionTestUtils.setField(order, "id", 10L);
+            }
+            return order;
+        });
+        when(tradeFillRepository.findByOrderId(any())).thenReturn(List.of());
+        when(tradeFillRepository.save(any(TradeFillEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(tradeEventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> {
             TradeEventEntity event = invocation.getArgument(0);
             savedEvents.add(event);
@@ -137,6 +155,18 @@ class OrderManagerTest {
         org.mockito.Mockito.verify(reconciliationService).applyImmediateFill(any(TradeEntity.class), orderCaptor.capture(), any(ExecutorOrderResponse.class));
         assertThat(orderCaptor.getValue().getStatus()).isEqualTo(TradeOrderStatus.FILLED);
         assertThat(orderCaptor.getValue().getRemoteOrderId()).isEqualTo("remote-1");
+        ArgumentCaptor<TradeFillEntity> fillCaptor = ArgumentCaptor.forClass(TradeFillEntity.class);
+        verify(tradeFillRepository).save(fillCaptor.capture());
+        TradeFillEntity fill = fillCaptor.getValue();
+        assertThat(fill.getTradeId()).isEqualTo(1L);
+        assertThat(fill.getOrderId()).isEqualTo(10L);
+        assertThat(fill.getExchangeOrderId()).isEqualTo("remote-1");
+        assertThat(fill.getSide()).isEqualTo(TradeSide.BUY);
+        assertThat(fill.getPrice()).isEqualByComparingTo("0.50");
+        assertThat(fill.getShares()).isEqualByComparingTo("2");
+        assertThat(fill.getAmountUsd()).isEqualByComparingTo("1.00");
+        assertThat(fill.getFeeUsd()).isEqualByComparingTo("0.01");
+        assertThat(fill.getRawFill()).isEqualTo("{}");
         verify(reconciliationService).reconcileOrder(any(TradeOrderEntity.class), eq(OrderReconciliationSource.POST_FILL_AUDIT));
     }
 
