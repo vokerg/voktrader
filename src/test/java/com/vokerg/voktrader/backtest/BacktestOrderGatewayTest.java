@@ -13,6 +13,7 @@ import com.vokerg.voktrader.trade.StrategyInstanceKey;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradingProperties;
+import com.vokerg.voktrader.trade.simulation.BookOrderFillSimulator;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeFillEntity;
@@ -62,7 +63,8 @@ class BacktestOrderGatewayTest {
                 fillRepository,
                 new PolymarketFeeCalculator(),
                 tradingProperties,
-                executionProperties
+                executionProperties,
+                new BookOrderFillSimulator()
         );
         when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> {
             TradeEntity trade = invocation.getArgument(0);
@@ -264,7 +266,8 @@ class BacktestOrderGatewayTest {
                 TimeMachine.now(),
                 TimeMachine.now().plusSeconds(60),
                 60L,
-                "test"
+                "test",
+                null
         );
     }
 

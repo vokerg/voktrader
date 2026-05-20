@@ -77,7 +77,8 @@ class TradeSettlementServiceTest {
                 Instant.parse("2026-05-18T12:00:00Z"),
                 Instant.parse("2026-05-18T12:05:00Z"),
                 300L,
-                "test"
+                "test",
+                null
         ), ExecutionMode.PAPER);
         ReflectionTestUtils.setField(trade, "id", 10L);
         trade.markOpen(

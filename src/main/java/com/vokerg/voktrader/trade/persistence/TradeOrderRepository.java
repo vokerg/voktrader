@@ -5,6 +5,7 @@ import com.vokerg.voktrader.trade.model.TradeOrderEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderPhase;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeSide;
+import com.vokerg.voktrader.trade.model.TradeVenue;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -31,6 +32,12 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Lo
     List<TradeOrderEntity> findByStatusIn(List<TradeOrderStatus> statuses);
 
     List<TradeOrderEntity> findByStatusInAndRemoteOrderIdIsNotNull(List<TradeOrderStatus> statuses);
+
+    List<TradeOrderEntity> findByModeAndVenueAndStatusInOrderByUpdatedAtAsc(
+            ExecutionMode mode,
+            TradeVenue venue,
+            List<TradeOrderStatus> statuses
+    );
 
     @Query("""
             select o

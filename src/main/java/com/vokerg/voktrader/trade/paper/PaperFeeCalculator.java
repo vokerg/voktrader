@@ -1,4 +1,6 @@
-package com.vokerg.voktrader.trade;
+package com.vokerg.voktrader.trade.paper;
+
+import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
 
 import org.springframework.stereotype.Component;
 

@@ -200,7 +200,8 @@ class FlipCatcherReversalStrategyTest {
                 clock.instant().minusSeconds(5),
                 market.endDate(),
                 60L,
-                "test"
+                "test",
+                null
         ), ExecutionMode.PAPER);
         trade.markOpen(
                 new BigDecimal(entryPrice),

@@ -29,6 +29,7 @@ import com.vokerg.voktrader.trade.TradeHistoryScopeContext;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import com.vokerg.voktrader.trade.TradingProperties;
+import com.vokerg.voktrader.trade.simulation.BookOrderFillSimulator;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeStatus;
 
@@ -64,6 +65,7 @@ public class BacktestReplayService {
     private final PolymarketFeeCalculator feeCalculator;
     private final TradingProperties tradingProperties;
     private final BacktestExecutionProperties backtestExecutionProperties;
+    private final BookOrderFillSimulator bookOrderFillSimulator;
     private final StrategyV2OverrideParser strategyV2OverrideParser;
 
     @Transactional
@@ -96,7 +98,8 @@ public class BacktestReplayService {
                 tradeFillRepository,
                 feeCalculator,
                 tradingProperties,
-                backtestExecutionProperties
+                backtestExecutionProperties,
+                bookOrderFillSimulator
         );
         BacktestDiagnostics diagnostics = new BacktestDiagnostics();
 

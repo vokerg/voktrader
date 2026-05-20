@@ -159,6 +159,35 @@ class StrategyV2OrderActionBuilderTest {
         assertThat(intent.getValue().amountUsd()).isEqualByComparingTo("3.06");
     }
 
+    @Test
+    void fixedSharesRejectsWhenNotionalExceedsMaxUsd() {
+        executionProperties.setUseOrderLayer(true);
+        StrategyV2Properties.Strategy strategy = fixedSharesStrategy();
+        strategy.getEntry().getAction().getSize().setMaxUsd(new BigDecimal("2.50"));
+
+        TradeExecutionResult result = builder.routeEntry(strategy, context());
+
+        assertThat(result.accepted()).isFalse();
+        assertThat(result.error()).contains("fixed_shares");
+        verify(orderGateway, never()).submitOrder(any(), any(), any());
+        verify(executionRouter, never()).route(any());
+    }
+
+    @Test
+    void fixedSharesRejectsWhenConfiguredMinimumWouldExceedMaxUsd() {
+        tradingProperties.setMinMakerOrderShares(new BigDecimal("6.00"));
+        executionProperties.setUseOrderLayer(true);
+        StrategyV2Properties.Strategy strategy = fixedSharesStrategy();
+        strategy.getEntry().getAction().getSize().setShares(null);
+        strategy.getEntry().getAction().getSize().setMaxUsd(new BigDecimal("3.00"));
+
+        TradeExecutionResult result = builder.routeEntry(strategy, context());
+
+        assertThat(result.accepted()).isFalse();
+        verify(orderGateway, never()).submitOrder(any(), any(), any());
+        verify(executionRouter, never()).route(any());
+    }
+
 
     @Test
     void flagEnabledSurfacesRejectedOrderManagerResult() {

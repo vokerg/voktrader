@@ -16,6 +16,7 @@ import com.vokerg.voktrader.trade.StrategyRuntimeState;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradeStateProvider;
 import com.vokerg.voktrader.trade.TradingProperties;
+import com.vokerg.voktrader.trade.simulation.BookOrderFillSimulator;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeFillEntity;
@@ -58,6 +59,7 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
     private final PolymarketFeeCalculator feeCalculator;
     private final TradingProperties tradingProperties;
     private final BacktestExecutionProperties executionProperties;
+    private final BookOrderFillSimulator fillSimulator;
     private final Set<String> openLocalOrderIds = new LinkedHashSet<>();
     private final Map<String, Instant> expiresAtByLocalOrderId = new LinkedHashMap<>();
 
@@ -68,7 +70,8 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
             TradeFillRepository tradeFillRepository,
             PolymarketFeeCalculator feeCalculator,
             TradingProperties tradingProperties,
-            BacktestExecutionProperties executionProperties
+            BacktestExecutionProperties executionProperties,
+            BookOrderFillSimulator fillSimulator
     ) {
         this.runId = runId;
         this.tradeRepository = tradeRepository;
@@ -77,6 +80,7 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
         this.feeCalculator = feeCalculator;
         this.tradingProperties = tradingProperties;
         this.executionProperties = executionProperties;
+        this.fillSimulator = fillSimulator;
     }
 
     @Override
@@ -151,7 +155,12 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
             if (executionProperties.fillModel() == BacktestFillModel.MAKER_NO_FILL) {
                 continue;
             }
-            MakerFillEstimate estimate = makerFillEstimate(order, orderBookState.byTokenId(order.getTokenId()).orElse(null));
+            BookOrderFillSimulator.MakerFillEstimate estimate = fillSimulator.makerFillEstimate(
+                    order,
+                    orderBookState.byTokenId(order.getTokenId()).orElse(null),
+                    executionProperties.fillModel(),
+                    executionProperties.makerTouchFillRatio()
+            );
             if (estimate == null || estimate.shares().compareTo(BigDecimal.ZERO) <= 0) {
                 continue;
             }
@@ -216,7 +225,7 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
         OutcomeOrderBook book = BotRuntimeContextHolder.currentOrderBookState()
                 .flatMap(state -> state.byTokenId(intent.tokenId()))
                 .orElse(null);
-        FillEstimate estimate = immediateFill(intent, book);
+        FillEstimate estimate = fillSimulator.immediateFill(intent, book);
         if (estimate == null || estimate.filledShares().compareTo(BigDecimal.ZERO) <= 0) {
             order.markCancelled("backtest immediate order did not fill", "{\"backtest\":true,\"filled\":false}");
             if (intent.side() == TradeSide.BUY) {
@@ -253,41 +262,6 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
             tradeOrderRepository.save(order);
         }
         return OrderLifecycleResult.of(trade, order, true, estimate.complete() ? "backtest immediate filled" : "backtest FAK partially filled");
-    }
-
-    private FillEstimate immediateFill(TradeIntent intent, OutcomeOrderBook book) {
-        if (book == null) {
-            return null;
-        }
-        OutcomeOrderBook executableBook = limitBook(intent, book);
-        if (intent.side() == TradeSide.BUY) {
-            return executableBook.estimateBuyUsd(intent.amountUsd());
-        }
-        BigDecimal shares = intent.shares() == null ? findExitTrade(intent).map(TradeEntity::getEntryFilledShares).orElse(null) : intent.shares();
-        return executableBook.estimateSellShares(shares);
-    }
-
-    private OutcomeOrderBook limitBook(TradeIntent intent, OutcomeOrderBook book) {
-        BigDecimal limit = intent.expectedPrice();
-        if (limit == null) {
-            return book;
-        }
-        if (intent.side() == TradeSide.BUY) {
-            return new OutcomeOrderBook(
-                    book.tokenId(),
-                    book.outcome(),
-                    book.bids(),
-                    book.asks().stream().filter(level -> level.price().compareTo(limit) <= 0).toList(),
-                    book.updatedAt()
-            );
-        }
-        return new OutcomeOrderBook(
-                book.tokenId(),
-                book.outcome(),
-                book.bids().stream().filter(level -> level.price().compareTo(limit) >= 0).toList(),
-                book.asks(),
-                book.updatedAt()
-        );
     }
 
     private void fillOrder(
@@ -342,56 +316,6 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
         }
         tradeOrderRepository.save(order);
         tradeRepository.save(trade);
-    }
-
-    private MakerFillEstimate makerFillEstimate(TradeOrderEntity order, OutcomeOrderBook book) {
-        if (book == null) {
-            return null;
-        }
-        BigDecimal limit = order.getRequestedPrice();
-        if (limit == null) {
-            return null;
-        }
-        BigDecimal remainingShares = remainingShares(order);
-        if (remainingShares.compareTo(BigDecimal.ZERO) <= 0) {
-            return null;
-        }
-        BacktestFillModel fillModel = executionProperties.fillModel();
-        if (order.getSide() == TradeSide.BUY) {
-            OrderBookLevel bestAsk = book.bestAsk().orElse(null);
-            if (bestAsk == null) {
-                return null;
-            }
-            int comparison = bestAsk.price().compareTo(limit);
-            if (comparison < 0) {
-                return new MakerFillEstimate(remainingShares, limit, true, "ask crossed below buy limit");
-            }
-            if (comparison == 0 && fillModel == BacktestFillModel.MAKER_TOUCH) {
-                return touchPartial(remainingShares, bestAsk.size(), limit, "ask touched buy limit");
-            }
-            return null;
-        }
-        OrderBookLevel bestBid = book.bestBid().orElse(null);
-        if (bestBid == null) {
-            return null;
-        }
-        int comparison = bestBid.price().compareTo(limit);
-        if (comparison > 0) {
-            return new MakerFillEstimate(remainingShares, limit, true, "bid crossed above sell limit");
-        }
-        if (comparison == 0 && fillModel == BacktestFillModel.MAKER_TOUCH) {
-            return touchPartial(remainingShares, bestBid.size(), limit, "bid touched sell limit");
-        }
-        return null;
-    }
-
-    private MakerFillEstimate touchPartial(BigDecimal remainingShares, BigDecimal visibleDepth, BigDecimal price, String reason) {
-        BigDecimal candidate = nullToZero(visibleDepth).multiply(executionProperties.makerTouchFillRatio());
-        BigDecimal shares = candidate.min(remainingShares).setScale(SCALE, RoundingMode.HALF_UP);
-        if (shares.compareTo(BigDecimal.ZERO) <= 0) {
-            return null;
-        }
-        return new MakerFillEstimate(shares, price, shares.compareTo(remainingShares) >= 0, reason);
     }
 
     private void expire(TradeOrderEntity order) {
@@ -472,27 +396,14 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
                 .toList();
     }
 
-    private BigDecimal requestedShares(TradeOrderEntity order) {
-        if (order.getRequestedShares() != null) {
-            return order.getRequestedShares();
-        }
-        if (order.getRequestedAmountUsd() != null && order.getRequestedPrice() != null && order.getRequestedPrice().compareTo(BigDecimal.ZERO) > 0) {
-            return order.getRequestedAmountUsd().divide(order.getRequestedPrice(), SCALE, RoundingMode.HALF_UP);
-        }
-        return BigDecimal.ZERO;
-    }
-
     private BigDecimal remaining(TradeOrderEntity order, BigDecimal filledShares) {
-        BigDecimal requested = requestedShares(order);
+        BigDecimal requested = fillSimulator.requestedShares(order);
         BigDecimal remaining = requested.subtract(filledShares == null ? BigDecimal.ZERO : filledShares);
         return remaining.signum() < 0 ? BigDecimal.ZERO : remaining;
     }
 
     private BigDecimal remainingShares(TradeOrderEntity order) {
-        if (order.getRemainingShares() != null) {
-            return order.getRemainingShares();
-        }
-        return remaining(order, order.getFilledShares());
+        return fillSimulator.remainingShares(order);
     }
 
     private BigDecimal nullToZero(BigDecimal value) {
@@ -534,6 +445,4 @@ public class BacktestOrderGateway implements OrderGateway, TradeStateProvider {
         return "BACKTEST:" + runId + ":" + tradeId + ":" + intent.side() + ":" + intent.tokenId() + ":" + TimeMachine.now().toEpochMilli();
     }
 
-    private record MakerFillEstimate(BigDecimal shares, BigDecimal price, boolean fullFill, String reason) {
-    }
 }

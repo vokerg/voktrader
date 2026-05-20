@@ -38,7 +38,8 @@ public record TradeIntent(
         Instant decisionAt,
         Instant marketEndAt,
         Long secondsToExpiryAtDecision,
-        String reason
+        String reason,
+        Integer restingTtlSeconds
 ) {
     public TradeIntent {
         Objects.requireNonNull(strategyId, "strategyId is required");
@@ -155,7 +156,8 @@ public record TradeIntent(
                 now,
                 market.endDate(),
                 secondsToExpiry,
-                reason
+                reason,
+                null
         );
     }
 
@@ -232,7 +234,39 @@ public record TradeIntent(
                 now,
                 market.endDate(),
                 secondsToExpiry,
-                reason
+                reason,
+                null
+        );
+    }
+
+    public TradeIntent withRestingTtlSeconds(Integer restingTtlSeconds) {
+        return new TradeIntent(
+                botId,
+                strategyId,
+                ruleId,
+                marketId,
+                marketSlug,
+                question,
+                conditionId,
+                tokenId,
+                outcome,
+                side,
+                amountUsd,
+                shares,
+                orderType,
+                postOnly,
+                limitPrice,
+                observedBid,
+                observedAsk,
+                observedSpread,
+                observedMidpoint,
+                priceUpdatedAt,
+                priceAgeMs,
+                decisionAt,
+                marketEndAt,
+                secondsToExpiryAtDecision,
+                reason,
+                restingTtlSeconds
         );
     }
 

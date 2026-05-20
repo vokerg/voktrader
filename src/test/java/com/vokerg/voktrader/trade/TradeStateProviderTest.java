@@ -92,7 +92,8 @@ class TradeStateProviderTest {
                 Instant.parse("2026-05-09T12:00:00Z"),
                 Instant.parse("2026-05-09T12:05:00Z"),
                 300L,
-                "test"
+                "test",
+                null
         );
     }
 }
