@@ -186,10 +186,12 @@ import { TradeSummaryResponse, DashboardOptionsResponse } from '../../models/api
       border-radius: 9999px;
       background: #f3f4f6;
       display: inline-block;
+      color: #fff;
     }
-    .status-badge[data-status="OPEN"] { background: #d1fae5; color: #065f46; }
-    .status-badge[data-status="CLOSED"] { background: #dbeafe; color: #1e40af; }
-    .status-badge[data-status="FAILED"] { background: #fee2e2; color: #991b1b; }
+    .status-badge[data-status="OPEN"] { background: #f59e0b; }
+    .status-badge[data-status="CLOSED"] { background: #3b82f6; }
+    .status-badge[data-status="FAILED"] { background: #ef4444; }
+    .status-badge[data-status="FILLED"] { background: #10b981; }
 
     .amount-main { font-weight: 600; }
     .amount-sub { font-size: 11px; color: #6b7280; }

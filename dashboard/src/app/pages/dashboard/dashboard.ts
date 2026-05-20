@@ -95,7 +95,7 @@ import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, Trad
               <td>{{ bot.strategyId }}</td>
               <td>{{ bot.strategySetId || '-' }}</td>
               <td>{{ bot.subStrategyId || '-' }}</td>
-              <td>{{ bot.status }}</td>
+              <td><div class="status-badge" [attr.data-status]="bot.status">{{ bot.status }}</div></td>
             </tr>
           </tbody>
         </table>
@@ -127,7 +127,7 @@ import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, Trad
                   {{ trade.marketSlug }}
                 </a>
               </td>
-              <td>{{ trade.status }}</td>
+              <td><div class="status-badge" [attr.data-status]="trade.status">{{ trade.status }}</div></td>
               <td [class.positive]="trade.finalPnlUsd > 0" [class.negative]="trade.finalPnlUsd < 0">
                 $ {{ trade.finalPnlUsd | number:'1.2-2' }}
               </td>
@@ -297,6 +297,53 @@ import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, Trad
     .link:hover {
       text-decoration: underline;
     }
+
+    .connection-state {
+      flex-shrink: 0;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      background: #f3f4f6;
+      color: #4b5563;
+    }
+
+    .connection-state[data-state="live"] {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .connection-state[data-state="connecting"] {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .connection-state[data-state="error"] {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .connection-state[data-state="disconnected"] {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    .status-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      background: #f3f4f6;
+      display: inline-block;
+      color: #fff;
+    }
+    .status-badge[data-status="OPEN"] { background: #f59e0b; }
+    .status-badge[data-status="CLOSED"] { background: #3b82f6; }
+    .status-badge[data-status="FAILED"] { background: #ef4444; }
+    .status-badge[data-status="FILLED"] { background: #10b981; }
+    .status-badge[data-status="RUNNING"] { background: #10b981; }
+    .status-badge[data-status="PAUSED"] { background: #f59e0b; }
   `
 })
 export class Dashboard implements OnInit {

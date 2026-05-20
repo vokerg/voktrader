@@ -234,6 +234,7 @@ import { TradeOrderResponse, DashboardOptionsResponse } from '../../models/api.m
     .status-badge[data-status="PARTIALLY_FILLED"] { background: #dbeafe; color: #1e40af; }
     .status-badge[data-status="CANCELLED"] { background: #f3f4f6; color: #6b7280; }
     .status-badge[data-status="FAILED"], .status-badge[data-status="REJECTED"] { background: #fee2e2; color: #991b1b; }
+    .status-badge[data-status="OPEN"] { background: #fef3c7; color: #92400e; }
 
     .price-main { font-weight: 600; }
     .price-req { font-size: 11px; color: #9ca3af; }

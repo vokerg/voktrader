@@ -55,7 +55,7 @@ import { BotConfigResponse } from '../../models/api.models';
             </td>
             <td>
               <span class="status-dot" [class.status-active]="bot.runtimeActive"></span>
-              {{ bot.status }}
+              <div class="status-badge" [attr.data-status]="bot.status">{{ bot.status }}</div>
               <div class="strategy-meta">
                 Live set:
                 <span [class.positive]="bot.runtimeIncluded" [class.negative]="!bot.runtimeIncluded">
@@ -198,6 +198,19 @@ import { BotConfigResponse } from '../../models/api.models';
     }
 
     .status-active { background-color: #10b981; }
+
+    .status-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      background: #f3f4f6;
+      display: inline-block;
+      color: #fff;
+    }
+    .status-badge[data-status="RUNNING"] { background: #10b981; }
+    .status-badge[data-status="PAUSED"] { background: #f59e0b; }
+    .status-badge[data-status="ERROR"] { background: #ef4444; }
 
     .btn {
       padding: 8px 16px;
