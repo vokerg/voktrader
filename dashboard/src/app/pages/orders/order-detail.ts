@@ -3,11 +3,12 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { TradeOrderDetailResponse, TradeOrderResponse } from '../../models/api.models';
+import { ExecutionEvents } from '../../components/execution-events/execution-events';
 
 @Component({
   selector: 'app-order-detail',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, ExecutionEvents],
   template: `
     <div *ngIf="detail() as d" class="container">
       <div class="header">
@@ -185,14 +186,7 @@ import { TradeOrderDetailResponse, TradeOrderResponse } from '../../models/api.m
 
       <div class="card mt-4">
         <h2>Order Events</h2>
-        <div class="events-list">
-          <div *ngFor="let event of d.events" class="event-item">
-            <span class="event-time">{{ event.createdAt | date:'HH:mm:ss' }}</span>
-            <span class="event-type-badge">{{ event.eventType }}</span>
-            <span class="event-message">{{ event.message }}</span>
-          </div>
-          <div *ngIf="d.events.length === 0" class="text-center p-4">No events recorded for this order.</div>
-        </div>
+        <app-execution-events [events]="d.events"></app-execution-events>
       </div>
     </div>
   `,
@@ -226,7 +220,7 @@ import { TradeOrderDetailResponse, TradeOrderResponse } from '../../models/api.m
     .banner-body { color: #b91c1c; font-size: 14px; line-height: 1.5; }
     .banner-body p { margin: 4px 0; }
 
-    .status-badge, .mode-badge, .phase-badge, .type-badge, .role-badge, .event-type-badge {
+    .status-badge, .mode-badge, .phase-badge, .type-badge, .role-badge {
       padding: 2px 10px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase;
     }
     .status-badge { background: #e5e7eb; color: #374151; }
@@ -239,7 +233,6 @@ import { TradeOrderDetailResponse, TradeOrderResponse } from '../../models/api.m
     .phase-badge { background: #f3f4f6; color: #4b5563; }
     .type-badge { background: #e0e7ff; color: #4338ca; }
     .role-badge { background: #f3f4f6; color: #6b7280; }
-    .event-type-badge { background: #f3f4f6; color: #4b5563; font-size: 10px; }
 
     .id-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; }
     .mono { font-family: monospace; font-size: 12px; background: #f9fafb; padding: 2px 6px; border-radius: 4px; color: #374151; overflow-wrap: anywhere; word-break: break-all; }
@@ -257,11 +250,6 @@ import { TradeOrderDetailResponse, TradeOrderResponse } from '../../models/api.m
     td { padding: 12px 16px; border-bottom: 1px solid #f3f4f6; font-size: 14px; }
     .audit-warning { background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
     .empty-state { padding: 24px; text-align: center; color: #9ca3af; font-style: italic; font-size: 14px; }
-
-    .events-list { display: flex; flex-direction: column; gap: 8px; }
-    .event-item { display: flex; align-items: center; gap: 12px; font-size: 13px; padding-bottom: 8px; border-bottom: 1px solid #f9fafb; }
-    .event-time { color: #9ca3af; font-family: monospace; }
-    .event-message { color: #374151; }
 
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
     .info-grid { display: grid; gap: 12px; }
