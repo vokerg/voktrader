@@ -22,6 +22,7 @@ import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeStatus;
+import com.vokerg.voktrader.trade.model.TradeVenue;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
@@ -50,12 +51,14 @@ class BacktestOrderGatewayTest {
     private final BacktestExecutionProperties executionProperties = new BacktestExecutionProperties();
     private final Map<Long, TradeEntity> trades = new LinkedHashMap<>();
     private final Map<Long, TradeOrderEntity> orders = new LinkedHashMap<>();
+    private final List<TradeFillEntity> savedFills = new ArrayList<>();
     private long nextTradeId = 1;
     private long nextOrderId = 1;
     private BacktestOrderGateway gateway;
 
     @BeforeEach
     void setUp() {
+        savedFills.clear();
         gateway = new BacktestOrderGateway(
                 "run-1",
                 tradeRepository,
@@ -82,7 +85,11 @@ class BacktestOrderGatewayTest {
             orders.put(order.getId(), order);
             return order;
         });
-        when(fillRepository.save(any(TradeFillEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(fillRepository.save(any(TradeFillEntity.class))).thenAnswer(invocation -> {
+            TradeFillEntity fill = invocation.getArgument(0);
+            savedFills.add(fill);
+            return fill;
+        });
         when(tradeRepository.findById(any())).thenAnswer(invocation -> Optional.ofNullable(trades.get(invocation.getArgument(0))));
         when(orderRepository.findByTradeId(any())).thenAnswer(invocation -> orders.values().stream()
                 .filter(order -> invocation.getArgument(0).equals(order.getTradeId()))
@@ -106,6 +113,9 @@ class BacktestOrderGatewayTest {
         assertThat(result.success()).isTrue();
         assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.FILLED);
         assertThat(result.tradeStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(savedFills)
+                .isNotEmpty()
+                .allMatch(fill -> fill.getVenue() == TradeVenue.BACKTEST_SIM);
     }
 
     @Test

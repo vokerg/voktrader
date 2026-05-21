@@ -7,7 +7,6 @@ import com.vokerg.voktrader.marketdata.LatestPriceState;
 import com.vokerg.voktrader.marketdata.OrderBookState;
 import com.vokerg.voktrader.polymarket.dto.PriceLevelDto;
 import com.vokerg.voktrader.time.TimeMachine;
-import com.vokerg.voktrader.trade.OrderCancellationEventEmitter;
 import com.vokerg.voktrader.trade.OrderLifecycleResult;
 import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
 import com.vokerg.voktrader.trade.StrategyInstanceKey;
@@ -20,10 +19,12 @@ import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeEventEntity;
 import com.vokerg.voktrader.trade.model.TradeFillEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderPhase;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeStatus;
+import com.vokerg.voktrader.trade.model.TradeVenue;
 import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
@@ -58,6 +59,7 @@ class PaperOrderGatewayTest {
     private final PaperExecutionProperties executionProperties = new PaperExecutionProperties();
     private final Map<Long, TradeEntity> trades = new LinkedHashMap<>();
     private final Map<Long, TradeOrderEntity> orders = new LinkedHashMap<>();
+    private final List<TradeFillEntity> savedFills = new ArrayList<>();
     private final List<TradeEventEntity> savedEvents = new ArrayList<>();
     private long nextTradeId = 1;
     private long nextOrderId = 1;
@@ -66,6 +68,7 @@ class PaperOrderGatewayTest {
     @BeforeEach
     void setUp() {
         savedEvents.clear();
+        savedFills.clear();
         gateway = newGateway();
         when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> {
             TradeEntity trade = invocation.getArgument(0);
@@ -83,7 +86,11 @@ class PaperOrderGatewayTest {
             orders.put(order.getId(), order);
             return order;
         });
-        when(fillRepository.save(any(TradeFillEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(fillRepository.save(any(TradeFillEntity.class))).thenAnswer(invocation -> {
+            TradeFillEntity fill = invocation.getArgument(0);
+            savedFills.add(fill);
+            return fill;
+        });
         when(eventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> {
             TradeEventEntity event = invocation.getArgument(0);
             savedEvents.add(event);
@@ -253,13 +260,100 @@ class PaperOrderGatewayTest {
 
         assertThat(savedEvents)
                 .extracting(TradeEventEntity::getEventType)
-                .contains(OrderCancellationEventEmitter.PAPER_CANCEL_REQUESTED_EVENT,
-                        OrderCancellationEventEmitter.PAPER_CANCELLED_EVENT);
+                .contains(PaperOrderEventEmitter.PAPER_ORDER_CANCEL_REQUESTED,
+                        PaperOrderEventEmitter.PAPER_ORDER_CANCELLED);
         assertThat(savedEvents.stream()
-                .filter(event -> OrderCancellationEventEmitter.PAPER_CANCEL_REQUESTED_EVENT.equals(event.getEventType())
-                        || OrderCancellationEventEmitter.PAPER_CANCELLED_EVENT.equals(event.getEventType()))
+                .filter(event -> PaperOrderEventEmitter.PAPER_ORDER_CANCEL_REQUESTED.equals(event.getEventType())
+                        || PaperOrderEventEmitter.PAPER_ORDER_CANCELLED.equals(event.getEventType()))
                 .map(TradeEventEntity::getPayloadJson))
                 .allMatch(payload -> payload != null && payload.contains("\"cancelReason\":\"manual test cancel\""));
+    }
+
+    @Test
+    void advanceNoFillPersistsPaperNoFillReason() {
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
+        ));
+
+        assertThat(savedEvents)
+                .extracting(TradeEventEntity::getEventType)
+                .contains(PaperOrderEventEmitter.PAPER_ORDER_ADVANCE_ATTEMPT, PaperOrderEventEmitter.PAPER_ORDER_ADVANCE_NO_FILL);
+        assertThat(savedEvents.stream()
+                .filter(event -> PaperOrderEventEmitter.PAPER_ORDER_ADVANCE_NO_FILL.equals(event.getEventType()))
+                .map(TradeEventEntity::getPayloadJson))
+                .anyMatch(payload -> payload != null && payload.contains("\"reason\":\"NOT_CROSSED\""));
+    }
+
+    @Test
+    void liveBackedPaperCancelIsRejectedWithoutMutation() {
+        TradeEntity trade = createStoredTrade(ExecutionMode.LIVE, TradeStatus.OPEN, 7L, "market-id", "token-up");
+        TradeOrderEntity order = createStoredOrder(trade, ExecutionMode.LIVE, TradeVenue.POLYMARKET, TradeOrderStatus.RESTING, TradeOrderPhase.EXIT);
+
+        OrderLifecycleResult result = gateway.cancelOrder(order.getLocalOrderId(), "should not mutate");
+
+        assertThat(result.success()).isFalse();
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.RESTING);
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.OPEN);
+        assertThat(savedEvents)
+                .extracting(TradeEventEntity::getEventType)
+                .doesNotContain(PaperOrderEventEmitter.PAPER_ORDER_CANCEL_REQUESTED, PaperOrderEventEmitter.PAPER_ORDER_CANCELLED);
+    }
+
+    @Test
+    void crossingBookPersistsPaperFilledEvent() {
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
+        ));
+
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.49", "10", () -> {
+            gateway.advanceOpenOrders();
+            return null;
+        }));
+
+        assertThat(savedEvents)
+                .extracting(TradeEventEntity::getEventType)
+                .contains(PaperOrderEventEmitter.PAPER_ORDER_FILLED);
+        assertThat(savedEvents.stream()
+                .filter(event -> PaperOrderEventEmitter.PAPER_ORDER_FILLED.equals(event.getEventType()))
+                .map(TradeEventEntity::getPayloadJson))
+                .anyMatch(payload -> payload != null && payload.contains("\"reason\":\"FULL_FILL\""));
+        assertThat(savedFills)
+                .isNotEmpty()
+                .allMatch(fill -> fill.getVenue() == TradeVenue.PAPER_SIM);
+    }
+
+    @Test
+    void restingGtdFillCreatesPaperSimFill() {
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.GTD, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
+        ));
+
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:01Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.49", "10", () -> {
+            gateway.advanceOpenOrders();
+            return null;
+        }));
+
+        assertThat(savedFills)
+                .isNotEmpty()
+                .allMatch(fill -> fill.getVenue() == TradeVenue.PAPER_SIM);
+        assertThat(savedFills)
+                .allMatch(fill -> fill.getVenue() != TradeVenue.BACKTEST_SIM);
+    }
+
+    @Test
+    void immediateFokOrFakFillCreatesPaperSimFill() {
+        withBook(1L, "market-id", "0.49", "2", "0.50", "2", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.FOK, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
+        );
+        withBook(1L, "market-id", "0.49", "1", "0.50", "1", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.FAK, TradeSide.BUY, "0.50", "10.00", null), owner(1L), ExecutionMode.PAPER)
+        );
+
+        assertThat(savedFills)
+                .isNotEmpty()
+                .allMatch(fill -> fill.getVenue() == TradeVenue.PAPER_SIM);
+        assertThat(savedFills)
+                .allMatch(fill -> fill.getVenue() != TradeVenue.BACKTEST_SIM);
     }
 
     @Test
@@ -327,8 +421,43 @@ class PaperOrderGatewayTest {
                 executionProperties,
                 new BookOrderFillSimulator(),
                 new TradeExecutionSafetyService(orderRepository, eventRepository, eventLogger, new ObjectMapper()),
-                new OrderCancellationEventEmitter(eventRepository, new ObjectMapper())
+                new PaperOrderEventEmitter(eventRepository, new ObjectMapper())
         );
+    }
+
+    private TradeEntity createStoredTrade(ExecutionMode mode, TradeStatus status, Long botId, String marketId, String tokenId) {
+        TradeEntity trade = TradeEntity.fromIntent(intent(botId, marketId, TradeOrderType.GTC, TradeSide.BUY, "0.50", "1.00", "2.00000000"), mode);
+        ReflectionTestUtils.setField(trade, "id", nextTradeId++);
+        trade.markOpen(new BigDecimal("0.50"), new BigDecimal("2.00000000"), new BigDecimal("1.00"), BigDecimal.ZERO, TimeMachine.now());
+        ReflectionTestUtils.setField(trade, "mode", mode);
+        ReflectionTestUtils.setField(trade, "status", status);
+        ReflectionTestUtils.setField(trade, "botId", botId);
+        ReflectionTestUtils.setField(trade, "marketId", marketId);
+        ReflectionTestUtils.setField(trade, "tokenId", tokenId);
+        trades.put(trade.getId(), trade);
+        return trade;
+    }
+
+    private TradeOrderEntity createStoredOrder(
+            TradeEntity trade,
+            ExecutionMode mode,
+            TradeVenue venue,
+            TradeOrderStatus status,
+            TradeOrderPhase phase
+    ) {
+        TradeOrderEntity order = TradeOrderEntity.fromIntent(
+                trade.getId(),
+                intent(trade.getBotId(), trade.getMarketId(), TradeOrderType.GTC, phase == TradeOrderPhase.ENTRY ? TradeSide.BUY : TradeSide.SELL, "0.50", "1.00", "2.00000000"),
+                mode,
+                venue,
+                "ORDER:" + nextOrderId
+        );
+        ReflectionTestUtils.setField(order, "id", nextOrderId++);
+        order.markSubmitting(order.getLocalOrderId(), "test");
+        order.markResting("{\"paper\":true}");
+        ReflectionTestUtils.setField(order, "status", status);
+        orders.put(order.getId(), order);
+        return order;
     }
 
     private StrategyInstanceKey owner(Long botId) {

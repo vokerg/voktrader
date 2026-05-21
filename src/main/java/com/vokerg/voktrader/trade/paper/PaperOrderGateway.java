@@ -1,6 +1,7 @@
 package com.vokerg.voktrader.trade.paper;
 
 import com.vokerg.voktrader.backtest.BacktestFillModel;
+import com.vokerg.voktrader.bot.BotRuntimeContext;
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.economy.LiquidityRole;
 import com.vokerg.voktrader.marketdata.FillEstimate;
@@ -8,7 +9,6 @@ import com.vokerg.voktrader.marketdata.OrderBookState;
 import com.vokerg.voktrader.marketdata.OutcomeOrderBook;
 import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.OrderGateway;
-import com.vokerg.voktrader.trade.OrderCancellationEventEmitter;
 import com.vokerg.voktrader.trade.OrderLifecycleResult;
 import com.vokerg.voktrader.trade.OrderRuntimeState;
 import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
@@ -68,7 +68,7 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
     private final PaperExecutionProperties paperExecutionProperties;
     private final BookOrderFillSimulator fillSimulator;
     private final TradeExecutionSafetyService safetyService;
-    private final OrderCancellationEventEmitter cancellationEventEmitter;
+    private final PaperOrderEventEmitter paperOrderEventEmitter;
 
     public PaperOrderGateway(
             TradeRepository tradeRepository,
@@ -79,7 +79,7 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
             PaperExecutionProperties paperExecutionProperties,
             BookOrderFillSimulator fillSimulator,
             TradeExecutionSafetyService safetyService,
-            OrderCancellationEventEmitter cancellationEventEmitter
+            PaperOrderEventEmitter paperOrderEventEmitter
     ) {
         this.tradeRepository = tradeRepository;
         this.tradeOrderRepository = tradeOrderRepository;
@@ -89,7 +89,7 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
         this.paperExecutionProperties = paperExecutionProperties;
         this.fillSimulator = fillSimulator;
         this.safetyService = safetyService;
-        this.cancellationEventEmitter = cancellationEventEmitter;
+        this.paperOrderEventEmitter = paperOrderEventEmitter;
     }
 
     @Override
@@ -99,6 +99,10 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
         if (trade == null) {
             return new OrderLifecycleResult(false, null, null, null, null, null, null,
                     "paper sell rejected: no open paper trade", "paper sell rejected: no open paper trade");
+        }
+        if (intent.side() == TradeSide.SELL && trade.getMode() != ExecutionMode.PAPER) {
+            return new OrderLifecycleResult(false, trade.getId(), null, null, null, trade.getStatus(), null,
+                    "paper sell rejected: non-paper trade", "paper sell rejected: non-paper trade");
         }
         if (intent.side() == TradeSide.SELL) {
             Optional<TradeExecutionResult> blocked = safetyService.rejectPaperExitIfLiveBacked(
@@ -151,6 +155,8 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
         }
         tradeOrderRepository.save(order);
         tradeRepository.save(trade);
+        paperOrderEventEmitter.emitResting(trade, order, currentBook(intent.tokenId()), "RESTING", paperExecutionProperties.fillModel());
+        attemptImmediateAdvance(order, trade);
         return OrderLifecycleResult.of(trade, order, true, "paper order resting");
     }
 
@@ -162,9 +168,11 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
             return new OrderLifecycleResult(false, null, null, localOrderId, null, null, null, "paper cancel rejected: order not found", "order not found");
         }
         TradeEntity trade = tradeRepository.findById(order.getTradeId()).orElse(null);
+        if (!paperScopeOk(order, trade)) {
+            return OrderLifecycleResult.of(trade, order, false, "paper cancel rejected: non-paper order/trade");
+        }
         TradeOrderStatus previousStatus = order.getStatus();
-        String rawResponse = "{\"paper\":true,\"cancelled\":true}";
-        cancellationEventEmitter.emitPaperCancelRequested(trade, order, reason, rawResponse);
+        paperOrderEventEmitter.emitCancelRequested(trade, order, currentBook(order.getTokenId()), reasonKey(reason, "STRATEGY_CANCELLED"), paperExecutionProperties.fillModel());
         order.markCancelled(reason, "{\"paper\":true,\"cancelled\":true}");
         if (trade != null) {
             if (order.getPhase() == TradeOrderPhase.ENTRY) {
@@ -204,7 +212,7 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
             }
         }
         tradeOrderRepository.save(order);
-        cancellationEventEmitter.emitPaperCancelled(trade, order, previousStatus, order.getStatus(), reason, rawResponse);
+        paperOrderEventEmitter.emitCancelled(trade, order, previousStatus, currentBook(order.getTokenId()), reasonKey(reason, "STRATEGY_CANCELLED"), paperExecutionProperties.fillModel());
         return OrderLifecycleResult.of(trade, order, true, reason);
     }
 
@@ -235,7 +243,6 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
                 .stream()
                 .filter(order -> Objects.equals(order.getBotId(), botId))
                 .filter(order -> currentMarketId == null || Objects.equals(order.getMarketId(), currentMarketId))
-                .filter(order -> orderBookState.byTokenId(order.getTokenId()).isPresent())
                 .toList();
         for (TradeOrderEntity order : orders) {
             advanceOneOrder(order, orderBookState.byTokenId(order.getTokenId()).orElse(null));
@@ -279,7 +286,17 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
             return OrderLifecycleResult.of(trade, order, false, "paper FOK insufficient depth");
         }
         BigDecimal feeUsd = feeFor(LiquidityRole.TAKER, estimate.filledShares(), estimate.averagePrice());
-        fillOrder(trade, order, estimate.averagePrice(), estimate.filledShares(), LiquidityRole.TAKER, feeUsd, estimate.complete());
+        fillOrder(
+                trade,
+                order,
+                estimate.averagePrice(),
+                estimate.filledShares(),
+                LiquidityRole.TAKER,
+                feeUsd,
+                estimate.complete(),
+                book,
+                estimate.complete() ? "FULL_FILL" : "PARTIAL_FILL"
+        );
         return OrderLifecycleResult.of(trade, order, true, estimate.complete() ? "paper immediate filled" : "paper FAK partially filled");
     }
 
@@ -290,11 +307,17 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
             BigDecimal shares,
             LiquidityRole role,
             BigDecimal feeUsd,
-            boolean full
+            boolean full,
+            OutcomeOrderBook book,
+            String reason
     ) {
         if (trade == null || price == null || shares == null || shares.compareTo(BigDecimal.ZERO) <= 0) {
             return;
         }
+        if (!paperScopeOk(order, trade)) {
+            return;
+        }
+        TradeOrderStatus previousStatus = order.getStatus();
         BigDecimal previousShares = nullToZero(order.getFilledShares());
         BigDecimal cumulativeShares = previousShares.add(shares);
         BigDecimal fillAmountUsd = price.multiply(shares).setScale(SCALE, RoundingMode.HALF_UP);
@@ -305,7 +328,7 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
             remainingShares = BigDecimal.ZERO;
         }
         boolean cumulativeFull = full || remainingShares.compareTo(BigDecimal.ZERO) <= 0;
-        TradeFillEntity fill = tradeFillRepository.save(TradeFillEntity.backtest(
+        TradeFillEntity fill = tradeFillRepository.save(TradeFillEntity.paper(
                 trade.getId(),
                 order.getId(),
                 order.getSide(),
@@ -341,10 +364,23 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
         }
         tradeOrderRepository.save(order);
         tradeRepository.save(trade);
+        paperOrderEventEmitter.emitFilled(
+                trade,
+                order,
+                previousStatus,
+                book,
+                reason == null ? (cumulativeFull ? "FULL_FILL" : "PARTIAL_FILL") : reason,
+                paperExecutionProperties.fillModel(),
+                cumulativeFull
+        );
     }
 
-    private void expire(TradeOrderEntity order) {
+    private void expire(TradeOrderEntity order, OutcomeOrderBook book) {
         TradeEntity trade = tradeRepository.findById(order.getTradeId()).orElse(null);
+        if (!paperScopeOk(order, trade)) {
+            return;
+        }
+        TradeOrderStatus previousStatus = order.getStatus();
         order.markExpired("{\"paper\":true,\"expired\":true}");
         if (trade != null) {
             if (order.getPhase() == TradeOrderPhase.ENTRY) {
@@ -379,22 +415,26 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
             tradeRepository.save(trade);
         }
         tradeOrderRepository.save(order);
+        paperOrderEventEmitter.emitExpired(trade, order, previousStatus, book, "EXPIRED", paperExecutionProperties.fillModel());
     }
 
     private void advanceOneOrder(TradeOrderEntity order, OutcomeOrderBook book) {
-        if (order == null
-                || order.getMode() != ExecutionMode.PAPER
-                || order.getVenue() != TradeVenue.PAPER_SIM
-                || order.getStatus() == null
-                || !ACTIVE_ORDER_STATUSES.contains(order.getStatus())) {
+        if (order == null || order.getStatus() == null || !ACTIVE_ORDER_STATUSES.contains(order.getStatus())) {
             return;
         }
-        if (expired(order)) {
-            expire(order);
+        TradeEntity trade = tradeRepository.findById(order.getTradeId()).orElse(null);
+        if (!paperScopeOk(order, trade)) {
             return;
         }
         BacktestFillModel fillModel = paperExecutionProperties.fillModel();
+        TradeOrderStatus previousStatus = order.getStatus();
+        paperOrderEventEmitter.emitAdvanceAttempt(trade, order, book, "ADVANCE_ATTEMPT", fillModel);
+        if (expired(order)) {
+            expire(order, book);
+            return;
+        }
         if (fillModel == BacktestFillModel.MAKER_NO_FILL) {
+            paperOrderEventEmitter.emitAdvanceNoFill(trade, order, previousStatus, order.getStatus(), book, "MAKER_NO_FILL_MODEL", fillModel);
             return;
         }
         BookOrderFillSimulator.MakerFillEstimate estimate = fillSimulator.makerFillEstimate(
@@ -404,12 +444,30 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
                 paperExecutionProperties.makerTouchFillRatio()
         );
         if (estimate == null || estimate.shares().compareTo(BigDecimal.ZERO) <= 0) {
+            paperOrderEventEmitter.emitAdvanceNoFill(
+                    trade,
+                    order,
+                    previousStatus,
+                    order.getStatus(),
+                    book,
+                    noFillReason(order, book, fillModel),
+                    fillModel
+            );
             return;
         }
-        TradeEntity trade = tradeRepository.findById(order.getTradeId()).orElse(null);
         LiquidityRole role = LiquidityRole.MAKER;
         BigDecimal feeUsd = feeFor(role, estimate.shares(), estimate.price());
-        fillOrder(trade, order, estimate.price(), estimate.shares(), role, feeUsd, estimate.fullFill());
+        fillOrder(
+                trade,
+                order,
+                estimate.price(),
+                estimate.shares(),
+                role,
+                feeUsd,
+                estimate.fullFill(),
+                book,
+                estimate.fullFill() ? "FULL_FILL" : "PARTIAL_FILL"
+        );
     }
 
     private boolean expired(TradeOrderEntity order) {
@@ -433,6 +491,86 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
         return tradeOrderRepository.findByLocalOrderId(localOrRemoteOrderId)
                 .or(() -> tradeOrderRepository.findByClientOrderId(localOrRemoteOrderId))
                 .or(() -> tradeOrderRepository.findByRemoteOrderId(localOrRemoteOrderId));
+    }
+
+    private void attemptImmediateAdvance(TradeOrderEntity order, TradeEntity trade) {
+        if (order == null || trade == null || !paperScopeOk(order, trade)) {
+            return;
+        }
+        BotRuntimeContext context = BotRuntimeContextHolder.current().orElse(null);
+        if (context == null) {
+            paperOrderEventEmitter.emitAdvanceAttempt(trade, order, null, "BOT_CONTEXT_MISSING", paperExecutionProperties.fillModel());
+            paperOrderEventEmitter.emitAdvanceNoFill(trade, order, order.getStatus(), order.getStatus(), null, "BOT_CONTEXT_MISSING", paperExecutionProperties.fillModel());
+            return;
+        }
+        OrderBookState orderBookState = context.orderBookState();
+        if (orderBookState == null) {
+            paperOrderEventEmitter.emitAdvanceAttempt(trade, order, null, "ORDER_BOOK_MISSING", paperExecutionProperties.fillModel());
+            paperOrderEventEmitter.emitAdvanceNoFill(trade, order, order.getStatus(), order.getStatus(), null, "ORDER_BOOK_MISSING", paperExecutionProperties.fillModel());
+            return;
+        }
+        OutcomeOrderBook book = orderBookState.byTokenId(order.getTokenId()).orElse(null);
+        if (book == null) {
+            paperOrderEventEmitter.emitAdvanceAttempt(trade, order, null, "TOKEN_BOOK_MISSING", paperExecutionProperties.fillModel());
+            paperOrderEventEmitter.emitAdvanceNoFill(trade, order, order.getStatus(), order.getStatus(), null, "TOKEN_BOOK_MISSING", paperExecutionProperties.fillModel());
+            return;
+        }
+        advanceOneOrder(order, book);
+    }
+
+    private OutcomeOrderBook currentBook(String tokenId) {
+        return BotRuntimeContextHolder.currentOrderBookState()
+                .flatMap(state -> state.byTokenId(tokenId))
+                .orElse(null);
+    }
+
+    private boolean paperScopeOk(TradeOrderEntity order, TradeEntity trade) {
+        return order != null
+                && order.getMode() == ExecutionMode.PAPER
+                && order.getVenue() == TradeVenue.PAPER_SIM
+                && (trade == null || trade.getMode() == ExecutionMode.PAPER);
+    }
+
+    private String noFillReason(TradeOrderEntity order, OutcomeOrderBook book, BacktestFillModel fillModel) {
+        if (book == null) {
+            return "TOKEN_BOOK_MISSING";
+        }
+        if (order == null || order.getRequestedPrice() == null) {
+            return "ORDER_PRICE_MISSING";
+        }
+        if (order.getSide() == TradeSide.BUY) {
+            var bestAsk = book.bestAsk().orElse(null);
+            if (bestAsk == null) {
+                return "BOOK_MISSING";
+            }
+            int comparison = bestAsk.price().compareTo(order.getRequestedPrice());
+            if (comparison > 0) {
+                return "NOT_CROSSED";
+            }
+            if (comparison == 0 && fillModel != BacktestFillModel.MAKER_TOUCH) {
+                return "TOUCH_IGNORED_BY_FILL_MODEL";
+            }
+            return "NO_FILL";
+        }
+        var bestBid = book.bestBid().orElse(null);
+        if (bestBid == null) {
+            return "BOOK_MISSING";
+        }
+        int comparison = bestBid.price().compareTo(order.getRequestedPrice());
+        if (comparison < 0) {
+            return "NOT_CROSSED";
+        }
+        if (comparison == 0 && fillModel != BacktestFillModel.MAKER_TOUCH) {
+            return "TOUCH_IGNORED_BY_FILL_MODEL";
+        }
+        return "NO_FILL";
+    }
+
+    private String reasonKey(String freeformReason, String fallback) {
+        if (freeformReason == null || freeformReason.isBlank()) {
+            return fallback;
+        }
+        return freeformReason;
     }
 
     private StrategyRuntimeState stateFromTrade(StrategyInstanceKey owner, TradeEntity trade) {

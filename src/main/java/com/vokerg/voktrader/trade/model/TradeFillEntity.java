@@ -142,6 +142,37 @@ public class TradeFillEntity {
         return entity;
     }
 
+    public static TradeFillEntity paper(
+            Long tradeId,
+            Long orderId,
+            TradeSide side,
+            BigDecimal price,
+            BigDecimal shares,
+            BigDecimal amountUsd,
+            BigDecimal feeUsd,
+            String liquidityRole,
+            String rawFill
+    ) {
+        TradeFillEntity entity = new TradeFillEntity();
+        entity.tradeId = tradeId;
+        entity.orderId = orderId;
+        entity.tradeOrderId = orderId;
+        entity.exchangeOrderId = "paper-" + orderId;
+        entity.venue = TradeVenue.PAPER_SIM;
+        entity.side = side;
+        entity.price = price;
+        entity.shares = shares;
+        entity.amountUsd = amountUsd;
+        entity.feeUsd = feeUsd != null ? feeUsd : BigDecimal.ZERO;
+        entity.feeKnown = feeUsd != null;
+        entity.liquidityRole = liquidityRole == null ? "TAKER" : liquidityRole;
+        entity.rawFill = rawFill;
+        entity.filledAt = TimeMachine.now();
+        entity.occurredAt = entity.filledAt;
+        entity.receivedAt = entity.filledAt;
+        return entity;
+    }
+
     public static TradeFillEntity remote(
             Long tradeId,
             Long orderId,
