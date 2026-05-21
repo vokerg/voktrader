@@ -20,6 +20,8 @@ import java.util.Map;
 public class OrderCancellationEventEmitter {
     public static final String CANCEL_REQUESTED_EVENT = "LIVE_ORDER_CANCEL_REQUESTED";
     public static final String CANCELLED_EVENT = "LIVE_ORDER_CANCELLED";
+    public static final String PAPER_CANCEL_REQUESTED_EVENT = "PAPER_ORDER_CANCEL_REQUESTED";
+    public static final String PAPER_CANCELLED_EVENT = "PAPER_ORDER_CANCELLED";
 
     private final TradeEventRepository tradeEventRepository;
     private final ObjectMapper objectMapper;
@@ -53,6 +55,44 @@ public class OrderCancellationEventEmitter {
         emitOnce(
                 CANCELLED_EVENT,
                 "live order cancelled",
+                trade,
+                order,
+                previousStatus,
+                resolvedStatus,
+                reason,
+                rawResponse
+        );
+    }
+
+    public void emitPaperCancelRequested(
+            TradeEntity trade,
+            TradeOrderEntity order,
+            String reason,
+            String rawResponse
+    ) {
+        emitOnce(
+                PAPER_CANCEL_REQUESTED_EVENT,
+                "paper order cancel requested",
+                trade,
+                order,
+                order == null ? null : order.getStatus(),
+                order == null ? null : order.getStatus(),
+                reason,
+                rawResponse
+        );
+    }
+
+    public void emitPaperCancelled(
+            TradeEntity trade,
+            TradeOrderEntity order,
+            TradeOrderStatus previousStatus,
+            TradeOrderStatus resolvedStatus,
+            String reason,
+            String rawResponse
+    ) {
+        emitOnce(
+                PAPER_CANCELLED_EVENT,
+                "paper order cancelled",
                 trade,
                 order,
                 previousStatus,
@@ -103,6 +143,7 @@ public class OrderCancellationEventEmitter {
         payload.put("strategyId", order == null ? null : order.getStrategyId());
         payload.put("ruleId", order == null ? null : order.getRuleId());
         payload.put("botId", order == null ? null : order.getBotId());
+        payload.put("localOrderId", order == null ? null : order.getLocalOrderId());
         payload.put("remoteOrderId", order == null ? null : order.getRemoteOrderId());
         payload.put("exchangeOrderId", order == null ? null : order.getExchangeOrderId());
         payload.put("previousStatus", previousStatus == null ? null : previousStatus.name());

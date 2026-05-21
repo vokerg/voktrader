@@ -7,6 +7,7 @@ import com.vokerg.voktrader.marketdata.LatestPriceState;
 import com.vokerg.voktrader.marketdata.OrderBookState;
 import com.vokerg.voktrader.polymarket.dto.PriceLevelDto;
 import com.vokerg.voktrader.time.TimeMachine;
+import com.vokerg.voktrader.trade.OrderCancellationEventEmitter;
 import com.vokerg.voktrader.trade.OrderLifecycleResult;
 import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
 import com.vokerg.voktrader.trade.StrategyInstanceKey;
@@ -57,12 +58,14 @@ class PaperOrderGatewayTest {
     private final PaperExecutionProperties executionProperties = new PaperExecutionProperties();
     private final Map<Long, TradeEntity> trades = new LinkedHashMap<>();
     private final Map<Long, TradeOrderEntity> orders = new LinkedHashMap<>();
+    private final List<TradeEventEntity> savedEvents = new ArrayList<>();
     private long nextTradeId = 1;
     private long nextOrderId = 1;
     private PaperOrderGateway gateway;
 
     @BeforeEach
     void setUp() {
+        savedEvents.clear();
         gateway = newGateway();
         when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> {
             TradeEntity trade = invocation.getArgument(0);
@@ -81,7 +84,17 @@ class PaperOrderGatewayTest {
             return order;
         });
         when(fillRepository.save(any(TradeFillEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(eventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(eventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> {
+            TradeEventEntity event = invocation.getArgument(0);
+            savedEvents.add(event);
+            return event;
+        });
+        when(eventRepository.existsByTradeOrderIdAndEventType(any(), any())).thenAnswer(invocation -> {
+            Long orderId = invocation.getArgument(0);
+            String eventType = invocation.getArgument(1);
+            return savedEvents.stream().anyMatch(event -> orderId.equals(event.getTradeOrderId())
+                    && eventType.equals(event.getEventType()));
+        });
         when(tradeRepository.findById(any())).thenAnswer(invocation -> Optional.ofNullable(trades.get(invocation.getArgument(0))));
         when(orderRepository.findByTradeId(any())).thenAnswer(invocation -> orders.values().stream()
                 .filter(order -> invocation.getArgument(0).equals(order.getTradeId()))
@@ -230,6 +243,26 @@ class PaperOrderGatewayTest {
     }
 
     @Test
+    void cancelRestingPaperOrderPersistsPaperCancellationEvents() {
+        TimeMachine.runAt(Instant.parse("2026-05-09T12:00:00Z"), () -> withBook(1L, "market-id", "0.49", "10", "0.51", "10", () ->
+                gateway.submitOrder(intent(1L, "market-id", TradeOrderType.GTD, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
+        ));
+
+        String localOrderId = orders.values().iterator().next().getLocalOrderId();
+        gateway.cancelOrder(localOrderId, "manual test cancel");
+
+        assertThat(savedEvents)
+                .extracting(TradeEventEntity::getEventType)
+                .contains(OrderCancellationEventEmitter.PAPER_CANCEL_REQUESTED_EVENT,
+                        OrderCancellationEventEmitter.PAPER_CANCELLED_EVENT);
+        assertThat(savedEvents.stream()
+                .filter(event -> OrderCancellationEventEmitter.PAPER_CANCEL_REQUESTED_EVENT.equals(event.getEventType())
+                        || OrderCancellationEventEmitter.PAPER_CANCELLED_EVENT.equals(event.getEventType()))
+                .map(TradeEventEntity::getPayloadJson))
+                .allMatch(payload -> payload != null && payload.contains("\"cancelReason\":\"manual test cancel\""));
+    }
+
+    @Test
     void fokAndFakStillUseImmediateTakerBehavior() {
         OrderLifecycleResult fok = withBook(1L, "market-id", "0.49", "2", "0.50", "2", () ->
                 gateway.submitOrder(intent(1L, "market-id", TradeOrderType.FOK, TradeSide.BUY, "0.50", "1.00", null), owner(1L), ExecutionMode.PAPER)
@@ -293,7 +326,8 @@ class PaperOrderGatewayTest {
                 tradingProperties,
                 executionProperties,
                 new BookOrderFillSimulator(),
-                new TradeExecutionSafetyService(orderRepository, eventRepository, eventLogger, new ObjectMapper())
+                new TradeExecutionSafetyService(orderRepository, eventRepository, eventLogger, new ObjectMapper()),
+                new OrderCancellationEventEmitter(eventRepository, new ObjectMapper())
         );
     }
 

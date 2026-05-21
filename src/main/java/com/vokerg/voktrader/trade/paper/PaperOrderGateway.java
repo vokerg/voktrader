@@ -8,6 +8,7 @@ import com.vokerg.voktrader.marketdata.OrderBookState;
 import com.vokerg.voktrader.marketdata.OutcomeOrderBook;
 import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.OrderGateway;
+import com.vokerg.voktrader.trade.OrderCancellationEventEmitter;
 import com.vokerg.voktrader.trade.OrderLifecycleResult;
 import com.vokerg.voktrader.trade.OrderRuntimeState;
 import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
@@ -67,6 +68,7 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
     private final PaperExecutionProperties paperExecutionProperties;
     private final BookOrderFillSimulator fillSimulator;
     private final TradeExecutionSafetyService safetyService;
+    private final OrderCancellationEventEmitter cancellationEventEmitter;
 
     public PaperOrderGateway(
             TradeRepository tradeRepository,
@@ -76,7 +78,8 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
             TradingProperties tradingProperties,
             PaperExecutionProperties paperExecutionProperties,
             BookOrderFillSimulator fillSimulator,
-            TradeExecutionSafetyService safetyService
+            TradeExecutionSafetyService safetyService,
+            OrderCancellationEventEmitter cancellationEventEmitter
     ) {
         this.tradeRepository = tradeRepository;
         this.tradeOrderRepository = tradeOrderRepository;
@@ -86,6 +89,7 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
         this.paperExecutionProperties = paperExecutionProperties;
         this.fillSimulator = fillSimulator;
         this.safetyService = safetyService;
+        this.cancellationEventEmitter = cancellationEventEmitter;
     }
 
     @Override
@@ -158,6 +162,9 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
             return new OrderLifecycleResult(false, null, null, localOrderId, null, null, null, "paper cancel rejected: order not found", "order not found");
         }
         TradeEntity trade = tradeRepository.findById(order.getTradeId()).orElse(null);
+        TradeOrderStatus previousStatus = order.getStatus();
+        String rawResponse = "{\"paper\":true,\"cancelled\":true}";
+        cancellationEventEmitter.emitPaperCancelRequested(trade, order, reason, rawResponse);
         order.markCancelled(reason, "{\"paper\":true,\"cancelled\":true}");
         if (trade != null) {
             if (order.getPhase() == TradeOrderPhase.ENTRY) {
@@ -197,6 +204,7 @@ public class PaperOrderGateway implements OrderGateway, TradeStateProvider {
             }
         }
         tradeOrderRepository.save(order);
+        cancellationEventEmitter.emitPaperCancelled(trade, order, previousStatus, order.getStatus(), reason, rawResponse);
         return OrderLifecycleResult.of(trade, order, true, reason);
     }
 
