@@ -9,6 +9,7 @@ import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeStatus;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
+import com.vokerg.voktrader.time.TimeMachine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -23,8 +24,10 @@ public class RiskCheckService {
     private static final List<TradeStatus> ACTIVE_STATUSES = List.of(
             TradeStatus.CREATED,
             TradeStatus.ENTRY_PENDING,
+            TradeStatus.PARTIALLY_OPEN,
             TradeStatus.OPEN,
-            TradeStatus.EXIT_PENDING
+            TradeStatus.EXIT_PENDING,
+            TradeStatus.PARTIALLY_CLOSED
     );
     private static final List<TradeOrderStatus> COOLDOWN_STATUSES = List.of(
             TradeOrderStatus.FAILED,
@@ -122,9 +125,11 @@ public class RiskCheckService {
                     properties.isLiveEnabled(), true,
                     liveEnabledOk ? "live trading explicitly enabled" : "live trading not explicitly enabled"));
 
-            long openLiveTradesIncludingCurrent = tradeRepository.countByModeInAndStatusIn(
-                    List.of(ExecutionMode.LIVE), ACTIVE_STATUSES);
-            long openLiveTrades = Math.max(0, openLiveTradesIncludingCurrent - 1);
+            long openLiveTradesIncludingCurrent = tradeRepository.countLiveCapacityTrades(
+                    List.of(ExecutionMode.LIVE), ACTIVE_STATUSES, TimeMachine.now());
+            long openLiveTrades = tradeId == null
+                    ? openLiveTradesIncludingCurrent
+                    : Math.max(0, openLiveTradesIncludingCurrent - 1);
             boolean openLiveOk = openLiveTrades < properties.getMaxOpenLiveTrades();
             assessment.add(check(tradeId, orderId, mode, "MAX_OPEN_LIVE_TRADES", openLiveOk,
                     openLiveTrades, properties.getMaxOpenLiveTrades(),

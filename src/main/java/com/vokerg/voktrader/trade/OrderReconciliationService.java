@@ -409,7 +409,9 @@ public class OrderReconciliationService {
                 trade.markCancelled();
             }
         } else if (order.getStatus() == TradeOrderStatus.EXPIRED) {
-            return;
+            if (zeroIfNull(order.getFilledShares()).compareTo(BigDecimal.ZERO) == 0) {
+                trade.markCancelled();
+            }
         } else if (order.getStatus() == TradeOrderStatus.REJECTED || order.getStatus() == TradeOrderStatus.FAILED) {
             if (trade.getStatus() != null && trade.getStatus().isTerminal()) {
                 return;

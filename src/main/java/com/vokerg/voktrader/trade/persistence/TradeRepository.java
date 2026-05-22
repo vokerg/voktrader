@@ -8,7 +8,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -18,6 +20,18 @@ public interface TradeRepository extends JpaRepository<TradeEntity, Long>, JpaSp
     long countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(String marketId, String tokenId, String strategyId, Collection<TradeStatus> statuses);
     long countByMarketIdAndStrategyIdAndStatusIn(String marketId, String strategyId, Collection<TradeStatus> statuses);
     long countByModeInAndStatusIn(Collection<ExecutionMode> modes, Collection<TradeStatus> statuses);
+    @Query("""
+            select count(t)
+            from TradeEntity t
+            where t.mode in :modes
+              and t.status in :statuses
+              and (t.marketEndAt is null or t.marketEndAt > :now)
+            """)
+    long countLiveCapacityTrades(
+            @Param("modes") Collection<ExecutionMode> modes,
+            @Param("statuses") Collection<TradeStatus> statuses,
+            @Param("now") Instant now
+    );
     long countByStrategyIdAndMarketId(String strategyId, String marketId);
     List<TradeEntity> findByMarketIdAndStatus(String marketId, TradeStatus status);
     List<TradeEntity> findByStatus(TradeStatus status);

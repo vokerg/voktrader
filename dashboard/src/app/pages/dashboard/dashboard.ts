@@ -1,12 +1,15 @@
-import { Component, signal, inject, OnInit } from '@angular/core';
+import { Component, signal, computed, inject, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { ApiService } from '../../services/api.service';
-import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, TradeSummaryResponse } from '../../models/api.models';
+import { TelemetryStreamService } from '../../services/telemetry-stream.service';
+import { LiveLogPanel } from '../../components/live-log-panel/live-log-panel';
+import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, TelemetryPanelKey, TradingEvent, TradeSummaryResponse } from '../../models/api.models';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, LiveLogPanel],
   template: `
     <div class="dashboard-grid">
       <div class="stat-card clickable" routerLink="/bots">
@@ -99,6 +102,45 @@ import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, Trad
             </tr>
           </tbody>
         </table>
+      </div>
+    </section>
+
+    <section class="runtime-section">
+      <div class="section-header">
+        <h2>Live Telemetry</h2>
+        <span class="connection-state" [attr.data-state]="telemetryStream.connectionState()">
+          {{ telemetryStream.connectionState() }}
+        </span>
+      </div>
+
+      <div class="telemetry-grid">
+        <app-live-log-panel
+          title="Market Info"
+          [events]="marketEvents()"
+          [connectionState]="telemetryStream.connectionState()"
+          emptyText="No market telemetry yet">
+        </app-live-log-panel>
+
+        <app-live-log-panel
+          title="Price Info"
+          [events]="priceEvents()"
+          [connectionState]="telemetryStream.connectionState()"
+          emptyText="No price telemetry yet">
+        </app-live-log-panel>
+
+        <app-live-log-panel
+          title="Strategy / Decisions"
+          [events]="strategyEvents()"
+          [connectionState]="telemetryStream.connectionState()"
+          emptyText="No strategy telemetry yet">
+        </app-live-log-panel>
+
+        <app-live-log-panel
+          title="Order Execution"
+          [events]="executionEvents()"
+          [connectionState]="telemetryStream.connectionState()"
+          emptyText="No order execution telemetry yet">
+        </app-live-log-panel>
       </div>
     </section>
 
@@ -209,6 +251,12 @@ import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, Trad
     .runtime-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       gap: 16px;
     }
 
@@ -346,19 +394,45 @@ import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, Trad
     .status-badge[data-status="PAUSED"] { background: #f59e0b; }
   `
 })
-export class Dashboard implements OnInit {
+export class Dashboard implements OnInit, OnDestroy {
   private apiService = inject(ApiService);
+  telemetryStream = inject(TelemetryStreamService);
+  private telemetrySub?: Subscription;
   
   bots = signal<BotConfigResponse[]>([]);
   trades = signal<TradeSummaryResponse[]>([]);
   runtimeStatus = signal<RuntimeStatusResponse | null>(null);
   strategyCatalog = signal<StrategyCatalogResponse | null>(null);
+  telemetryEvents = signal<TradingEvent[]>([]);
   
   activeBotsCount = signal(0);
   dailyPnl = signal(0);
 
+  marketEvents = computed(() =>
+    this.telemetryEvents().filter(e => this.panelFor(e) === 'market').slice(0, 50)
+  );
+
+  priceEvents = computed(() =>
+    this.telemetryEvents().filter(e => this.panelFor(e) === 'price').slice(0, 50)
+  );
+
+  strategyEvents = computed(() =>
+    this.telemetryEvents().filter(e => this.panelFor(e) === 'strategy').slice(0, 50)
+  );
+
+  executionEvents = computed(() =>
+    this.telemetryEvents().filter(e => this.panelFor(e) === 'execution').slice(0, 50)
+  );
+
   ngOnInit() {
     this.loadData();
+    this.telemetrySub = this.telemetryStream.stream().subscribe(event => {
+      this.telemetryEvents.update(events => [event, ...events].slice(0, 300));
+    });
+  }
+
+  ngOnDestroy() {
+    this.telemetrySub?.unsubscribe();
   }
 
   loadData() {
@@ -375,5 +449,52 @@ export class Dashboard implements OnInit {
 
     this.apiService.getRuntimeStatus().subscribe(status => this.runtimeStatus.set(status));
     this.apiService.getStrategies().subscribe(catalog => this.strategyCatalog.set(catalog));
+  }
+
+  private panelFor(event: TradingEvent): TelemetryPanelKey {
+    const phase = (event.phase || '').toUpperCase();
+    const type = (event.type || '').toUpperCase();
+
+    if (
+      phase === 'PRICE' ||
+      type.startsWith('PRICE_') ||
+      type === 'PRICE_WS_UPDATE' ||
+      type === 'PRICE_SEEDED_FROM_REST' ||
+      type === 'PRICE_SEED_FAILED'
+    ) {
+      return 'price';
+    }
+
+    if (
+      phase === 'EXECUTION' ||
+      type.includes('ORDER') ||
+      type.includes('FILL') ||
+      type.includes('RECONCIL') ||
+      type.startsWith('PAPER_ORDER_')
+    ) {
+      return 'execution';
+    }
+
+    if (
+      phase === 'ENTRY' ||
+      phase === 'EXIT' ||
+      type === 'ENTRY_REJECTED' ||
+      type === 'ENTRY_SIGNAL' ||
+      type === 'EXIT_SIGNAL' ||
+      type === 'TRADE_ROUTED' ||
+      type === 'STRATEGY_V2_ENTRY_PULSE'
+    ) {
+      return 'strategy';
+    }
+
+    if (
+      phase === 'MARKET' ||
+      type.startsWith('MARKET_') ||
+      type === 'PRICE_SNAPSHOT'
+    ) {
+      return 'market';
+    }
+
+    return 'strategy';
   }
 }

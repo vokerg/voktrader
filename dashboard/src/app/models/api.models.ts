@@ -17,6 +17,33 @@ export interface BotConfigResponse {
   updatedAt: string;
 }
 
+export interface TradingEvent {
+  timestamp: string;
+  type: string;
+  phase: string | null;
+  strategyId: string | null;
+  ruleId: string | null;
+  botId: number | null;
+  marketId: string | null;
+  marketSlug: string | null;
+  tokenId: string | null;
+  outcome: string | null;
+  reason: string | null;
+  data: Record<string, unknown>;
+}
+
+export type TelemetryConnectionState =
+  | 'connecting'
+  | 'live'
+  | 'error'
+  | 'disconnected';
+
+export type TelemetryPanelKey =
+  | 'market'
+  | 'price'
+  | 'strategy'
+  | 'execution';
+
 export interface BotCreateRequest {
   name: string | null;
   marketFamily: string | null;

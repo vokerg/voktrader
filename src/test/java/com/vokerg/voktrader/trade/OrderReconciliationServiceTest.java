@@ -458,7 +458,7 @@ class OrderReconciliationServiceTest {
         TimeMachine.runAt(now, () -> service.reconcileOrder(order));
 
         assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.EXPIRED);
-        assertThat(trade.getStatus()).isEqualTo(TradeStatus.CREATED);
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.CANCELLED);
     }
 
     @Test

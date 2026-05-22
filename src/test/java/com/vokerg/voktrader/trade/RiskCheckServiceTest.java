@@ -15,11 +15,13 @@ import org.mockito.ArgumentCaptor;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -88,8 +90,10 @@ class RiskCheckServiceTest {
         assertThat(countedStatuses).containsExactlyInAnyOrder(
                 "CREATED",
                 "ENTRY_PENDING",
+                "PARTIALLY_OPEN",
                 "OPEN",
-                "EXIT_PENDING"
+                "EXIT_PENDING",
+                "PARTIALLY_CLOSED"
         );
         assertThat(countedStatuses).doesNotContain(
                 "RISK_REJECTED",
@@ -141,6 +145,89 @@ class RiskCheckServiceTest {
                     assertThat(check.isPassed()).isFalse();
                     assertThat(check.getObservedValue()).isEqualTo("1");
                 });
+    }
+
+    @Test
+    void liveOpenTradeLimitCountsActiveLiveTradesBeforeCreatingCurrentTrade() {
+        properties.setAllowedStrategyIds(Set.of("cost-aware-momentum"));
+        properties.setMaxOrderUsd(new BigDecimal("1.00"));
+        properties.setMaxSpread(new BigDecimal("0.03"));
+        properties.setMaxPriceAgeMs(1500);
+        properties.setMinSecondsToExpiry(30);
+        properties.setMaxTradesPerMarket(5);
+        properties.setMaxOpenLiveTrades(3);
+        properties.setKillSwitchEnabled(false);
+        properties.setLiveEnabled(true);
+
+        TradeIntent intent = TradeIntent.buy(
+                market(),
+                price(),
+                new BigDecimal("1.00"),
+                "cost-aware-momentum",
+                "cost-aware-momentum",
+                "entry"
+        );
+
+        when(tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(
+                eq("market-id"),
+                eq("up"),
+                eq("cost-aware-momentum"),
+                anyCollection()
+        )).thenReturn(0L);
+        when(tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(
+                eq("market-id"),
+                eq("cost-aware-momentum"),
+                anyCollection()
+        )).thenReturn(0L);
+        when(tradeOrderRepository.findByClientOrderId("key")).thenReturn(Optional.empty());
+        when(tradeRepository.countLiveCapacityTrades(eq(List.of(ExecutionMode.LIVE)), anyCollection(), any(Instant.class)))
+                .thenReturn(3L);
+
+        RiskAssessment assessment = service.assess(intent, ExecutionMode.LIVE, null, null, "key");
+
+        assertThat(assessment.passed()).isFalse();
+        assertThat(assessment.checks())
+                .filteredOn(check -> "MAX_OPEN_LIVE_TRADES".equals(check.getCheckName()))
+                .singleElement()
+                .satisfies(check -> {
+                    assertThat(check.isPassed()).isFalse();
+                    assertThat(check.getObservedValue()).isEqualTo("3");
+                    assertThat(check.getLimitValue()).isEqualTo("3");
+                });
+    }
+
+    @Test
+    void liveOpenTradeLimitIncludesPartialPositionStatuses() {
+        properties.setAllowedStrategyIds(Set.of("cost-aware-momentum"));
+        properties.setMaxOrderUsd(new BigDecimal("1.00"));
+        properties.setMaxSpread(new BigDecimal("0.03"));
+        properties.setMaxPriceAgeMs(1500);
+        properties.setMinSecondsToExpiry(30);
+        properties.setMaxTradesPerMarket(5);
+        properties.setMaxOpenLiveTrades(10);
+        properties.setKillSwitchEnabled(false);
+        properties.setLiveEnabled(true);
+
+        TradeIntent intent = TradeIntent.buy(
+                market(),
+                price(),
+                new BigDecimal("1.00"),
+                "cost-aware-momentum",
+                "cost-aware-momentum",
+                "entry"
+        );
+
+        when(tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(any(), any(), any(), anyCollection())).thenReturn(0L);
+        when(tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(any(), any(), anyCollection())).thenReturn(0L);
+        when(tradeOrderRepository.findByClientOrderId("key")).thenReturn(Optional.empty());
+        when(tradeRepository.countLiveCapacityTrades(eq(List.of(ExecutionMode.LIVE)), anyCollection(), any(Instant.class))).thenReturn(1L);
+
+        service.assess(intent, ExecutionMode.LIVE, null, null, "key");
+
+        ArgumentCaptor<Collection<TradeStatus>> statusCaptor = ArgumentCaptor.forClass(Collection.class);
+        verify(tradeRepository).countLiveCapacityTrades(eq(List.of(ExecutionMode.LIVE)), statusCaptor.capture(), any(Instant.class));
+        assertThat(statusCaptor.getValue())
+                .contains(TradeStatus.PARTIALLY_OPEN, TradeStatus.PARTIALLY_CLOSED);
     }
 
     private GammaMarketDto market() {
