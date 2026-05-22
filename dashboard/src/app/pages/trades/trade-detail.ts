@@ -15,6 +15,9 @@ import { ExecutionEvents } from '../../components/execution-events/execution-eve
         <a routerLink="/trades" class="back-link">Back to Trades</a>
         <div class="header-main">
           <h1>Trade Details #{{ t.id }}</h1>
+          <div class="market-info">
+            <a [routerLink]="['/markets', t.marketId]" class="market-link">{{ t.marketSlug }}</a>
+          </div>
           <div class="badges">
             <div class="status-badge" [attr.data-status]="t.status">{{ t.status }}</div>
             <div class="mode-badge" [attr.data-mode]="t.mode">{{ t.mode }}</div>
@@ -29,6 +32,9 @@ import { ExecutionEvents } from '../../components/execution-events/execution-eve
           <div class="outcome-main">
             <div class="label">Outcome</div>
             <div class="value large">{{ t.outcome }}</div>
+            <div class="trade-action">
+              Bought {{ t.outcome }} @ {{ t.entryAvgPrice !== null ? (t.entryAvgPrice | number:'1.3-3') : '-' }}
+            </div>
           </div>
           <div class="pnl-section">
             <div class="label">Final PnL</div>
@@ -54,6 +60,23 @@ import { ExecutionEvents } from '../../components/execution-events/execution-eve
               <label>Fees</label>
               <span class="usd negative">$ {{ t.totalFeeUsd || 0 | number:'1.2-4' }}</span>
             </div>
+          </div>
+        </div>
+        <div class="round-trip-strip">
+          <div class="round-trip-item primary">
+            <label>Entry</label>
+            <span>BUY {{ t.outcome }} @ {{ t.entryAvgPrice !== null ? (t.entryAvgPrice | number:'1.3-3') : '-' }}</span>
+            <small>{{ t.entryFilledShares || 0 | number:'1.2-2' }} shares / $ {{ t.entryFilledUsd || 0 | number:'1.2-2' }}</small>
+          </div>
+          <div class="round-trip-item">
+            <label>Exit</label>
+            <span>SELL {{ t.outcome }} @ {{ t.exitAvgPrice !== null ? (t.exitAvgPrice | number:'1.3-3') : '-' }}</span>
+            <small>{{ t.exitFilledShares || 0 | number:'1.2-2' }} shares / $ {{ t.exitFilledUsd || 0 | number:'1.2-2' }}</small>
+          </div>
+          <div class="round-trip-item">
+            <label>Net</label>
+            <span [class.positive]="t.finalPnlUsd > 0" [class.negative]="t.finalPnlUsd < 0">$ {{ t.finalPnlUsd | number:'1.2-2' }}</span>
+            <small>Fees $ {{ t.totalFeeUsd || 0 | number:'1.2-4' }}</small>
           </div>
         </div>
       </div>
@@ -150,6 +173,7 @@ import { ExecutionEvents } from '../../components/execution-events/execution-eve
             <thead>
               <tr>
                 <th>Time</th>
+                <th>Outcome</th>
                 <th>Side</th>
                 <th>Price</th>
                 <th>Shares</th>
@@ -163,6 +187,7 @@ import { ExecutionEvents } from '../../components/execution-events/execution-eve
             <tbody>
               <tr *ngFor="let fill of t.fills" [routerLink]="fill.orderId ? ['/orders', fill.orderId] : null" [class.clickable-row]="fill.orderId">
                 <td>{{ fill.filledAt | date:'medium' }}</td>
+                <td><span class="outcome-chip">{{ t.outcome }}</span></td>
                 <td><span class="side" [class.side-buy]="fill.side === 'BUY'" [class.side-sell]="fill.side === 'SELL'">{{ fill.side }}</span></td>
                 <td>{{ fill.price | number:'1.3-3' }}</td>
                 <td>{{ fill.shares | number:'1.2-2' }}</td>
@@ -173,7 +198,7 @@ import { ExecutionEvents } from '../../components/execution-events/execution-eve
                 <td>{{ fill.orderId ? '#' + fill.orderId : 'N/A' }}</td>
               </tr>
               <tr *ngIf="t.fills.length === 0">
-                <td colspan="9" class="empty-cell">No fills recorded for this trade.</td>
+                <td colspan="10" class="empty-cell">No fills recorded for this trade.</td>
               </tr>
             </tbody>
           </table>
@@ -188,7 +213,7 @@ import { ExecutionEvents } from '../../components/execution-events/execution-eve
               <tr>
                 <th>Created / Latency</th>
                 <th>Phase</th>
-                <th>Type / Side</th>
+                <th>Action</th>
                 <th>Status</th>
                 <th>Price / Shares</th>
                 <th>Filled / Avg</th>
@@ -203,8 +228,11 @@ import { ExecutionEvents } from '../../components/execution-events/execution-eve
                 </td>
                 <td><span class="phase-badge">{{ order.phase }}</span></td>
                 <td>
+                  <div class="action-line">
+                    <span class="side" [class.side-buy]="order.side === 'BUY'" [class.side-sell]="order.side === 'SELL'">{{ order.side }}</span>
+                    <span class="outcome-chip">{{ order.outcome }}</span>
+                  </div>
                   <div class="type">{{ order.orderType }}</div>
-                  <div class="side" [class.side-buy]="order.side === 'BUY'" [class.side-sell]="order.side === 'SELL'">{{ order.side }}</div>
                 </td>
                 <td>
                   <div class="status-badge" [attr.data-status]="order.status">{{ order.status }}</div>
@@ -243,6 +271,10 @@ import { ExecutionEvents } from '../../components/execution-events/execution-eve
     h1 { font-size: 28px; font-weight: 800; margin: 0; color: #111827; }
     h2 { font-size: 18px; font-weight: 700; margin: 0 0 16px; color: #374151; }
 
+    .market-info { margin-bottom: 4px; }
+    .market-link { font-size: 14px; font-weight: 700; color: #3b82f6; text-decoration: none; }
+    .market-link:hover { text-decoration: underline; }
+
     .card { background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #f3f4f6; }
     .mt-4 { margin-top: 24px; }
     .mt-2 { margin-top: 16px; }
@@ -250,6 +282,7 @@ import { ExecutionEvents } from '../../components/execution-events/execution-eve
     .outcome-card { background: linear-gradient(to bottom right, #ffffff, #f9fafb); border-left: 4px solid #3b82f6; }
     .outcome-grid { display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 32px; align-items: center; }
     .outcome-main .value.large { font-size: 24px; font-weight: 800; color: #111827; }
+    .trade-action { margin-top: 6px; font-size: 13px; font-weight: 700; color: #374151; }
     .pnl-section .pnl { font-size: 24px; font-weight: 800; }
     .pnl-section .net-return { font-size: 14px; font-weight: 600; margin-left: 8px; }
     .economics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; background: #fff; padding: 16px; border-radius: 8px; border: 1px solid #e5e7eb; }
@@ -258,6 +291,12 @@ import { ExecutionEvents } from '../../components/execution-events/execution-eve
     .eco-item span { font-size: 14px; font-weight: 600; }
     .eco-item .usd { font-size: 12px; color: #4b5563; }
     .label { font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 4px; }
+    .round-trip-strip { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 18px; padding-top: 18px; border-top: 1px solid #e5e7eb; }
+    .round-trip-item { min-width: 0; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #fff; display: grid; gap: 4px; }
+    .round-trip-item.primary { border-color: #bfdbfe; background: #eff6ff; }
+    .round-trip-item label { font-size: 11px; color: #6b7280; font-weight: 800; text-transform: uppercase; }
+    .round-trip-item span { font-size: 15px; font-weight: 800; color: #111827; overflow-wrap: anywhere; }
+    .round-trip-item small { font-size: 12px; color: #6b7280; font-weight: 600; }
 
     .timeline-horiz { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; overflow-x: auto; }
     .timeline-step { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 100px; position: relative; }
@@ -291,6 +330,7 @@ import { ExecutionEvents } from '../../components/execution-events/execution-eve
     .status-badge[data-status="RESOLVED"] { background: #10b981; color: #fff; }
     .status-badge[data-status="FILLED"] { background: #10b981; color: #fff; }
     .status-badge[data-status="PARTIALLY_FILLED"] { background: #3b82f6; color: #fff; }
+    .status-badge[data-status="CANCELLED"] { background: #f3f4f6; color: #6b7280; }
     .status-badge[data-status="FAILED"], .status-badge[data-status="REJECTED"] { background: #ef4444; color: #fff; }
     .mode-badge[data-mode="LIVE"] { background: #fee2e2; color: #991b1b; }
     .mode-badge[data-mode="PAPER"] { background: #d1fae5; color: #065f46; }
@@ -308,6 +348,8 @@ import { ExecutionEvents } from '../../components/execution-events/execution-eve
     .side { font-weight: 700; }
     .side-buy { color: #10b981; }
     .side-sell { color: #3b82f6; }
+    .action-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .outcome-chip { display: inline-block; max-width: 160px; padding: 2px 8px; border-radius: 9999px; background: #eef2ff; color: #3730a3; font-size: 11px; font-weight: 800; text-transform: uppercase; overflow-wrap: anywhere; }
     .time { font-weight: 600; color: #111827; }
     .latency { font-size: 11px; color: #9ca3af; font-family: monospace; }
     .failed-label { font-size: 10px; font-weight: 700; color: #ef4444; text-transform: uppercase; margin-top: 2px; }
@@ -326,6 +368,7 @@ import { ExecutionEvents } from '../../components/execution-events/execution-eve
 
     @media (max-width: 900px) {
       .outcome-grid, .grid { grid-template-columns: 1fr; }
+      .round-trip-strip { grid-template-columns: 1fr; }
       .economics-grid { grid-template-columns: 1fr; }
       .header-main { align-items: flex-start; flex-direction: column; }
     }

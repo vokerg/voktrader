@@ -84,8 +84,8 @@ import { TradeOrderResponse, DashboardOptionsResponse } from '../../models/api.m
           <tr>
             <th>Time</th>
             <th>ID / Bot</th>
-            <th>Market / Token</th>
-            <th>Side / Type</th>
+            <th>Market / Outcome</th>
+            <th>Action</th>
             <th>Status</th>
             <th>Last Recon</th>
             <th>Price</th>
@@ -106,12 +106,14 @@ import { TradeOrderResponse, DashboardOptionsResponse } from '../../models/api.m
             </td>
             <td>
               <div class="market-id">{{ order.marketId }}</div>
+              <div class="outcome-line">{{ order.outcome }}</div>
               <div class="token-id">{{ order.tokenId }}</div>
             </td>
             <td>
-              <span class="side" [class.side-buy]="order.side === 'BUY'" [class.side-sell]="order.side === 'SELL'">
-                {{ order.side }}
-              </span>
+              <div class="action-main">
+                <span class="side" [class.side-buy]="order.side === 'BUY'" [class.side-sell]="order.side === 'SELL'">{{ order.side }}</span>
+                <span class="phase-pill">{{ order.phase }}</span>
+              </div>
               <div class="order-type">{{ order.orderType }}</div>
             </td>
             <td>
@@ -122,8 +124,8 @@ import { TradeOrderResponse, DashboardOptionsResponse } from '../../models/api.m
               <div *ngIf="!order.lastReconciledAt" class="time-sub">N/A</div>
             </td>
             <td>
-              <div class="price-main">{{ order.avgFillPrice || order.requestedPrice | number:'1.3-3' }}</div>
-              <div class="price-req" *ngIf="order.avgFillPrice">Req: {{ order.requestedPrice | number:'1.3-3' }}</div>
+              <div class="price-main">{{ order.avgFillPrice !== null ? (order.avgFillPrice | number:'1.3-3') : '-' }} avg</div>
+              <div class="price-req">Req: {{ order.requestedPrice !== null ? (order.requestedPrice | number:'1.3-3') : '-' }}</div>
             </td>
             <td>
               <div class="shares-main">{{ order.filledShares | number:'1.2-2' }}</div>
@@ -215,11 +217,14 @@ import { TradeOrderResponse, DashboardOptionsResponse } from '../../models/api.m
     .mode-badge[data-mode="PAPER"] { background: #d1fae5; color: #065f46; }
 
     .market-id { font-weight: 600; font-size: 12px; }
+    .outcome-line { display: inline-block; margin-top: 3px; padding: 1px 7px; border-radius: 9999px; background: #eef2ff; color: #3730a3; font-size: 11px; font-weight: 800; text-transform: uppercase; }
     .token-id { font-size: 11px; color: #6b7280; font-family: monospace; }
 
     .side { font-weight: 700; font-size: 11px; }
     .side-buy { color: #10b981; }
     .side-sell { color: #3b82f6; }
+    .action-main { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+    .phase-pill { padding: 1px 6px; border-radius: 9999px; background: #f3f4f6; color: #4b5563; font-size: 10px; font-weight: 800; }
     .order-type { font-size: 11px; color: #6b7280; }
 
     .status-badge {

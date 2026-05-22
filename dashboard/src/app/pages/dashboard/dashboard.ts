@@ -390,6 +390,7 @@ import { BotConfigResponse, RuntimeStatusResponse, StrategyCatalogResponse, Tele
     .status-badge[data-status="CLOSED"] { background: #3b82f6; }
     .status-badge[data-status="FAILED"] { background: #ef4444; }
     .status-badge[data-status="FILLED"] { background: #10b981; }
+    .status-badge[data-status="CANCELLED"] { background: #f3f4f6; color: #6b7280; }
     .status-badge[data-status="RUNNING"] { background: #10b981; }
     .status-badge[data-status="PAUSED"] { background: #f59e0b; }
   `
