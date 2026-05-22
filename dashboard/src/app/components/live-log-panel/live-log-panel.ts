@@ -23,7 +23,37 @@ import { TelemetryConnectionState, TradingEvent } from '../../models/api.models'
             <span *ngIf="event.outcome || event.tokenId" class="event-meta">{{ truncate(event.outcome || event.tokenId || '', 24) }}</span>
           </div>
 
-          <div *ngIf="event.reason" class="event-reason">{{ truncate(event.reason, 180) }}</div>
+          <div *ngIf="isPriceEvent(event)" class="snapshot-indicators">
+            <!-- Dual outcome snapshot (UP/DOWN) -->
+            <ng-container *ngIf="event.type.includes('SNAPSHOT') && event.data['upBid'] !== undefined; else singleOutcome">
+              <div class="indicator-group">
+                <span class="label">UP</span>
+                <span class="value">{{ event.data['upBid'] }} / {{ event.data['upAsk'] }}</span>
+                <span class="spread">({{ event.data['upSpread'] }})</span>
+              </div>
+              <div class="indicator-group">
+                <span class="label">DOWN</span>
+                <span class="value">{{ event.data['downBid'] }} / {{ event.data['downAsk'] }}</span>
+                <span class="spread">({{ event.data['downSpread'] }})</span>
+              </div>
+            </ng-container>
+
+            <!-- Single outcome update -->
+            <ng-template #singleOutcome>
+              <div class="indicator-group" *ngIf="event.data['bid'] !== undefined">
+                <span class="label" *ngIf="event.data['outcome']">{{ event.data['outcome'] }}</span>
+                <span class="value">{{ event.data['bid'] }} / {{ event.data['ask'] }}</span>
+                <span class="spread">({{ event.data['spread'] }})</span>
+              </div>
+            </ng-template>
+
+            <div class="indicator-group" *ngIf="event.data['remaining']">
+              <span class="label">TIME</span>
+              <span class="value">{{ event.data['remaining'] }}</span>
+            </div>
+          </div>
+
+          <div *ngIf="event.reason && !isPriceEvent(event)" class="event-reason">{{ truncate(event.reason, 180) }}</div>
 
           <details *ngIf="hasData(event)" class="event-details">
             <summary>Details</summary>
@@ -99,7 +129,7 @@ import { TelemetryConnectionState, TradingEvent } from '../../models/api.models'
     }
 
     .event-list {
-      max-height: 320px;
+      max-height: 420px;
       overflow-y: auto;
     }
 
@@ -158,6 +188,43 @@ import { TelemetryConnectionState, TradingEvent } from '../../models/api.models'
       overflow-wrap: anywhere;
     }
 
+    .snapshot-indicators {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      column-gap: 16px;
+      row-gap: 8px;
+      background: #f8fafc;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+    }
+
+    .indicator-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-family: monospace;
+    }
+
+    .indicator-group .label {
+      font-weight: 800;
+      color: #64748b;
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+
+    .indicator-group .value {
+      font-weight: 700;
+      color: #1e293b;
+    }
+
+    .indicator-group .spread {
+      color: #94a3b8;
+      font-size: 11px;
+    }
+
     .event-details {
       margin-top: 8px;
     }
@@ -196,6 +263,10 @@ export class LiveLogPanel {
   @Input({ required: true }) events: TradingEvent[] = [];
   @Input({ required: true }) connectionState: TelemetryConnectionState = 'disconnected';
   @Input() emptyText = 'No telemetry yet';
+
+  isPriceEvent(event: TradingEvent): boolean {
+    return event.type.startsWith('PRICE_');
+  }
 
   marketLabel(event: TradingEvent): string {
     return this.truncate(event.marketSlug || event.marketId || '', 36);
