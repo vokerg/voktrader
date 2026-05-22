@@ -184,6 +184,13 @@ public class OrderReconciliationEventEmitter {
         payload.put("previousStatus", before == null || before.status() == null ? null : before.status().name());
         payload.put("resolvedStatus", resolvedStatus == null ? null : resolvedStatus.name());
         payload.put("statusChanged", statusChanged);
+        payload.put("consecutiveReconcileFailures", order == null ? null : order.getConsecutiveReconcileFailures());
+        payload.put("consecutiveReconcileNoProgress", order == null ? null : order.getConsecutiveReconcileNoProgress());
+        payload.put("nextReconcileAt", order == null ? null : order.getNextReconcileAt());
+        payload.put("reconciliationPausedAt", order == null ? null : order.getReconciliationPausedAt());
+        payload.put("reconciliationPauseReason", order == null ? null : order.getReconciliationPauseReason());
+        payload.put("lastReconcileProgressAt", order == null ? null : order.getLastReconcileProgressAt());
+        payload.put("lastReconcileProgressSummary", order == null ? null : order.getLastReconcileProgressSummary());
         payload.put("remoteStatusSuccess", remoteStatus != null && remoteStatus.success());
         payload.put("remoteStatus", remoteStatus == null ? null : remoteStatus.status());
         payload.put("remoteError", remoteStatus == null || remoteStatus.error() == null ? null : remoteStatus.error().message());

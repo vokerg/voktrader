@@ -20,6 +20,7 @@ import com.vokerg.voktrader.executor.ExecutorOrderStatusResponse;
 import com.vokerg.voktrader.time.TimeMachine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -63,6 +64,7 @@ public class OrderReconciliationService {
         OrderReconciliationSource resolvedSource = source == null ? OrderReconciliationSource.AUTO_WORKER : source;
         TradeEntity trade = tradeRepository.findById(order.getTradeId()).orElse(null);
         OrderReconciliationBeforeState before = OrderReconciliationBeforeState.from(order);
+        order.recordReconcileAttempt();
         reconciliationEventEmitter.emitRequested(resolvedSource, order, before, "reconcile order");
 
         ExecutorOrderStatusResponse remoteStatus = order.getRemoteOrderId() == null
@@ -98,22 +100,68 @@ public class OrderReconciliationService {
             );
         }
 
+        if (!remoteStatus.success() && !fills.success()) {
+            String failureSummary = reconciliationFailureSummary(remoteStatus, fills);
+            Instant nextAttemptAt = nextReconcileAt(order, pulledAt);
+            order.recordReconcileFailure(failureSummary, nextAttemptAt);
+            if (order.getConsecutiveReconcileFailures() >= properties.getReconciliation().getPauseAfterConsecutiveFailures()) {
+                order.pauseReconciliation(failureSummary);
+            }
+            logReconciliation(order, remoteStatus, fills, order.getStatus());
+            tradeOrderRepository.save(order);
+            reconciliationEventEmitter.emitFailed(
+                    resolvedSource,
+                    order,
+                    before,
+                    remoteStatus,
+                    fills,
+                    order.isReconciliationPaused()
+                            ? "reconciliation paused; manual review required"
+                            : "remote status and fills both failed",
+                    pulledAt
+            );
+            return OrderReconciliationResult.from(
+                    order,
+                    before.status(),
+                    false,
+                    false,
+                    remoteStatus.status(),
+                    fills.fills().size(),
+                    importedFills.size(),
+                    warnings(remoteStatus, fills)
+            );
+        }
+
         TradeOrderStatus status = resolveStatus(remoteStatus, fills, order);
         applyOrderState(order, status, remoteStatus, fills);
         reconcileTradeAfterOrderState(trade, order);
         emitCancellationIfNew(trade, order, before.status(), status, remoteStatus);
         logReconciliation(order, remoteStatus, fills, status);
-        order.markReconciled();
+        order.recordReconcileSuccess();
+        String progressSummary = reconciliationProgressSummary(before, order, remoteStatus, importedFills.size());
+        boolean hasProgress = progressSummary != null;
+        if (hasProgress) {
+            order.recordReconcileProgress(progressSummary);
+        } else if (shouldBackOffForNoProgress(order)) {
+            Instant nextAttemptAt = nextNoProgressReconcileAt(order, pulledAt);
+            String noProgressReason = noProgressSummary(order, remoteStatus);
+            order.recordReconcileNoProgress(noProgressReason, nextAttemptAt);
+            if (order.getConsecutiveReconcileNoProgress() >= properties.getReconciliation().getPauseAfterConsecutiveNoProgress()) {
+                order.pauseReconciliation(noProgressPauseReason(order, remoteStatus));
+            }
+        }
         tradeOrderRepository.save(order);
         if (trade != null) {
             tradeRepository.save(trade);
         }
-        if (!remoteStatus.success() && !fills.success()) {
-            reconciliationEventEmitter.emitFailed(resolvedSource, order, before, remoteStatus, fills, "remote status and fills both failed", pulledAt);
-        } else if (before.status() != order.getStatus()) {
+        if (before.status() != order.getStatus()) {
             reconciliationEventEmitter.emitStatusChanged(resolvedSource, order, before, order.getStatus(), remoteStatus, fills, importedFills.size(), "local order status changed", pulledAt);
         } else {
-            reconciliationEventEmitter.emitNoChange(resolvedSource, order, before, remoteStatus, fills, importedFills.size(), "local order status unchanged", pulledAt);
+            reconciliationEventEmitter.emitNoChange(resolvedSource, order, before, remoteStatus, fills, importedFills.size(), hasProgress
+                    ? "local order status unchanged but reconciliation made progress"
+                    : order.isReconciliationPaused()
+                    ? "no reconciliation progress; manual review required"
+                    : "local order status unchanged", pulledAt);
         }
         return OrderReconciliationResult.from(
                 order,
@@ -143,7 +191,13 @@ public class OrderReconciliationService {
                 TradeOrderStatus.CANCEL_REQUESTED,
                 TradeOrderStatus.UNKNOWN
         );
-        List<TradeOrderEntity> orders = tradeOrderRepository.findReconcilableRemoteOrders(activeStatuses);
+        int maxOrdersPerCycle = Math.max(1, properties.getReconciliation().getMaxOrdersPerCycle());
+        Instant now = TimeMachine.now();
+        List<TradeOrderEntity> orders = tradeOrderRepository.findReconcilableRemoteOrders(
+                activeStatuses,
+                now,
+                PageRequest.of(0, maxOrdersPerCycle)
+        );
         orders.forEach(order -> reconcileOrder(order, source));
         return orders.size();
     }
@@ -585,6 +639,110 @@ public class OrderReconciliationService {
 
     private String firstNonBlank(String first, String fallback) {
         return first == null || first.isBlank() ? fallback : first;
+    }
+
+    private boolean shouldBackOffForNoProgress(TradeOrderEntity order) {
+        return properties.getReconciliation().isNoProgressEnabled()
+                && isReconcilableStatus(order.getStatus())
+                && !order.getStatus().isTerminal();
+    }
+
+    private Instant nextReconcileAt(TradeOrderEntity order, Instant now) {
+        int failures = order.getConsecutiveReconcileFailures() + 1;
+        long initialBackoffSeconds = Math.max(1L, properties.getReconciliation().getInitialBackoffSeconds());
+        long maxBackoffSeconds = Math.max(initialBackoffSeconds, properties.getReconciliation().getMaxBackoffSeconds());
+        return now.plusSeconds(exponentialBackoffSeconds(initialBackoffSeconds, maxBackoffSeconds, failures));
+    }
+
+    private Instant nextNoProgressReconcileAt(TradeOrderEntity order, Instant now) {
+        int noProgressCount = order.getConsecutiveReconcileNoProgress() + 1;
+        long initialBackoffSeconds = Math.max(1L, properties.getReconciliation().getNoProgressInitialBackoffSeconds());
+        long maxBackoffSeconds = Math.max(initialBackoffSeconds, properties.getReconciliation().getNoProgressMaxBackoffSeconds());
+        return now.plusSeconds(exponentialBackoffSeconds(initialBackoffSeconds, maxBackoffSeconds, noProgressCount));
+    }
+
+    private long exponentialBackoffSeconds(long initialBackoffSeconds, long maxBackoffSeconds, int attempts) {
+        long delaySeconds = initialBackoffSeconds;
+        for (int i = 1; i < attempts && delaySeconds < maxBackoffSeconds; i++) {
+            if (delaySeconds > maxBackoffSeconds / 2) {
+                delaySeconds = maxBackoffSeconds;
+                break;
+            }
+            delaySeconds *= 2;
+        }
+        return Math.min(delaySeconds, maxBackoffSeconds);
+    }
+
+    private String reconciliationFailureSummary(
+            ExecutorOrderStatusResponse remoteStatus,
+            ExecutorFillsResponse fills
+    ) {
+        String remoteSummary = remoteStatus.error() == null
+                ? firstNonBlank(remoteStatus.status(), "unknown remote status error")
+                : firstNonBlank(remoteStatus.error().message(), remoteStatus.status());
+        String fillsSummary = fills.error() == null
+                ? "unknown fills error"
+                : firstNonBlank(fills.error().message(), "unknown fills error");
+        return "remoteStatus=" + remoteSummary + ", fills=" + fillsSummary;
+    }
+
+    private String reconciliationProgressSummary(
+            OrderReconciliationBeforeState before,
+            TradeOrderEntity order,
+            ExecutorOrderStatusResponse remoteStatus,
+            int newFillsCount
+    ) {
+        if (before.status() != order.getStatus()) {
+            return "status changed from " + before.status() + " to " + order.getStatus();
+        }
+        if (newFillsCount > 0) {
+            return "imported " + newFillsCount + " new fill" + (newFillsCount == 1 ? "" : "s");
+        }
+        if (!sameDecimal(before.filledShares(), order.getFilledShares())) {
+            return "filled shares changed from " + before.filledShares() + " to " + order.getFilledShares();
+        }
+        if (!sameDecimal(before.remainingShares(), order.getRemainingShares())) {
+            return "remaining shares changed from " + before.remainingShares() + " to " + order.getRemainingShares();
+        }
+        if (!sameDecimal(before.avgFillPrice(), order.getAvgFillPrice())) {
+            return "avg fill price changed from " + before.avgFillPrice() + " to " + order.getAvgFillPrice();
+        }
+        if (order.getStatus() != null && order.getStatus().isTerminal()) {
+            return "order reached terminal status " + order.getStatus();
+        }
+        return null;
+    }
+
+    private String noProgressSummary(TradeOrderEntity order, ExecutorOrderStatusResponse remoteStatus) {
+        return "no reconciliation progress; status=" + order.getStatus()
+                + ", remoteStatus=" + remoteStatus.status()
+                + ", filledShares=" + order.getFilledShares()
+                + ", remainingShares=" + order.getRemainingShares();
+    }
+
+    private String noProgressPauseReason(TradeOrderEntity order, ExecutorOrderStatusResponse remoteStatus) {
+        return "no reconciliation progress after " + order.getConsecutiveReconcileNoProgress()
+                + " successful polls; last status=" + order.getStatus()
+                + ", remoteStatus=" + remoteStatus.status()
+                + ", filledShares=" + order.getFilledShares()
+                + ", remainingShares=" + order.getRemainingShares();
+    }
+
+    private boolean sameDecimal(BigDecimal left, BigDecimal right) {
+        if (left == null || right == null) {
+            return left == right;
+        }
+        return left.compareTo(right) == 0;
+    }
+
+    private boolean isReconcilableStatus(TradeOrderStatus status) {
+        return status == TradeOrderStatus.CREATED
+                || status == TradeOrderStatus.SUBMITTING
+                || status == TradeOrderStatus.SUBMITTED
+                || status == TradeOrderStatus.RESTING
+                || status == TradeOrderStatus.PARTIALLY_FILLED
+                || status == TradeOrderStatus.CANCEL_REQUESTED
+                || status == TradeOrderStatus.UNKNOWN;
     }
 
     private List<String> warnings(ExecutorOrderStatusResponse remoteStatus, ExecutorFillsResponse fills) {

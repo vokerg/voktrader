@@ -103,7 +103,20 @@ public class TradeOrderEntity {
     private Instant submittedAt;
     private Instant acknowledgedAt;
     private Instant completedAt;
+    private Instant lastReconcileAttemptAt;
     private Instant lastReconciledAt;
+    private Integer consecutiveReconcileFailures;
+    private Integer consecutiveReconcileNoProgress;
+    private Instant nextReconcileAt;
+    private Instant reconciliationPausedAt;
+    private Instant lastReconcileProgressAt;
+
+    @Column(columnDefinition = "TEXT")
+    private String reconciliationPauseReason;
+
+    @Column(columnDefinition = "TEXT")
+    private String lastReconcileProgressSummary;
+
     private Instant expiresAt;
     private Long latencyMs;
     private Instant createdAt;
@@ -294,6 +307,54 @@ public class TradeOrderEntity {
     public void markFailed(String errorMessage, String rawResponse) {
         setRawResponseIfUseful(rawResponse);
         markFailed(errorMessage);
+    }
+
+    public void recordReconcileAttempt() {
+        this.lastReconcileAttemptAt = TimeMachine.now();
+        touch();
+    }
+
+    public void recordReconcileSuccess() {
+        this.consecutiveReconcileFailures = 0;
+        this.lastReconciledAt = TimeMachine.now();
+        touch();
+    }
+
+    public void recordReconcileFailure(String reason, Instant nextAttemptAt) {
+        this.consecutiveReconcileFailures = getConsecutiveReconcileFailures() + 1;
+        this.nextReconcileAt = nextAttemptAt;
+        this.reconciliationPausedAt = null;
+        this.reconciliationPauseReason = null;
+        this.failureReason = reason;
+        touch();
+    }
+
+    public void recordReconcileProgress(String summary) {
+        this.consecutiveReconcileNoProgress = 0;
+        this.lastReconcileProgressAt = TimeMachine.now();
+        this.lastReconcileProgressSummary = summary;
+        if (!isReconciliationPaused()) {
+            this.nextReconcileAt = null;
+        }
+        touch();
+    }
+
+    public void recordReconcileNoProgress(String reason, Instant nextAttemptAt) {
+        this.consecutiveReconcileNoProgress = getConsecutiveReconcileNoProgress() + 1;
+        this.lastReconcileProgressSummary = reason;
+        this.nextReconcileAt = nextAttemptAt;
+        touch();
+    }
+
+    public void pauseReconciliation(String reason) {
+        this.reconciliationPausedAt = TimeMachine.now();
+        this.reconciliationPauseReason = reason;
+        this.nextReconcileAt = null;
+        touch();
+    }
+
+    public boolean isReconciliationPaused() {
+        return this.reconciliationPausedAt != null;
     }
 
     public void markReconciled() {
@@ -517,8 +578,40 @@ public class TradeOrderEntity {
         return completedAt;
     }
 
+    public Instant getLastReconcileAttemptAt() {
+        return lastReconcileAttemptAt;
+    }
+
     public Instant getLastReconciledAt() {
         return lastReconciledAt;
+    }
+
+    public int getConsecutiveReconcileFailures() {
+        return consecutiveReconcileFailures == null ? 0 : consecutiveReconcileFailures;
+    }
+
+    public int getConsecutiveReconcileNoProgress() {
+        return consecutiveReconcileNoProgress == null ? 0 : consecutiveReconcileNoProgress;
+    }
+
+    public Instant getNextReconcileAt() {
+        return nextReconcileAt;
+    }
+
+    public Instant getReconciliationPausedAt() {
+        return reconciliationPausedAt;
+    }
+
+    public String getReconciliationPauseReason() {
+        return reconciliationPauseReason;
+    }
+
+    public Instant getLastReconcileProgressAt() {
+        return lastReconcileProgressAt;
+    }
+
+    public String getLastReconcileProgressSummary() {
+        return lastReconcileProgressSummary;
     }
 
     public Instant getExpiresAt() {

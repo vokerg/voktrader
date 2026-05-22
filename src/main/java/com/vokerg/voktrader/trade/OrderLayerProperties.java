@@ -46,6 +46,14 @@ public class OrderLayerProperties {
     public static class Reconciliation {
         private boolean enabled = false;
         private long intervalMs = 2000;
+        private long initialBackoffSeconds = 5;
+        private long maxBackoffSeconds = 300;
+        private int pauseAfterConsecutiveFailures = 5;
+        private int maxOrdersPerCycle = 50;
+        private boolean noProgressEnabled = true;
+        private long noProgressInitialBackoffSeconds = 5;
+        private long noProgressMaxBackoffSeconds = 120;
+        private int pauseAfterConsecutiveNoProgress = 10;
 
         public boolean isEnabled() {
             return enabled;
@@ -61,6 +69,70 @@ public class OrderLayerProperties {
 
         public void setIntervalMs(long intervalMs) {
             this.intervalMs = intervalMs;
+        }
+
+        public long getInitialBackoffSeconds() {
+            return initialBackoffSeconds;
+        }
+
+        public void setInitialBackoffSeconds(long initialBackoffSeconds) {
+            this.initialBackoffSeconds = initialBackoffSeconds;
+        }
+
+        public long getMaxBackoffSeconds() {
+            return maxBackoffSeconds;
+        }
+
+        public void setMaxBackoffSeconds(long maxBackoffSeconds) {
+            this.maxBackoffSeconds = maxBackoffSeconds;
+        }
+
+        public int getPauseAfterConsecutiveFailures() {
+            return pauseAfterConsecutiveFailures;
+        }
+
+        public void setPauseAfterConsecutiveFailures(int pauseAfterConsecutiveFailures) {
+            this.pauseAfterConsecutiveFailures = pauseAfterConsecutiveFailures;
+        }
+
+        public int getMaxOrdersPerCycle() {
+            return maxOrdersPerCycle;
+        }
+
+        public void setMaxOrdersPerCycle(int maxOrdersPerCycle) {
+            this.maxOrdersPerCycle = maxOrdersPerCycle;
+        }
+
+        public boolean isNoProgressEnabled() {
+            return noProgressEnabled;
+        }
+
+        public void setNoProgressEnabled(boolean noProgressEnabled) {
+            this.noProgressEnabled = noProgressEnabled;
+        }
+
+        public long getNoProgressInitialBackoffSeconds() {
+            return noProgressInitialBackoffSeconds;
+        }
+
+        public void setNoProgressInitialBackoffSeconds(long noProgressInitialBackoffSeconds) {
+            this.noProgressInitialBackoffSeconds = noProgressInitialBackoffSeconds;
+        }
+
+        public long getNoProgressMaxBackoffSeconds() {
+            return noProgressMaxBackoffSeconds;
+        }
+
+        public void setNoProgressMaxBackoffSeconds(long noProgressMaxBackoffSeconds) {
+            this.noProgressMaxBackoffSeconds = noProgressMaxBackoffSeconds;
+        }
+
+        public int getPauseAfterConsecutiveNoProgress() {
+            return pauseAfterConsecutiveNoProgress;
+        }
+
+        public void setPauseAfterConsecutiveNoProgress(int pauseAfterConsecutiveNoProgress) {
+            this.pauseAfterConsecutiveNoProgress = pauseAfterConsecutiveNoProgress;
         }
     }
 }

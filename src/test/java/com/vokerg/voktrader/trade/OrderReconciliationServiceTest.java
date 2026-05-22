@@ -37,6 +37,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -289,16 +290,334 @@ class OrderReconciliationServiceTest {
     }
 
     @Test
-    void reconcileOpenOrdersOnlyPollsOrdersWithRemoteOrderId() {
+    void reconcileOpenOrdersOnlyPollsDueOrdersWithConfiguredLimit() {
+        Instant now = Instant.parse("2026-05-22T09:30:00Z");
+        properties.getReconciliation().setMaxOrdersPerCycle(7);
         TradeOrderEntity remoteOrder = order(trade(), TradeSide.BUY);
-        when(tradeOrderRepository.findReconcilableRemoteOrders(any())).thenReturn(List.of(remoteOrder));
+        when(tradeOrderRepository.findReconcilableRemoteOrders(any(), any(), any())).thenReturn(List.of(remoteOrder));
         when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("OPEN"));
         when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
 
-        int reconciled = service.reconcileOpenOrders();
+        int[] reconciled = new int[1];
+        TimeMachine.runAt(now, () -> reconciled[0] = service.reconcileOpenOrders());
 
-        assertThat(reconciled).isEqualTo(1);
-        verify(tradeOrderRepository).findReconcilableRemoteOrders(any());
+        assertThat(reconciled[0]).isEqualTo(1);
+        verify(tradeOrderRepository).findReconcilableRemoteOrders(
+                any(),
+                eq(now),
+                argThat(pageable -> pageable.getPageSize() == 7)
+        );
+    }
+
+    @Test
+    void bothRemoteStatusAndFillsFailureDoNotMarkOrderUnknown() {
+        Instant now = Instant.parse("2026-05-22T10:00:00Z");
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        order.markResting("{\"resting\":true}");
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(
+                ExecutorOrderStatusResponse.failure("remote-1", "REMOTE_DOWN", "remote temporarily unavailable")
+        );
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(ExecutorFillsResponse.failure("REMOTE_DOWN", "fills lookup unavailable"));
+
+        TimeMachine.runAt(now, () -> service.reconcileOrder(order));
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.RESTING);
+        assertThat(order.getConsecutiveReconcileFailures()).isEqualTo(1);
+        assertThat(order.getNextReconcileAt()).isEqualTo(now.plusSeconds(5));
+        assertThat(savedEvents)
+                .extracting(TradeEventEntity::getEventType)
+                .contains(OrderReconciliationEventEmitter.FAILED);
+        TradeEventEntity failedEvent = savedEvents.stream()
+                .filter(event -> OrderReconciliationEventEmitter.FAILED.equals(event.getEventType()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(failedEvent.getPayloadJson())
+                .contains("\"consecutiveReconcileFailures\":1")
+                .contains("\"nextReconcileAt\":\"2026-05-22T10:00:05Z\"");
+        verify(tradeOrderRepository).save(order);
+    }
+
+    @Test
+    void repeatedFailuresPauseReconciliation() {
+        Instant now = Instant.parse("2026-05-22T10:30:00Z");
+        properties.getReconciliation().setPauseAfterConsecutiveFailures(3);
+        properties.getReconciliation().setInitialBackoffSeconds(5);
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        order.markResting("{\"resting\":true}");
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(
+                ExecutorOrderStatusResponse.failure("remote-1", "REMOTE_DOWN", "remote temporarily unavailable")
+        );
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(ExecutorFillsResponse.failure("REMOTE_DOWN", "fills lookup unavailable"));
+
+        TimeMachine.runAt(now, () -> service.reconcileOrder(order));
+        TimeMachine.runAt(now.plusSeconds(5), () -> service.reconcileOrder(order));
+        TimeMachine.runAt(now.plusSeconds(15), () -> service.reconcileOrder(order));
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.RESTING);
+        assertThat(order.getConsecutiveReconcileFailures()).isEqualTo(3);
+        assertThat(order.getReconciliationPausedAt()).isEqualTo(now.plusSeconds(15));
+        assertThat(order.getReconciliationPauseReason()).isNotBlank();
+        assertThat(order.isReconciliationPaused()).isTrue();
+    }
+
+    @Test
+    void successfulReconcileResetsFailureBackoff() {
+        Instant now = Instant.parse("2026-05-22T11:00:00Z");
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        ReflectionTestUtils.setField(order, "consecutiveReconcileFailures", 2);
+        ReflectionTestUtils.setField(order, "nextReconcileAt", now.plusSeconds(60));
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("PARTIALLY_FILLED"));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any())).thenReturn(
+                new ExecutorFillsResponse(true, List.of(fill("fill-reset", "1", "0.50", "0.01")), "{}", null)
+        );
+
+        TimeMachine.runAt(now, () -> service.reconcileOrder(order));
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
+        assertThat(order.getConsecutiveReconcileFailures()).isZero();
+        assertThat(order.getNextReconcileAt()).isNull();
+        assertThat(order.getReconciliationPausedAt()).isNull();
+    }
+
+    @Test
+    void failureAfterPartialFillPreservesPartialFillData() {
+        Instant now = Instant.parse("2026-05-22T11:30:00Z");
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        order.applyFillState(
+                TradeOrderStatus.PARTIALLY_FILLED,
+                new BigDecimal("0.55"),
+                new BigDecimal("1"),
+                new BigDecimal("0.55"),
+                new BigDecimal("1"),
+                new BigDecimal("0.01"),
+                true,
+                LiquidityRole.MAKER,
+                "{\"partial\":true}"
+        );
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(
+                ExecutorOrderStatusResponse.failure("remote-1", "REMOTE_DOWN", "remote temporarily unavailable")
+        );
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(ExecutorFillsResponse.failure("REMOTE_DOWN", "fills lookup unavailable"));
+
+        TimeMachine.runAt(now, () -> service.reconcileOrder(order));
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
+        assertThat(order.getFilledShares()).isEqualByComparingTo("1");
+        assertThat(order.getAvgFillPrice()).isEqualByComparingTo("0.55");
+        assertThat(order.getRemainingShares()).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void repeatedFailuresUseExponentialBackoffAndPauseOnThreshold() {
+        Instant now = Instant.parse("2026-05-22T12:00:00Z");
+        properties.getReconciliation().setPauseAfterConsecutiveFailures(3);
+        properties.getReconciliation().setInitialBackoffSeconds(5);
+        properties.getReconciliation().setMaxBackoffSeconds(300);
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        order.markResting("{\"resting\":true}");
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(
+                ExecutorOrderStatusResponse.failure("remote-1", "REMOTE_DOWN", "remote temporarily unavailable")
+        );
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(ExecutorFillsResponse.failure("REMOTE_DOWN", "fills lookup unavailable"));
+
+        TimeMachine.runAt(now, () -> service.reconcileOrder(order));
+        assertThat(order.getNextReconcileAt()).isEqualTo(now.plusSeconds(5));
+
+        TimeMachine.runAt(now.plusSeconds(5), () -> service.reconcileOrder(order));
+        assertThat(order.getNextReconcileAt()).isEqualTo(now.plusSeconds(15));
+
+        TimeMachine.runAt(now.plusSeconds(15), () -> service.reconcileOrder(order));
+        assertThat(order.getReconciliationPausedAt()).isEqualTo(now.plusSeconds(15));
+    }
+
+    @Test
+    void repeatedNoChangeBacksOff() {
+        Instant now = Instant.parse("2026-05-22T12:30:00Z");
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        order.markResting("{\"resting\":true}");
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("OPEN"));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
+
+        TimeMachine.runAt(now, () -> service.reconcileOrder(order));
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.RESTING);
+        assertThat(order.getConsecutiveReconcileNoProgress()).isEqualTo(1);
+        assertThat(order.getNextReconcileAt()).isEqualTo(now.plusSeconds(5));
+        assertThat(order.getReconciliationPausedAt()).isNull();
+    }
+
+    @Test
+    void repeatedNoChangeEventuallyPauses() {
+        Instant now = Instant.parse("2026-05-22T13:00:00Z");
+        properties.getReconciliation().setPauseAfterConsecutiveNoProgress(3);
+        properties.getReconciliation().setNoProgressInitialBackoffSeconds(5);
+        properties.getReconciliation().setNoProgressMaxBackoffSeconds(120);
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        order.markResting("{\"resting\":true}");
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("OPEN"));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
+
+        TimeMachine.runAt(now, () -> service.reconcileOrder(order));
+        TimeMachine.runAt(now.plusSeconds(5), () -> service.reconcileOrder(order));
+        TimeMachine.runAt(now.plusSeconds(15), () -> service.reconcileOrder(order));
+
+        assertThat(order.getConsecutiveReconcileNoProgress()).isEqualTo(3);
+        assertThat(order.getReconciliationPausedAt()).isEqualTo(now.plusSeconds(15));
+        assertThat(order.getReconciliationPauseReason()).contains("no reconciliation progress");
+    }
+
+    @Test
+    void progressResetsNoProgressCounter() {
+        Instant now = Instant.parse("2026-05-22T13:30:00Z");
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        order.markResting("{\"resting\":true}");
+        ReflectionTestUtils.setField(order, "consecutiveReconcileNoProgress", 2);
+        ReflectionTestUtils.setField(order, "nextReconcileAt", now.plusSeconds(30));
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("PARTIALLY_FILLED"));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(fill("fill-2", "1", "0.50", "0.01")), "{}", null));
+
+        TimeMachine.runAt(now, () -> service.reconcileOrder(order));
+
+        assertThat(order.getConsecutiveReconcileNoProgress()).isZero();
+        assertThat(order.getNextReconcileAt()).isNull();
+        assertThat(order.getLastReconcileProgressAt()).isEqualTo(now);
+        assertThat(order.getLastReconcileProgressSummary()).isNotBlank();
+    }
+
+    @Test
+    void noProgressDoesNotDemoteStatus() {
+        Instant now = Instant.parse("2026-05-22T14:00:00Z");
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        order.applyFillState(
+                TradeOrderStatus.PARTIALLY_FILLED,
+                new BigDecimal("0.55"),
+                new BigDecimal("1"),
+                new BigDecimal("0.55"),
+                new BigDecimal("1"),
+                new BigDecimal("0.01"),
+                true,
+                LiquidityRole.MAKER,
+                "{\"partial\":true}"
+        );
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(new ExecutorOrderStatusResponse(
+                true,
+                "remote-1",
+                "PARTIALLY_FILLED",
+                "market-id",
+                "token-id",
+                TradeSide.BUY,
+                new BigDecimal("0.55"),
+                new BigDecimal("2"),
+                new BigDecimal("1"),
+                new BigDecimal("1"),
+                new BigDecimal("0.55"),
+                null,
+                null,
+                null,
+                "{}",
+                null
+        ));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(), "{}", null));
+
+        TimeMachine.runAt(now, () -> service.reconcileOrder(order));
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
+        assertThat(order.getFilledShares()).isEqualByComparingTo("1");
+        assertThat(order.getAvgFillPrice()).isEqualByComparingTo("0.55");
+        assertThat(order.getConsecutiveReconcileNoProgress()).isEqualTo(1);
+    }
+
+    @Test
+    void repeatedCancelledRemoteWithSamePartialStateCountsAsNoProgress() {
+        Instant now = Instant.parse("2026-05-22T14:30:00Z");
+        properties.getReconciliation().setPauseAfterConsecutiveNoProgress(3);
+        properties.getReconciliation().setNoProgressInitialBackoffSeconds(5);
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        ReflectionTestUtils.setField(order, "requestedShares", new BigDecimal("5"));
+        ReflectionTestUtils.setField(order, "requestedAmountUsd", new BigDecimal("2.80"));
+        ReflectionTestUtils.setField(order, "remainingShares", new BigDecimal("0.454547"));
+        order.applyFillState(
+                TradeOrderStatus.PARTIALLY_FILLED,
+                new BigDecimal("0.56"),
+                new BigDecimal("4.545453"),
+                new BigDecimal("2.54545368"),
+                new BigDecimal("0.454547"),
+                null,
+                false,
+                LiquidityRole.UNKNOWN,
+                "{\"status\":\"CANCELED\"}"
+        );
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(new ExecutorOrderStatusResponse(
+                true,
+                "remote-1",
+                "CANCELED",
+                "market-id",
+                "token-id",
+                TradeSide.BUY,
+                new BigDecimal("0.56"),
+                new BigDecimal("5"),
+                new BigDecimal("4.545453"),
+                null,
+                null,
+                Instant.parse("2026-05-22T18:20:31Z"),
+                null,
+                Instant.parse("2026-05-22T18:23:01Z"),
+                "{\"status\":\"CANCELED\",\"size_matched\":\"4.545453\"}",
+                null
+        ));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(), "[]", null));
+
+        TimeMachine.runAt(now, () -> service.reconcileOrder(order));
+        TimeMachine.runAt(now.plusSeconds(5), () -> service.reconcileOrder(order));
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
+        assertThat(order.getConsecutiveReconcileNoProgress()).isEqualTo(2);
+        assertThat(order.getNextReconcileAt()).isEqualTo(now.plusSeconds(15));
+    }
+
+    @Test
+    void terminalOrdersDoNotNeedNoProgressBackoff() {
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("FILLED"));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(fill("fill-terminal", "2", "0.50", "0.01")), "{}", null));
+
+        service.reconcileOrder(order);
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.FILLED);
+        assertThat(order.getConsecutiveReconcileNoProgress()).isZero();
+        assertThat(order.getReconciliationPausedAt()).isNull();
     }
 
     @Test

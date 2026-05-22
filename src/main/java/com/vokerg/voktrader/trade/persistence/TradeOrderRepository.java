@@ -10,6 +10,7 @@ import com.vokerg.voktrader.trade.model.TradeVenue;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
@@ -44,6 +45,8 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Lo
             from TradeOrderEntity o
             join TradeEntity t on t.id = o.tradeId
             where o.remoteOrderId is not null
+              and o.reconciliationPausedAt is null
+              and (o.nextReconcileAt is null or o.nextReconcileAt <= :now)
               and (
                     o.status in :activeStatuses
                     or (
@@ -53,8 +56,15 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Lo
                         and t.status = com.vokerg.voktrader.trade.model.TradeStatus.CANCELLED
                     )
               )
+            order by case when o.nextReconcileAt is null then 0 else 1 end asc,
+                     o.nextReconcileAt asc,
+                     o.updatedAt asc
             """)
-    List<TradeOrderEntity> findReconcilableRemoteOrders(@Param("activeStatuses") List<TradeOrderStatus> activeStatuses);
+    List<TradeOrderEntity> findReconcilableRemoteOrders(
+            @Param("activeStatuses") List<TradeOrderStatus> activeStatuses,
+            @Param("now") Instant now,
+            Pageable pageable
+    );
 
     @Query("""
             select count(o) > 0
