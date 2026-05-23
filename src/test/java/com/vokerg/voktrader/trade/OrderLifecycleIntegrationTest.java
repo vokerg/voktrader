@@ -26,6 +26,7 @@ import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRiskCheckRepository;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -134,7 +135,40 @@ class OrderLifecycleIntegrationTest {
         TradeOrderEntity entryOrder = latestOrder(trade.getId(), TradeOrderPhase.ENTRY);
         assertThat(trade.getStatus()).isEqualTo(TradeStatus.FAILED);
         assertThat(entryOrder.getStatus()).isEqualTo(TradeOrderStatus.REJECTED);
-        assertThat(runtimeState().hasPosition()).isFalse();
+        assertRuntimePosition(false, "0");
+        assertNoActiveEntryOrder();
+    }
+
+    @Test
+    void fakEntryPartialFillIsPartialDoneImmediately() {
+        executor.onSubmit(filledSubmit("remote-entry-fak-partial", "0.50", "2.0", "1.00"));
+
+        OrderLifecycleResult result = orderManager.submitOrder(buyIntent(TradeOrderType.FAK, "5", "0.50"), ExecutionMode.LIVE);
+
+        assertThat(result.success()).isTrue();
+        TradeEntity trade = assertSingleTrade(result.tradeId());
+        TradeOrderEntity entryOrder = latestOrder(trade.getId(), TradeOrderPhase.ENTRY);
+        assertThat(entryOrder.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED_DONE);
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.PARTIALLY_OPEN);
+        assertThat(trade.getEntryFilledShares()).isEqualByComparingTo("2.0");
+        assertRuntimePosition(true, "2.0");
+        assertThat(runtimeState().activeEntryOrder()).isNull();
+        assertThat(orderManager.reconcileOpenOrders()).isZero();
+    }
+
+    @Test
+    void fakEntryZeroFillRejectedLeavesNoPosition() {
+        executor.onSubmit(ExecutorOrderResponse.rejected("exchange rejected"));
+
+        OrderLifecycleResult result = orderManager.submitOrder(buyIntent(TradeOrderType.FAK, "5", "0.50"), ExecutionMode.LIVE);
+
+        assertThat(result.success()).isFalse();
+        TradeEntity trade = assertSingleTrade(result.tradeId());
+        TradeOrderEntity entryOrder = latestOrder(trade.getId(), TradeOrderPhase.ENTRY);
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.FAILED);
+        assertThat(entryOrder.getStatus()).isEqualTo(TradeOrderStatus.REJECTED);
+        assertRuntimePosition(false, "0");
+        assertNoActiveEntryOrder();
     }
 
     @Test
@@ -172,22 +206,7 @@ class OrderLifecycleIntegrationTest {
 
     @Test
     void gtcEntryPartialFillStillLive() {
-        executor.onSubmit(restingSubmit("remote-entry-gtc-2"));
-        executor.onGetOrderStatus(
-                "remote-entry-gtc-2",
-                orderStatus("remote-entry-gtc-2", "OPEN", "0.50", "5", null, null, null),
-                orderStatus("remote-entry-gtc-2", "OPEN", "0.50", "5", "1", "4", "0.50")
-        );
-        executor.onListFills(
-                "remote-entry-gtc-2",
-                noFills(),
-                fills(fill("remote-entry-gtc-2", "fill-entry-gtc-2", "1", "0.50", "0.01"))
-        );
-
-        OrderLifecycleResult submitted = orderManager.submitOrder(buyIntent(TradeOrderType.GTC, "5", "0.50"), ExecutionMode.LIVE);
-
-        TradeOrderEntity entryOrder = latestOrder(submitted.tradeId(), TradeOrderPhase.ENTRY);
-        orderManager.reconcileOrderDetailed(entryOrder.getId(), OrderReconciliationSource.AUTO_WORKER);
+        OrderLifecycleResult submitted = createPartialLivePosition("remote-entry-gtc-2", "5", "1", TradeOrderType.GTC);
 
         TradeEntity trade = trade(submitted.tradeId());
         StrategyRuntimeState state = runtimeState();
@@ -203,14 +222,11 @@ class OrderLifecycleIntegrationTest {
 
         TradeEntity trade = trade(submitted.tradeId());
         TradeOrderEntity entryOrder = latestOrder(trade.getId(), TradeOrderPhase.ENTRY);
-        StrategyRuntimeState state = runtimeState();
-
         assertThat(entryOrder.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED_DONE);
         assertThat(trade.getStatus()).isEqualTo(TradeStatus.PARTIALLY_OPEN);
-        assertThat(state.hasPosition()).isTrue();
-        assertThat(state.activeEntryOrder()).isNull();
-        assertThat(state.filledShares()).isEqualByComparingTo("4.5");
-        assertThat(state.avgEntryPrice()).isEqualByComparingTo("0.50");
+        assertRuntimePosition(true, "4.5");
+        assertThat(runtimeState().avgEntryPrice()).isEqualByComparingTo("0.50");
+        assertNoActiveEntryOrder();
         assertThat(orderManager.reconcileOpenOrders()).isZero();
     }
 
@@ -230,10 +246,9 @@ class OrderLifecycleIntegrationTest {
         orderManager.reconcileOrderDetailed(entryOrder.getId(), OrderReconciliationSource.AUTO_WORKER);
 
         TradeEntity trade = trade(submitted.tradeId());
-        StrategyRuntimeState state = runtimeState();
         assertThat(latestOrder(trade.getId(), TradeOrderPhase.ENTRY).getStatus()).isEqualTo(TradeOrderStatus.EXPIRED);
         assertThat(trade.getStatus()).isEqualTo(TradeStatus.CANCELLED);
-        assertThat(state.hasPosition()).isFalse();
+        assertRuntimePosition(false, "0");
     }
 
     @Test
@@ -279,6 +294,113 @@ class OrderLifecycleIntegrationTest {
     }
 
     @Test
+    void gtcExitFromPartiallyOpenRestsAsExitPending() {
+        OrderLifecycleResult partial = createPartialDonePosition("remote-entry-exit-resting", "4.5", TradeOrderType.GTD, "CANCELED");
+        OrderLifecycleResult exit = submitRestingExit("remote-exit-resting", TradeOrderType.GTC, "4.5", "0.54");
+
+        TradeEntity trade = assertSingleTrade(partial.tradeId());
+        TradeOrderEntity exitOrder = latestOrder(trade.getId(), TradeOrderPhase.EXIT);
+        assertThat(exit.success()).isTrue();
+        assertThat(exit.tradeId()).isEqualTo(partial.tradeId());
+        assertThat(exitOrder.getPhase()).isEqualTo(TradeOrderPhase.EXIT);
+        assertThat(exitOrder.getStatus()).isIn(TradeOrderStatus.SUBMITTED, TradeOrderStatus.RESTING);
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.EXIT_PENDING);
+        assertThat(runtimeState().activeExitOrder()).isNotNull();
+        assertNoActiveEntryOrder();
+    }
+
+    @Test
+    void restingExitLaterPartialFillViaReconciliation() {
+        OrderLifecycleResult partial = createPartialDonePosition("remote-entry-exit-reconcile-partial", "4.5", TradeOrderType.GTD, "CANCELED");
+        submitRestingExit(
+                "remote-exit-reconcile-partial",
+                TradeOrderType.GTC,
+                "4.5",
+                "0.54",
+                orderStatus("remote-exit-reconcile-partial", TradeSide.SELL, "OPEN", "0.54", "4.5", "2.0", "2.5", "0.54"),
+                fills(fill("remote-exit-reconcile-partial", "fill-exit-reconcile-partial", TradeSide.SELL, "2.0", "0.54", "0.01"))
+        );
+
+        TradeOrderEntity exitOrder = latestOrder(partial.tradeId(), TradeOrderPhase.EXIT);
+        reconcileOrder(exitOrder);
+
+        TradeEntity trade = trade(partial.tradeId());
+        assertThat(latestOrder(trade.getId(), TradeOrderPhase.EXIT).getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.PARTIALLY_CLOSED);
+        assertThat(trade.getExitFilledShares()).isEqualByComparingTo("2.0");
+        assertHeldShares(trade, "2.5");
+        assertRuntimePosition(true, "4.5");
+        assertThat(runtimeState().activeExitOrder()).isNotNull();
+    }
+
+    @Test
+    void restingExitRemainderCancelledAfterPartialFill() {
+        OrderLifecycleResult partial = createPartialDonePosition("remote-entry-exit-cancelled-partial", "4.5", TradeOrderType.GTD, "CANCELED");
+        executor.onSubmit(restingSubmit("remote-exit-cancelled-partial"));
+        executor.onGetOrderStatus(
+                "remote-exit-cancelled-partial",
+                orderStatus("remote-exit-cancelled-partial", TradeSide.SELL, "OPEN", "0.54", "4.5", null, null, null),
+                orderStatus("remote-exit-cancelled-partial", TradeSide.SELL, "OPEN", "0.54", "4.5", "2.0", "2.5", "0.54"),
+                orderStatus("remote-exit-cancelled-partial", TradeSide.SELL, "CANCELED", "0.54", "4.5", "2.0", "0", "0.54")
+        );
+        executor.onListFills(
+                "remote-exit-cancelled-partial",
+                noFills(),
+                fills(fill("remote-exit-cancelled-partial", "fill-exit-cancelled-partial", TradeSide.SELL, "2.0", "0.54", "0.01")),
+                fills(fill("remote-exit-cancelled-partial", "fill-exit-cancelled-partial", TradeSide.SELL, "2.0", "0.54", "0.01"))
+        );
+        orderManager.submitOrder(sellIntent(TradeOrderType.GTC, "4.5", "0.54"), ExecutionMode.LIVE);
+
+        TradeOrderEntity exitOrder = latestOrder(partial.tradeId(), TradeOrderPhase.EXIT);
+        reconcileOrder(exitOrder);
+        reconcileOrder(exitOrder);
+
+        TradeEntity trade = trade(partial.tradeId());
+        TradeOrderEntity latestExitOrder = latestOrder(trade.getId(), TradeOrderPhase.EXIT);
+        assertThat(latestExitOrder.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED_DONE);
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.PARTIALLY_CLOSED);
+        assertThat(trade.getExitFilledShares()).isEqualByComparingTo("2.0");
+        assertHeldShares(trade, "2.5");
+        assertThat(runtimeState().activeExitOrder()).isNull();
+        assertNoActiveEntryOrder();
+    }
+
+    @Test
+    void secondExitFromPartiallyClosedClosesRemaining() {
+        OrderLifecycleResult partial = createPartialDonePosition("remote-entry-second-exit", "4.5", TradeOrderType.GTD, "CANCELED");
+        executor.onSubmit(filledSubmit("remote-exit-first", "0.54", "2.0", "1.08"));
+        orderManager.submitOrder(sellIntent(TradeOrderType.FAK, "2.0", "0.54"), ExecutionMode.LIVE);
+
+        executor.onSubmit(filledSubmit("remote-exit-second", "0.54", "2.5", "1.35"));
+        OrderLifecycleResult exit = orderManager.submitOrder(sellIntent(TradeOrderType.FAK, "10", "0.54"), ExecutionMode.LIVE);
+
+        TradeEntity trade = assertSingleTrade(partial.tradeId());
+        TradeOrderEntity exitOrder = latestOrder(trade.getId(), TradeOrderPhase.EXIT);
+        assertThat(executor.lastSubmittedCommand().shares()).isEqualByComparingTo("2.5");
+        assertThat(exit.tradeId()).isEqualTo(partial.tradeId());
+        assertThat(exitOrder.getRequestedShares()).isEqualByComparingTo("2.5");
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.CLOSED);
+        assertThat(trade.getExitFilledShares()).isEqualByComparingTo("4.5");
+        assertHeldShares(trade, "0");
+    }
+
+    @Disabled("Phase 4: remote-status-only partial fills need inferred ledger fills before we can assert safe cumulative accounting.")
+    @Test
+    void remoteStatusOnlyPartialFillDoesNotPretendLedgerIsComplete() {
+        OrderLifecycleResult submitted = createRestingEntry("remote-entry-status-only", "5", "0.50", TradeOrderType.GTC);
+        executor.onGetOrderStatus(
+                "remote-entry-status-only",
+                orderStatus("remote-entry-status-only", "OPEN", "0.50", "5", "2.0", "3.0", "0.50")
+        );
+        executor.onListFills("remote-entry-status-only", noFills());
+
+        TradeOrderEntity entryOrder = latestOrder(submitted.tradeId(), TradeOrderPhase.ENTRY);
+        reconcileOrder(entryOrder);
+
+        assertThat(tradeFillRepository.findByOrderId(entryOrder.getId())).isNotEmpty();
+    }
+
+    @Test
     void overSellClampsToHeldShares() {
         OrderLifecycleResult partial = createPartialDonePosition("remote-entry-oversell", "4.5", TradeOrderType.GTD, "CANCELED");
         executor.onSubmit(filledSubmit("remote-exit-oversell", "0.54", "4.5", "2.43"));
@@ -291,23 +413,92 @@ class OrderLifecycleIntegrationTest {
         assertThat(exitOrder.getRequestedShares()).isEqualByComparingTo("4.5");
     }
 
+    private OrderLifecycleResult createPartialLivePosition(String remoteOrderId, String requestedShares, String filledShares, TradeOrderType orderType) {
+        createRestingEntryScripts(remoteOrderId, requestedShares, filledShares, "OPEN");
+        OrderLifecycleResult submitted = createRestingEntry(remoteOrderId, requestedShares, "0.50", orderType);
+        reconcileOrder(latestOrder(submitted.tradeId(), TradeOrderPhase.ENTRY));
+        return submitted;
+    }
+
     private OrderLifecycleResult createPartialDonePosition(String remoteOrderId, String filledShares, TradeOrderType orderType, String terminalStatus) {
+        createRestingEntryScripts(remoteOrderId, "5", filledShares, terminalStatus);
+        OrderLifecycleResult submitted = createRestingEntry(remoteOrderId, "5", "0.50", orderType);
+        reconcileOrder(latestOrder(submitted.tradeId(), TradeOrderPhase.ENTRY));
+        return submitted;
+    }
+
+    private OrderLifecycleResult createRestingEntry(String remoteOrderId, String shares, String price, TradeOrderType orderType) {
         executor.onSubmit(restingSubmit(remoteOrderId));
+        return orderManager.submitOrder(buyIntent(orderType, shares, price), ExecutionMode.LIVE);
+    }
+
+    private void createRestingEntryScripts(String remoteOrderId, String requestedShares, String filledShares, String terminalStatus) {
+        BigDecimal requested = new BigDecimal(requestedShares);
+        BigDecimal filled = new BigDecimal(filledShares);
+        BigDecimal remaining = requested.subtract(filled).max(BigDecimal.ZERO);
         executor.onGetOrderStatus(
                 remoteOrderId,
-                orderStatus(remoteOrderId, "OPEN", "0.50", "5", null, null, null),
-                orderStatus(remoteOrderId, terminalStatus, "0.50", "5", filledShares, null, "0.50")
+                orderStatus(remoteOrderId, "OPEN", "0.50", requestedShares, null, null, null),
+                orderStatus(remoteOrderId, terminalStatus, "0.50", requestedShares, filledShares, remaining.toPlainString(), "0.50")
         );
         executor.onListFills(
                 remoteOrderId,
                 noFills(),
-                fills(fill(remoteOrderId, "fill-" + remoteOrderId, filledShares, "0.50", "0.01"))
+                fills(fill(remoteOrderId, "fill-" + remoteOrderId, TradeSide.BUY, filledShares, "0.50", "0.01"))
         );
+    }
 
-        OrderLifecycleResult submitted = orderManager.submitOrder(buyIntent(orderType, "5", "0.50"), ExecutionMode.LIVE);
-        TradeOrderEntity entryOrder = latestOrder(submitted.tradeId(), TradeOrderPhase.ENTRY);
-        orderManager.reconcileOrderDetailed(entryOrder.getId(), OrderReconciliationSource.AUTO_WORKER);
-        return submitted;
+    private OrderLifecycleResult submitRestingExit(String remoteOrderId, TradeOrderType orderType, String shares, String price) {
+        return submitRestingExit(remoteOrderId, orderType, shares, price, null, null);
+    }
+
+    private OrderLifecycleResult submitRestingExit(
+            String remoteOrderId,
+            TradeOrderType orderType,
+            String shares,
+            String price,
+            ExecutorOrderStatusResponse nextStatus,
+            ExecutorFillsResponse nextFills
+    ) {
+        executor.onSubmit(restingSubmit(remoteOrderId));
+        if (nextStatus == null) {
+            executor.onGetOrderStatus(
+                    remoteOrderId,
+                    orderStatus(remoteOrderId, TradeSide.SELL, "OPEN", price, shares, null, null, null)
+            );
+            executor.onListFills(remoteOrderId, noFills());
+        } else {
+            executor.onGetOrderStatus(
+                    remoteOrderId,
+                    orderStatus(remoteOrderId, TradeSide.SELL, "OPEN", price, shares, null, null, null),
+                    nextStatus
+            );
+            executor.onListFills(remoteOrderId, noFills(), nextFills == null ? noFills() : nextFills);
+        }
+        return orderManager.submitOrder(sellIntent(orderType, shares, price), ExecutionMode.LIVE);
+    }
+
+    private void reconcileOrder(TradeOrderEntity order) {
+        orderManager.reconcileOrderDetailed(order.getId(), OrderReconciliationSource.AUTO_WORKER);
+    }
+
+    private TradeEntity assertSingleTrade(Long tradeId) {
+        assertThat(tradeRepository.count()).isEqualTo(1);
+        return trade(tradeId);
+    }
+
+    private void assertRuntimePosition(boolean hasPosition, String filledShares) {
+        StrategyRuntimeState state = runtimeState();
+        assertThat(state.hasPosition()).isEqualTo(hasPosition);
+        assertThat(state.filledShares() == null ? BigDecimal.ZERO : state.filledShares()).isEqualByComparingTo(filledShares);
+    }
+
+    private void assertNoActiveEntryOrder() {
+        assertThat(runtimeState().activeEntryOrder()).isNull();
+    }
+
+    private void assertHeldShares(TradeEntity trade, String heldShares) {
+        assertThat(TradePositionSupport.heldShares(trade)).isEqualByComparingTo(heldShares);
     }
 
     private StrategyRuntimeState runtimeState() {
@@ -434,13 +625,26 @@ class OrderLifecycleIntegrationTest {
             String remainingSize,
             String avgFillPrice
     ) {
+        return orderStatus(remoteOrderId, TradeSide.BUY, status, price, originalSize, filledSize, remainingSize, avgFillPrice);
+    }
+
+    private ExecutorOrderStatusResponse orderStatus(
+            String remoteOrderId,
+            TradeSide side,
+            String status,
+            String price,
+            String originalSize,
+            String filledSize,
+            String remainingSize,
+            String avgFillPrice
+    ) {
         return new ExecutorOrderStatusResponse(
                 true,
                 remoteOrderId,
                 status,
                 MARKET_ID,
                 TOKEN_ID,
-                TradeSide.BUY,
+                side,
                 price == null ? null : new BigDecimal(price),
                 originalSize == null ? null : new BigDecimal(originalSize),
                 filledSize == null ? null : new BigDecimal(filledSize),
@@ -463,13 +667,17 @@ class OrderLifecycleIntegrationTest {
     }
 
     private ExecutorFillResponse fill(String remoteOrderId, String fillId, String shares, String price, String fee) {
+        return fill(remoteOrderId, fillId, TradeSide.BUY, shares, price, fee);
+    }
+
+    private ExecutorFillResponse fill(String remoteOrderId, String fillId, TradeSide side, String shares, String price, String fee) {
         return new ExecutorFillResponse(
                 remoteOrderId,
                 "trade-" + fillId,
                 fillId,
                 TOKEN_ID,
                 MARKET_ID,
-                TradeSide.BUY,
+                side,
                 new BigDecimal(price),
                 new BigDecimal(shares),
                 new BigDecimal(fee),

@@ -68,8 +68,6 @@ public class OrderManager {
         }
 
         if (response.filled()) {
-            order.markFilled(response.exchangeOrderId(), response.averagePrice(), response.filledShares(), response.filledAmountUsd());
-            tradeOrderRepository.save(order);
             persistImmediateFillIfAbsent(trade, order, intent, response);
             reconciliationService.applyImmediateFill(trade, order, response);
             try {
@@ -146,13 +144,8 @@ public class OrderManager {
         }
 
         if (response.filled()) {
-            BigDecimal fillShares = firstNonNull(response.filledShares(), sellIntent.shares());
-            BigDecimal fillAmountUsd = firstNonNull(response.filledAmountUsd(),
-                    response.averagePrice() == null || fillShares == null ? null : response.averagePrice().multiply(fillShares));
-            order.markFilled(response.exchangeOrderId(), response.averagePrice(), fillShares, fillAmountUsd);
-            tradeOrderRepository.save(order);
             persistImmediateFillIfAbsent(trade, order, sellIntent, response);
-            applyImmediateExitFill(trade, order, response, fillShares, fillAmountUsd);
+            reconciliationService.applyImmediateFill(trade, order, response);
             try {
                 reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_FILL_AUDIT);
             } catch (RuntimeException ignored) {
@@ -286,25 +279,6 @@ public class OrderManager {
                 TradePositionSupport.EXITABLE_STATUSES
         );
         return trade;
-    }
-
-    private void applyImmediateExitFill(
-            TradeEntity trade,
-            TradeOrderEntity order,
-            ExecutorOrderResponse response,
-            BigDecimal fillShares,
-            BigDecimal fillAmountUsd
-    ) {
-        BigDecimal fee = response.feeUsd();
-        BigDecimal cumulativeExitShares = TradePositionSupport.cumulativeExitShares(trade, fillShares);
-        BigDecimal cumulativeExitAmountUsd = TradePositionSupport.cumulativeExitAmountUsd(trade, fillAmountUsd);
-        BigDecimal cumulativeExitFeeUsd = TradePositionSupport.cumulativeExitFeeUsd(trade, fee);
-        if (TradePositionSupport.closesPosition(trade, fillShares)) {
-            trade.markClosed(response.averagePrice(), cumulativeExitShares, cumulativeExitAmountUsd, cumulativeExitFeeUsd, response.exchangeTimestamp());
-        } else {
-            trade.markPartiallyClosed(response.averagePrice(), cumulativeExitShares, cumulativeExitAmountUsd, cumulativeExitFeeUsd, response.exchangeTimestamp());
-        }
-        tradeRepository.save(trade);
     }
 
     private String localOrderId(TradeIntent intent, ExecutionMode mode, Long tradeId) {

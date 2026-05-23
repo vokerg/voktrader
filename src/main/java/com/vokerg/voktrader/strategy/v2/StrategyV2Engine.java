@@ -175,12 +175,12 @@ public class StrategyV2Engine implements TradingStrategy {
         if (status == TradeStatus.PARTIALLY_OPEN) {
             diagnosticsRecorder.stateBranch(strategy, state, market.id(), "PARTIAL_POSITION_MANAGEMENT", "partial position active; suppressing duplicate entry");
             maybeCancelPartialRemainder(strategy, state);
-            if (strategy.getPartialFillManagement().isAllowExitPartialPosition()) {
+            if (strategy.getPartialFillManagement().isAllowExitPartialPosition() && state.activeEntryOrder() == null) {
                 exitEvaluator.evaluate(strategy, market, marketView, state);
             }
             return false;
         }
-        if (status == TradeStatus.OPEN) {
+        if (status == TradeStatus.OPEN || status == TradeStatus.PARTIALLY_CLOSED) {
             diagnosticsRecorder.stateBranch(strategy, state, market.id(), "EXIT", "position open; evaluating exit rules");
             exitEvaluator.evaluate(strategy, market, marketView, state);
             return false;

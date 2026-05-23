@@ -25,6 +25,7 @@ import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.OrderReconciliationSource;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderPhase;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeStatus;
@@ -194,6 +195,99 @@ class StrategyV2OrderLifecycleIntegrationTest {
         assertThat(state.activeEntryOrder()).isNull();
     }
 
+    @Test
+    void partiallyClosedPositionRoutesRemainingExitThroughStrategyV2Engine() {
+        OrderLifecycleResult partial = createPartialDonePosition("remote-v2-partial-close-entry", "4.5");
+        executor.onSubmit(new ExecutorOrderResponse(
+                true,
+                true,
+                "MATCHED",
+                "remote-v2-direct-exit",
+                new BigDecimal("0.54"),
+                new BigDecimal("2.0"),
+                new BigDecimal("1.08"),
+                BigDecimal.ZERO,
+                "matched",
+                "{}",
+                Instant.parse("2026-05-23T12:00:08Z")
+        ));
+        orderManager.submitOrder(sellIntent(TradeOrderType.FAK, "2.0", "0.54"), ExecutionMode.LIVE);
+        assertThat(runtimeState().currentTradeStatus()).isEqualTo(TradeStatus.PARTIALLY_CLOSED);
+
+        executor.resetCommands();
+        executor.onSubmit(new ExecutorOrderResponse(
+                true,
+                true,
+                "MATCHED",
+                "remote-v2-engine-exit",
+                new BigDecimal("0.54"),
+                new BigDecimal("2.5"),
+                new BigDecimal("1.35"),
+                BigDecimal.ZERO,
+                "matched",
+                "{}",
+                Instant.parse("2026-05-23T12:00:10Z")
+        ));
+        stubCurrentMarket();
+
+        engine.tick();
+
+        assertThat(executor.submittedCommands()).hasSize(1);
+        assertThat(executor.lastSubmittedCommand().side()).isEqualTo(TradeSide.SELL);
+        assertThat(executor.lastSubmittedCommand().shares()).isEqualByComparingTo("2.5");
+        assertThat(tradeRepository.count()).isEqualTo(1);
+        assertThat(tradeRepository.findById(partial.tradeId()).orElseThrow().getStatus()).isEqualTo(TradeStatus.CLOSED);
+    }
+
+    @Test
+    void partiallyClosedPositionDoesNotCreateDuplicateBuy() {
+        OrderLifecycleResult partial = createPartialDonePosition("remote-v2-no-buy-entry", "4.5");
+        executor.onSubmit(new ExecutorOrderResponse(
+                true,
+                true,
+                "MATCHED",
+                "remote-v2-no-buy-direct-exit",
+                new BigDecimal("0.54"),
+                new BigDecimal("2.0"),
+                new BigDecimal("1.08"),
+                BigDecimal.ZERO,
+                "matched",
+                "{}",
+                Instant.parse("2026-05-23T12:00:08Z")
+        ));
+        orderManager.submitOrder(sellIntent(TradeOrderType.FAK, "2.0", "0.54"), ExecutionMode.LIVE);
+
+        strategyProperties.setStrategies(List.of(strategyWithExitThreshold(false, "0.60")));
+        executor.resetCommands();
+        stubCurrentMarket();
+
+        engine.tick();
+
+        assertThat(executor.submittedCommands()).isEmpty();
+        assertThat(tradeRepository.count()).isEqualTo(1);
+        StrategyRuntimeState state = runtimeState();
+        assertThat(state.currentTradeStatus()).isEqualTo(TradeStatus.PARTIALLY_CLOSED);
+        assertThat(state.activeEntryOrder()).isNull();
+        assertThat(tradeOrderRepository.findByTradeId(partial.tradeId())).hasSize(2);
+    }
+
+    @Test
+    void partiallyOpenWithActiveEntryOrderDoesNotExitUntilRemainderDoneUnlessConfigured() {
+        OrderLifecycleResult partial = createPartialLivePosition("remote-v2-live-entry", "5", "1");
+        executor.resetCommands();
+        stubCurrentMarket();
+
+        engine.tick();
+
+        assertThat(executor.submittedCommands()).isEmpty();
+        StrategyRuntimeState state = runtimeState();
+        assertThat(state.currentTradeStatus()).isEqualTo(TradeStatus.PARTIALLY_OPEN);
+        assertThat(state.activeEntryOrder()).isNotNull();
+        assertThat(state.activeExitOrder()).isNull();
+        assertThat(tradeRepository.count()).isEqualTo(1);
+        assertThat(latestOrder(partial.tradeId(), TradeOrderPhase.ENTRY).getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
+    }
+
     private OrderLifecycleResult createPartialDonePosition(String remoteOrderId, String filledShares) {
         executor.onSubmit(new ExecutorOrderResponse(
                 true,
@@ -240,6 +334,60 @@ class StrategyV2OrderLifecycleIntegrationTest {
         return submitted;
     }
 
+    private OrderLifecycleResult createPartialLivePosition(String remoteOrderId, String requestedShares, String filledShares) {
+        executor.onSubmit(new ExecutorOrderResponse(
+                true,
+                false,
+                "LIVE",
+                remoteOrderId,
+                null,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                null,
+                "accepted",
+                "{}",
+                Instant.parse("2026-05-23T12:00:01Z")
+        ));
+        executor.onGetOrderStatus(
+                remoteOrderId,
+                orderStatus(remoteOrderId, "OPEN", "0.50", requestedShares, null, null, null),
+                orderStatus(
+                        remoteOrderId,
+                        "OPEN",
+                        "0.50",
+                        requestedShares,
+                        filledShares,
+                        new BigDecimal(requestedShares).subtract(new BigDecimal(filledShares)).toPlainString(),
+                        "0.50"
+                )
+        );
+        executor.onListFills(
+                remoteOrderId,
+                new ExecutorFillsResponse(true, List.of(), "[]", null),
+                new ExecutorFillsResponse(true, List.of(fill(remoteOrderId, "fill-" + remoteOrderId, filledShares, "0.50")), "[]", null)
+        );
+
+        OrderLifecycleResult submitted = orderManager.submitOrder(
+                TradeIntent.buy(
+                        null,
+                        market(),
+                        outcomePrice("0.50", "0.51"),
+                        new BigDecimal(requestedShares).multiply(new BigDecimal("0.50")),
+                        new BigDecimal(requestedShares),
+                        TradeOrderType.GTC,
+                        true,
+                        new BigDecimal("0.50"),
+                        STRATEGY_ID,
+                        "entry-rule",
+                        "strategy entry"
+                ),
+                ExecutionMode.LIVE
+        );
+        TradeOrderEntity entryOrder = latestOrder(submitted.tradeId(), TradeOrderPhase.ENTRY);
+        orderManager.reconcileOrderDetailed(entryOrder.getId(), OrderReconciliationSource.AUTO_WORKER);
+        return submitted;
+    }
+
     private void stubCurrentMarket() {
         StrategyMarketView marketView = mock(StrategyMarketView.class);
         StrategyOutcomeView up = outcome("Up", "token-up", "0.58");
@@ -254,6 +402,10 @@ class StrategyV2OrderLifecycleIntegrationTest {
     }
 
     private StrategyV2Properties.Strategy strategy(boolean allowExitPartialPosition) {
+        return strategyWithExitThreshold(allowExitPartialPosition, "0.40");
+    }
+
+    private StrategyV2Properties.Strategy strategyWithExitThreshold(boolean allowExitPartialPosition, String exitThreshold) {
         StrategyV2Properties.Strategy strategy = new StrategyV2Properties.Strategy();
         strategy.setStrategyId(STRATEGY_ID);
         strategy.getPartialFillManagement().setAllowExitPartialPosition(allowExitPartialPosition);
@@ -272,10 +424,25 @@ class StrategyV2OrderLifecycleIntegrationTest {
         StrategyV2Properties.Condition condition = new StrategyV2Properties.Condition();
         condition.setFeature("candidate.mid");
         condition.setOp(">=");
-        condition.setValue("0.40");
+        condition.setValue(exitThreshold);
         exitRule.setWhen(condition);
         strategy.getExit().setRules(List.of(exitRule));
         return strategy;
+    }
+
+    private TradeIntent sellIntent(TradeOrderType orderType, String shares, String price) {
+        return TradeIntent.sell(
+                null,
+                market(),
+                outcomePrice(price, new BigDecimal(price).add(new BigDecimal("0.01")).toPlainString()),
+                new BigDecimal(shares),
+                orderType,
+                orderType.prefersMaker(),
+                new BigDecimal(price),
+                STRATEGY_ID,
+                "exit-rule",
+                "strategy exit"
+        );
     }
 
     private StrategyOutcomeView outcome(String outcome, String tokenId, String mid) {

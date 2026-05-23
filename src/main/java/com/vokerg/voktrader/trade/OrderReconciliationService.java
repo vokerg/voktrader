@@ -222,20 +222,46 @@ public class OrderReconciliationService {
         boolean feeKnown = response.feeUsd() != null;
         BigDecimal filledShares = zeroIfNull(response.filledShares());
         BigDecimal filledAmountUsd = zeroIfNull(response.filledAmountUsd());
-        order.applyFillState(
-                TradeOrderStatus.FILLED,
-                response.averagePrice(),
-                filledShares,
-                filledAmountUsd,
-                BigDecimal.ZERO,
-                fee,
-                feeKnown,
-                order.getOrderType().expectedLiquidityRole(),
-                response.rawResponse()
-        );
+        BigDecimal requestedShares = requestedShares(order);
+        BigDecimal remainingShares = requestedShares == null
+                ? BigDecimal.ZERO
+                : requestedShares.subtract(filledShares).max(BigDecimal.ZERO);
+        boolean fullyFilled = requestedShares == null || filledShares.compareTo(requestedShares) >= 0;
+        TradeOrderStatus immediateStatus = fullyFilled
+                ? TradeOrderStatus.FILLED
+                : order.getOrderType().canRestOnBook() ? TradeOrderStatus.PARTIALLY_FILLED : TradeOrderStatus.PARTIALLY_FILLED_DONE;
+        if (immediateStatus == TradeOrderStatus.PARTIALLY_FILLED_DONE) {
+            order.markPartiallyFilledDone(
+                    response.averagePrice(),
+                    filledShares,
+                    filledAmountUsd,
+                    BigDecimal.ZERO,
+                    fee,
+                    feeKnown,
+                    order.getOrderType().expectedLiquidityRole(),
+                    "remaining quantity no longer working",
+                    response.rawResponse()
+            );
+        } else {
+            order.applyFillState(
+                    immediateStatus,
+                    response.averagePrice(),
+                    filledShares,
+                    filledAmountUsd,
+                    fullyFilled ? BigDecimal.ZERO : remainingShares,
+                    fee,
+                    feeKnown,
+                    order.getOrderType().expectedLiquidityRole(),
+                    response.rawResponse()
+            );
+        }
         tradeOrderRepository.save(order);
         if (order.getPhase() == TradeOrderPhase.ENTRY) {
-            trade.markOpen(response.averagePrice(), response.filledShares(), response.filledAmountUsd(), fee, response.exchangeTimestamp());
+            if (fullyFilled) {
+                trade.markOpen(response.averagePrice(), response.filledShares(), response.filledAmountUsd(), fee, response.exchangeTimestamp());
+            } else {
+                trade.markPartiallyOpen(response.averagePrice(), response.filledShares(), response.filledAmountUsd(), fee, response.exchangeTimestamp());
+            }
         } else {
             BigDecimal cumulativeExitShares = TradePositionSupport.cumulativeExitShares(trade, filledShares);
             BigDecimal cumulativeExitAmountUsd = TradePositionSupport.cumulativeExitAmountUsd(trade, filledAmountUsd);
@@ -533,7 +559,8 @@ public class OrderReconciliationService {
             } else {
                 trade.markPartiallyClosed(order.getAvgFillPrice(), totals.shares(), totals.amountUsd(), totals.feeUsd(), order.getCompletedAt());
             }
-        } else if (order.getStatus() == TradeOrderStatus.PARTIALLY_FILLED) {
+        } else if (order.getStatus() == TradeOrderStatus.PARTIALLY_FILLED
+                || order.getStatus() == TradeOrderStatus.PARTIALLY_FILLED_DONE) {
             ExitTotals totals = aggregateExitTotals(trade, order);
             if (closesPosition(trade, totals.shares())) {
                 trade.markClosed(order.getAvgFillPrice(), totals.shares(), totals.amountUsd(), totals.feeUsd(), order.getCompletedAt());
