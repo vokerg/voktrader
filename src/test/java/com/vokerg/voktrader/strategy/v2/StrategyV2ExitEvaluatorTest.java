@@ -108,6 +108,31 @@ class StrategyV2ExitEvaluatorTest {
     }
 
     @Test
+    void partiallyOpenOrderLayerRoutesHeldShares() {
+        executionProperties.setUseOrderLayer(true);
+        when(orderGateway.submitOrder(any(TradeIntent.class), any(), any())).thenReturn(new OrderLifecycleResult(
+                true,
+                1L,
+                2L,
+                "local-exit",
+                "remote-exit",
+                TradeStatus.EXIT_PENDING,
+                TradeOrderStatus.SUBMITTED,
+                "submitted",
+                null
+        ));
+        StrategyV2Properties.Strategy strategy = strategy(">=", "0.05");
+        strategy.getPartialFillManagement().setAllowExitPartialPosition(true);
+
+        evaluator.evaluate(strategy, market(), marketView("0.58"), state(TradeStatus.PARTIALLY_OPEN, "4.545453", true));
+
+        ArgumentCaptor<TradeIntent> captor = ArgumentCaptor.forClass(TradeIntent.class);
+        verify(orderGateway).submitOrder(captor.capture(), any(), any());
+        assertThat(captor.getValue().side()).isEqualTo(TradeSide.SELL);
+        assertThat(captor.getValue().shares()).isEqualByComparingTo("4.545453");
+    }
+
+    @Test
     void partiallyOpenNotAllowedDoesNotExit() {
         StrategyV2Properties.Strategy strategy = strategy(">=", "0.05");
         strategy.getPartialFillManagement().setAllowExitPartialPosition(false);

@@ -39,6 +39,7 @@ public interface TradeRepository extends JpaRepository<TradeEntity, Long>, JpaSp
     List<String> findDistinctMarketIdByStatus(TradeStatus status);
     List<TradeEntity> findByStrategyIdAndStatus(String strategyId, TradeStatus status);
     Optional<TradeEntity> findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(String strategyId, String marketId, String tokenId, TradeStatus status);
+    Optional<TradeEntity> findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(String strategyId, String marketId, String tokenId, Collection<TradeStatus> statuses);
     Optional<TradeEntity> findFirstByStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(String strategyId, String marketId, TradeStatus status);
     Optional<TradeEntity> findFirstByStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(String strategyId, String marketId, Collection<TradeStatus> statuses);
     Optional<TradeEntity> findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(String strategyId, String marketId, String tokenId, Collection<TradeStatus> statuses);
@@ -47,6 +48,7 @@ public interface TradeRepository extends JpaRepository<TradeEntity, Long>, JpaSp
     long countByBotIdAndMarketIdAndStrategyIdAndStatusIn(Long botId, String marketId, String strategyId, Collection<TradeStatus> statuses);
     long countByBotIdAndStrategyIdAndMarketId(Long botId, String strategyId, String marketId);
     Optional<TradeEntity> findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(Long botId, String strategyId, String marketId, String tokenId, TradeStatus status);
+    Optional<TradeEntity> findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(Long botId, String strategyId, String marketId, String tokenId, Collection<TradeStatus> statuses);
     Optional<TradeEntity> findFirstByBotIdAndStrategyIdAndMarketIdAndStatusOrderByCreatedAtDesc(Long botId, String strategyId, String marketId, TradeStatus status);
     Optional<TradeEntity> findFirstByBotIdAndStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(Long botId, String strategyId, String marketId, Collection<TradeStatus> statuses);
     Optional<TradeEntity> findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByUpdatedAtDesc(Long botId, String strategyId, String marketId, String tokenId, Collection<TradeStatus> statuses);

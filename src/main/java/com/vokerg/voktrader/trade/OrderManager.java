@@ -20,7 +20,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -37,6 +39,10 @@ public class OrderManager {
 
     @Transactional
     public OrderLifecycleResult submitOrder(TradeIntent intent, ExecutionMode mode) {
+        if (intent.side() == TradeSide.SELL) {
+            return submitExitOrder(intent, mode);
+        }
+
         TradeEntity trade = tradeRepository.save(TradeEntity.fromIntent(intent, mode));
         String localOrderId = localOrderId(intent, mode, trade.getId());
         TradeOrderEntity order = tradeOrderRepository.save(TradeOrderEntity.fromIntent(
@@ -80,6 +86,83 @@ public class OrderManager {
         } else {
             trade.markExitPending();
         }
+        tradeOrderRepository.save(order);
+        tradeRepository.save(trade);
+        reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_SUBMIT);
+        return OrderLifecycleResult.of(trade, order, true, response.safeMessage());
+    }
+
+    private OrderLifecycleResult submitExitOrder(TradeIntent intent, ExecutionMode mode) {
+        TradeEntity trade = findActivePositionTrade(intent).orElse(null);
+        if (trade == null) {
+            return new OrderLifecycleResult(
+                    false,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "sell rejected: no open or partially open trade to close",
+                    "sell rejected: no open or partially open trade to close"
+            );
+        }
+
+        TradePositionSupport.ExitPlan exitPlan = TradePositionSupport.planExit(trade, intent.shares());
+        if (!exitPlan.hasRequestedShares()) {
+            return new OrderLifecycleResult(
+                    false,
+                    trade.getId(),
+                    null,
+                    null,
+                    null,
+                    trade.getStatus(),
+                    null,
+                    "sell rejected: active trade has no held shares to close",
+                    "sell rejected: active trade has no held shares to close"
+            );
+        }
+
+        TradeIntent sellIntent = TradePositionSupport.withSellShares(intent, exitPlan.requestedShares());
+        String localOrderId = localOrderId(sellIntent, mode, trade.getId());
+        TradeOrderEntity order = tradeOrderRepository.save(TradeOrderEntity.fromIntent(
+                trade.getId(),
+                sellIntent,
+                mode,
+                TradeVenue.POLYMARKET,
+                localOrderId
+        ));
+
+        ExecutorOrderCommand command = ExecutorOrderCommand.fromIntent(sellIntent, localOrderId, executorProperties.isDryRun());
+        order.markSubmitting(command.idempotencyKey(), command.toString());
+        order = tradeOrderRepository.save(order);
+
+        ExecutorOrderResponse response = pythonExecutorClient.submit(command);
+        order.attachExecutorResponse(response.exchangeOrderId(), response.rawResponse());
+        if (!response.accepted()) {
+            order.markRejected(response.safeMessage(), response.rawResponse());
+            tradeOrderRepository.save(order);
+            return OrderLifecycleResult.of(trade, order, false, response.safeMessage());
+        }
+
+        if (response.filled()) {
+            BigDecimal fillShares = firstNonNull(response.filledShares(), sellIntent.shares());
+            BigDecimal fillAmountUsd = firstNonNull(response.filledAmountUsd(),
+                    response.averagePrice() == null || fillShares == null ? null : response.averagePrice().multiply(fillShares));
+            order.markFilled(response.exchangeOrderId(), response.averagePrice(), fillShares, fillAmountUsd);
+            tradeOrderRepository.save(order);
+            persistImmediateFillIfAbsent(trade, order, sellIntent, response);
+            applyImmediateExitFill(trade, order, response, fillShares, fillAmountUsd);
+            try {
+                reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_FILL_AUDIT);
+            } catch (RuntimeException ignored) {
+                // Post-fill audit is observability; the accepted fill path must not depend on remote history lag.
+            }
+            return OrderLifecycleResult.of(trade, order, true, response.safeMessage());
+        }
+
+        order.markSubmitted(response.exchangeOrderId(), response.rawResponse());
+        trade.markExitPending();
         tradeOrderRepository.save(order);
         tradeRepository.save(trade);
         reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_SUBMIT);
@@ -187,6 +270,43 @@ public class OrderManager {
                 .or(() -> tradeOrderRepository.findByRemoteOrderId(localOrRemoteOrderId));
     }
 
+    private Optional<TradeEntity> findActivePositionTrade(TradeIntent intent) {
+        Optional<TradeEntity> trade = intent.botId() == null
+                ? tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
+                intent.strategyId(),
+                intent.marketId(),
+                intent.tokenId(),
+                TradePositionSupport.EXITABLE_STATUSES
+        )
+                : tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
+                intent.botId(),
+                intent.strategyId(),
+                intent.marketId(),
+                intent.tokenId(),
+                TradePositionSupport.EXITABLE_STATUSES
+        );
+        return trade;
+    }
+
+    private void applyImmediateExitFill(
+            TradeEntity trade,
+            TradeOrderEntity order,
+            ExecutorOrderResponse response,
+            BigDecimal fillShares,
+            BigDecimal fillAmountUsd
+    ) {
+        BigDecimal fee = response.feeUsd();
+        BigDecimal cumulativeExitShares = TradePositionSupport.cumulativeExitShares(trade, fillShares);
+        BigDecimal cumulativeExitAmountUsd = TradePositionSupport.cumulativeExitAmountUsd(trade, fillAmountUsd);
+        BigDecimal cumulativeExitFeeUsd = TradePositionSupport.cumulativeExitFeeUsd(trade, fee);
+        if (TradePositionSupport.closesPosition(trade, fillShares)) {
+            trade.markClosed(response.averagePrice(), cumulativeExitShares, cumulativeExitAmountUsd, cumulativeExitFeeUsd, response.exchangeTimestamp());
+        } else {
+            trade.markPartiallyClosed(response.averagePrice(), cumulativeExitShares, cumulativeExitAmountUsd, cumulativeExitFeeUsd, response.exchangeTimestamp());
+        }
+        tradeRepository.save(trade);
+    }
+
     private String localOrderId(TradeIntent intent, ExecutionMode mode, Long tradeId) {
         Instant decisionAt = intent.decisionAt() == null ? Instant.now() : intent.decisionAt();
         String botScope = intent.botId() == null ? "default" : intent.botId().toString();
@@ -195,6 +315,10 @@ public class OrderManager {
 
     private java.math.BigDecimal zeroIfNull(java.math.BigDecimal value) {
         return value == null ? java.math.BigDecimal.ZERO : value;
+    }
+
+    private <T> T firstNonNull(T primary, T fallback) {
+        return primary != null ? primary : fallback;
     }
 
     private boolean equalByValue(java.math.BigDecimal left, java.math.BigDecimal right) {

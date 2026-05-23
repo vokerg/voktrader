@@ -172,6 +172,18 @@ class StrategyV2RuntimeStateAwarenessTest {
         verify(entryEvaluator, never()).evaluate(any(), anyList(), any());
     }
 
+    @Test
+    void partiallyOpenWithoutAllowExitSuppressesDuplicateEntryWithoutExit() {
+        StrategyRuntimeState state = state(TradeStatus.PARTIALLY_OPEN, null, null);
+        EngineFixture fixture = fixture(true, state);
+        fixture.strategy.getPartialFillManagement().setAllowExitPartialPosition(false);
+
+        fixture.engine.tick();
+
+        verify(exitEvaluator, never()).evaluate(any(), any(), any(), any(StrategyRuntimeState.class));
+        verify(entryEvaluator, never()).evaluate(any(), anyList(), any());
+    }
+
     private EngineFixture fixture(boolean useOrderLayer, StrategyRuntimeState state) {
         properties.getEngine().setEnabled(true);
         StrategyV2Properties.Strategy strategy = strategy();

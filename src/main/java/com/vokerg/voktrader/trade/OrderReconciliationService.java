@@ -314,22 +314,47 @@ public class OrderReconciliationService {
 
     private TradeOrderStatus resolveStatus(ExecutorOrderStatusResponse remoteStatus, ExecutorFillsResponse fills, TradeOrderEntity order) {
         BigDecimal filled = aggregate(order).filledShares();
+        BigDecimal requested = requestedShares(order);
         if (filled.compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal requested = requestedShares(order);
-            return requested != null && filled.compareTo(requested) >= 0
-                    ? TradeOrderStatus.FILLED
-                    : TradeOrderStatus.PARTIALLY_FILLED;
+            if (requested == null && remoteStatus.success()) {
+                requested = remoteStatus.originalSize();
+            }
+            if (requested != null && filled.compareTo(requested) >= 0) {
+                return TradeOrderStatus.FILLED;
+            }
+            if (remoteStatus.success()) {
+                TradeOrderStatus remoteLifecycle = remoteStatus.lifecycleStatus();
+                if (isRemoteLifecycleTerminal(remoteLifecycle)) {
+                    return TradeOrderStatus.PARTIALLY_FILLED_DONE;
+                }
+                if (isRemoteLifecycleActive(remoteLifecycle)) {
+                    return TradeOrderStatus.PARTIALLY_FILLED;
+                }
+                if (remoteStatus.remainingSize() != null
+                        && remoteStatus.remainingSize().compareTo(BigDecimal.ZERO) == 0
+                        && (requested == null || filled.compareTo(requested) < 0)) {
+                    return TradeOrderStatus.PARTIALLY_FILLED_DONE;
+                }
+            }
+            return TradeOrderStatus.PARTIALLY_FILLED;
         }
         if (remoteStatus.success()) {
             BigDecimal remoteFilled = remoteStatus.filledSize();
             if (remoteFilled != null && remoteFilled.compareTo(BigDecimal.ZERO) > 0) {
-                BigDecimal requested = requestedShares(order);
                 if (requested == null) {
                     requested = remoteStatus.originalSize();
                 }
-                return requested != null && remoteFilled.compareTo(requested) >= 0
-                        ? TradeOrderStatus.FILLED
-                        : TradeOrderStatus.PARTIALLY_FILLED;
+                if (requested != null && remoteFilled.compareTo(requested) >= 0) {
+                    return TradeOrderStatus.FILLED;
+                }
+                TradeOrderStatus remoteLifecycle = remoteStatus.lifecycleStatus();
+                if (isRemoteLifecycleTerminal(remoteLifecycle)) {
+                    return TradeOrderStatus.PARTIALLY_FILLED_DONE;
+                }
+                if (remoteStatus.remainingSize() != null && remoteStatus.remainingSize().compareTo(BigDecimal.ZERO) == 0) {
+                    return TradeOrderStatus.PARTIALLY_FILLED_DONE;
+                }
+                return TradeOrderStatus.PARTIALLY_FILLED;
             }
             if (remoteStatus.lifecycleStatus() == TradeOrderStatus.FILLED) {
                 return TradeOrderStatus.FILLED;
@@ -444,6 +469,17 @@ public class OrderReconciliationService {
                     role,
                     usefulRaw(remoteStatus.rawResponse(), fills.rawResponse())
             );
+            case PARTIALLY_FILLED_DONE -> order.markPartiallyFilledDone(
+                    avgPrice,
+                    filledShares,
+                    filledAmountUsd,
+                    BigDecimal.ZERO,
+                    totals.feeUsd(),
+                    totals.feeKnown(),
+                    role,
+                    firstNonBlank(order.getCancelReason(), "remaining quantity no longer working"),
+                    usefulRaw(remoteStatus.rawResponse(), fills.rawResponse())
+            );
             case RESTING, SUBMITTED -> order.markResting(usefulRaw(remoteStatus.rawResponse()));
             case CANCELLED -> order.markCancelled(firstNonBlank(order.getCancelReason(), "remote cancelled"), usefulRaw(remoteStatus.rawResponse()));
             case EXPIRED -> order.markExpired(usefulRaw(remoteStatus.rawResponse()));
@@ -456,7 +492,8 @@ public class OrderReconciliationService {
     private void reconcileEntryTrade(TradeEntity trade, TradeOrderEntity order) {
         if (order.getStatus() == TradeOrderStatus.FILLED) {
             trade.markOpen(order.getAvgFillPrice(), order.getFilledShares(), order.getFilledAmountUsd(), order.getRealizedFeeUsd(), order.getCompletedAt());
-        } else if (order.getStatus() == TradeOrderStatus.PARTIALLY_FILLED) {
+        } else if (order.getStatus() == TradeOrderStatus.PARTIALLY_FILLED
+                || order.getStatus() == TradeOrderStatus.PARTIALLY_FILLED_DONE) {
             trade.markPartiallyOpen(order.getAvgFillPrice(), order.getFilledShares(), order.getFilledAmountUsd(), order.getRealizedFeeUsd(), order.getCompletedAt());
         } else if (order.getStatus() == TradeOrderStatus.CANCELLED) {
             if (zeroIfNull(order.getFilledShares()).compareTo(BigDecimal.ZERO) == 0) {
@@ -608,9 +645,29 @@ public class OrderReconciliationService {
     private boolean isStickyTerminal(TradeOrderStatus status) {
         return status == TradeOrderStatus.CANCELLED
                 || status == TradeOrderStatus.FILLED
+                || status == TradeOrderStatus.PARTIALLY_FILLED_DONE
                 || status == TradeOrderStatus.REJECTED
                 || status == TradeOrderStatus.FAILED
                 || status == TradeOrderStatus.EXPIRED;
+    }
+
+    private boolean isRemoteLifecycleActive(TradeOrderStatus status) {
+        return status == TradeOrderStatus.CREATED
+                || status == TradeOrderStatus.SUBMITTING
+                || status == TradeOrderStatus.SUBMITTED
+                || status == TradeOrderStatus.RESTING
+                || status == TradeOrderStatus.OPEN
+                || status == TradeOrderStatus.PARTIALLY_FILLED
+                || status == TradeOrderStatus.PARTIAL
+                || status == TradeOrderStatus.CANCEL_REQUESTED;
+    }
+
+    private boolean isRemoteLifecycleTerminal(TradeOrderStatus status) {
+        return status == TradeOrderStatus.CANCELLED
+                || status == TradeOrderStatus.EXPIRED
+                || status == TradeOrderStatus.REJECTED
+                || status == TradeOrderStatus.FAILED
+                || status == TradeOrderStatus.TIMEOUT;
     }
 
     private boolean hasRemoteFillEvidence(ExecutorOrderStatusResponse remoteStatus) {

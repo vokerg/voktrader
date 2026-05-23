@@ -5,6 +5,7 @@ public enum TradeOrderStatus {
     SUBMITTED,
     RESTING,
     PARTIALLY_FILLED,
+    PARTIALLY_FILLED_DONE,
     FILLED,
     CANCEL_REQUESTED,
     CANCELLED,
@@ -28,12 +29,12 @@ public enum TradeOrderStatus {
 
     public boolean isTerminal() {
         return switch (this) {
-            case FILLED, CANCELLED, EXPIRED, TIMEOUT, REJECTED, RISK_REJECTED, FAILED, SHADOW_RECORDED -> true;
+            case FILLED, PARTIALLY_FILLED_DONE, CANCELLED, EXPIRED, TIMEOUT, REJECTED, RISK_REJECTED, FAILED, SHADOW_RECORDED -> true;
             default -> false;
         };
     }
 
     public boolean isFilledOrPartiallyFilled() {
-        return this == FILLED || this == PARTIALLY_FILLED || this == PARTIAL;
+        return this == FILLED || this == PARTIALLY_FILLED || this == PARTIALLY_FILLED_DONE || this == PARTIAL;
     }
 }

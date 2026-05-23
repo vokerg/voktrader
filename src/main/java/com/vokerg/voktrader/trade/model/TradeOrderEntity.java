@@ -309,6 +309,34 @@ public class TradeOrderEntity {
         markFailed(errorMessage);
     }
 
+    public void markPartiallyFilledDone(
+            BigDecimal avgPrice,
+            BigDecimal filledShares,
+            BigDecimal filledAmountUsd,
+            BigDecimal remainingShares,
+            BigDecimal feeUsd,
+            boolean feeKnown,
+            LiquidityRole fillRole,
+            String reason,
+            String rawResponse
+    ) {
+        this.status = TradeOrderStatus.PARTIALLY_FILLED_DONE;
+        this.filledPrice = avgPrice;
+        this.avgFillPrice = avgPrice;
+        this.filledShares = filledShares;
+        this.filledAmountUsd = filledAmountUsd;
+        this.remainingShares = remainingShares;
+        this.realizedFeeUsd = feeUsd;
+        this.feeKnown = feeKnown;
+        this.fillRole = fillRole;
+        if (reason != null && !reason.isBlank()) {
+            this.cancelReason = reason;
+        }
+        setRawResponseIfUseful(rawResponse);
+        this.completedAt = TimeMachine.now();
+        touch();
+    }
+
     public void recordReconcileAttempt() {
         this.lastReconcileAttemptAt = TimeMachine.now();
         touch();

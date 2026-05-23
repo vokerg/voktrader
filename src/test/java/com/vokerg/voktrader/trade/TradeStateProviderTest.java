@@ -66,6 +66,44 @@ class TradeStateProviderTest {
         assertThat(state.activeEntryOrder()).isNull();
     }
 
+    @Test
+    void partialDoneRuntimeStateHasPositionButNoActiveEntryOrder() {
+        TradeEntity trade = TradeEntity.fromIntent(intent(), ExecutionMode.LIVE);
+        ReflectionTestUtils.setField(trade, "id", 10L);
+        trade.markPartiallyOpen(
+                new BigDecimal("0.50"),
+                new BigDecimal("1"),
+                new BigDecimal("0.50"),
+                new BigDecimal("0.01"),
+                Instant.parse("2026-05-09T12:00:03Z")
+        );
+        TradeOrderEntity order = TradeOrderEntity.fromIntent(10L, intent(), ExecutionMode.LIVE, TradeVenue.POLYMARKET, "local-1");
+        ReflectionTestUtils.setField(order, "id", 20L);
+        order.markPartiallyFilledDone(
+                new BigDecimal("0.50"),
+                new BigDecimal("1"),
+                new BigDecimal("0.50"),
+                BigDecimal.ZERO,
+                new BigDecimal("0.01"),
+                true,
+                null,
+                "remainder cancelled",
+                "{}"
+        );
+        when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndStatusInOrderByUpdatedAtDesc(
+                eq(7L), eq("strategy-test"), eq("market-id"), any()
+        )).thenReturn(Optional.of(trade));
+        when(tradeOrderRepository.findByTradeId(10L)).thenReturn(List.of(order));
+
+        StrategyRuntimeState state = provider.getState(StrategyInstanceKey.of(7L, "strategy-test"), "market-id");
+
+        assertThat(state.hasPosition()).isTrue();
+        assertThat(state.currentTradeStatus()).isEqualTo(TradeStatus.PARTIALLY_OPEN);
+        assertThat(state.activeEntryOrder()).isNull();
+        assertThat(state.filledShares()).isEqualByComparingTo("1");
+        assertThat(state.avgEntryPrice()).isEqualByComparingTo("0.50");
+    }
+
     private TradeIntent intent() {
         return new TradeIntent(
                 7L,

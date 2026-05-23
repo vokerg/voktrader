@@ -95,13 +95,17 @@ public class StrategyV2OrderActionBuilder {
             StrategyV2FeatureContext context
     ) {
         ExecutionMode mode = configuredMode();
+        BigDecimal shares = context.runtimeState() == null ? null : context.runtimeState().filledShares();
+        if (shares == null || shares.compareTo(BigDecimal.ZERO) <= 0) {
+            return TradeExecutionResult.rejected(mode, null, null, null, null,
+                    "Strategy V2 exit requires positive held shares");
+        }
         TradeOrderType orderType = orderType(rule == null ? null : rule.getOrderType());
         String liquidityRole = rule == null ? null : rule.getLiquidityRole();
         boolean postOnly = liquidityRole != null
                 ? "maker".equalsIgnoreCase(liquidityRole)
                 : orderType.prefersMaker();
         BigDecimal price = exitPrice(context, orderType, postOnly);
-        BigDecimal shares = context.runtimeState() == null ? null : context.runtimeState().filledShares();
         OutcomePrice outcomePrice = new OutcomePrice(
                 context.candidate().tokenId(),
                 context.candidate().outcome(),

@@ -554,7 +554,7 @@ class OrderReconciliationServiceTest {
     }
 
     @Test
-    void repeatedCancelledRemoteWithSamePartialStateCountsAsNoProgress() {
+    void repeatedCancelledRemoteWithSamePartialStateConvergesToPartialDone() {
         Instant now = Instant.parse("2026-05-22T14:30:00Z");
         properties.getReconciliation().setPauseAfterConsecutiveNoProgress(3);
         properties.getReconciliation().setNoProgressInitialBackoffSeconds(5);
@@ -599,9 +599,9 @@ class OrderReconciliationServiceTest {
         TimeMachine.runAt(now, () -> service.reconcileOrder(order));
         TimeMachine.runAt(now.plusSeconds(5), () -> service.reconcileOrder(order));
 
-        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
-        assertThat(order.getConsecutiveReconcileNoProgress()).isEqualTo(2);
-        assertThat(order.getNextReconcileAt()).isEqualTo(now.plusSeconds(15));
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED_DONE);
+        assertThat(order.getStatus().isTerminal()).isTrue();
+        assertThat(order.getConsecutiveReconcileNoProgress()).isZero();
     }
 
     @Test
@@ -682,9 +682,10 @@ class OrderReconciliationServiceTest {
     }
 
     @Test
-    void remoteCancelledWithPartialFillsResolvesPartiallyFilled() {
+    void remoteCancelledWithPartialFillsResolvesPartialDone() {
         TradeEntity trade = trade();
         TradeOrderEntity order = order(trade, TradeSide.BUY);
+        ReflectionTestUtils.setField(order, "requestedShares", new BigDecimal("5"));
         when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
         when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("CANCELLED"));
         when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
@@ -692,8 +693,46 @@ class OrderReconciliationServiceTest {
 
         service.reconcileOrder(order);
 
-        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED_DONE);
+        assertThat(order.getFilledShares()).isEqualByComparingTo("1");
+        assertThat(order.getCompletedAt()).isNotNull();
         assertThat(trade.getStatus()).isEqualTo(TradeStatus.PARTIALLY_OPEN);
+        assertThat(trade.getEntryFilledShares()).isEqualByComparingTo("1");
+        assertThat(trade.getStatus()).isNotEqualTo(TradeStatus.CANCELLED);
+    }
+
+    @Test
+    void remoteExpiredWithPartialFillResolvesPartialDone() {
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        ReflectionTestUtils.setField(order, "requestedShares", new BigDecimal("5"));
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(orderStatus("EXPIRED"));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(fill("fill-1", "1", "0.50", "0.01")), "{}", null));
+
+        service.reconcileOrder(order);
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED_DONE);
+        assertThat(order.getCompletedAt()).isNotNull();
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.PARTIALLY_OPEN);
+    }
+
+    @Test
+    void partialDoneIsTerminalAndNotReconcilable() {
+        assertThat(TradeOrderStatus.PARTIALLY_FILLED_DONE.isTerminal()).isTrue();
+        assertThat(TradeOrderStatus.PARTIALLY_FILLED_DONE.isActive()).isFalse();
+        assertThat(TradeOrderStatus.PARTIALLY_FILLED_DONE.isFilledOrPartiallyFilled()).isTrue();
+
+        when(tradeOrderRepository.findReconcilableRemoteOrders(any(), any(), any())).thenReturn(List.of());
+
+        service.reconcileOpenOrders();
+
+        verify(tradeOrderRepository).findReconcilableRemoteOrders(
+                argThat(statuses -> !statuses.contains(TradeOrderStatus.PARTIALLY_FILLED_DONE)),
+                any(),
+                any()
+        );
     }
 
     @Test
@@ -859,6 +898,40 @@ class OrderReconciliationServiceTest {
         assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
         assertThat(order.getFilledShares()).isEqualByComparingTo("1");
         assertThat(order.getFilledAmountUsd()).isEqualByComparingTo("0.50");
+    }
+
+    @Test
+    void remoteActiveWithPartialFillRemainsPartiallyFilled() {
+        TradeEntity trade = trade();
+        TradeOrderEntity order = order(trade, TradeSide.BUY);
+        ReflectionTestUtils.setField(order, "requestedShares", new BigDecimal("5"));
+        when(tradeRepository.findById(1L)).thenReturn(Optional.of(trade));
+        when(liveExecutionService.fetchRemoteOrderStatus("remote-1")).thenReturn(new ExecutorOrderStatusResponse(
+                true,
+                "remote-1",
+                "OPEN",
+                "market-id",
+                "token-id",
+                TradeSide.BUY,
+                new BigDecimal("0.50"),
+                new BigDecimal("5"),
+                new BigDecimal("1"),
+                new BigDecimal("4"),
+                new BigDecimal("0.50"),
+                null,
+                null,
+                null,
+                "{}",
+                null
+        ));
+        when(liveExecutionService.fetchRemoteFills(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ExecutorFillsResponse(true, List.of(fill("fill-1", "1", "0.50", "0.01")), "{}", null));
+
+        service.reconcileOrder(order);
+
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.PARTIALLY_FILLED);
+        assertThat(order.getStatus().isActive()).isTrue();
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.PARTIALLY_OPEN);
     }
 
     @Test

@@ -5,6 +5,7 @@ import com.vokerg.voktrader.trade.RiskCheckService;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeExecutionSafetyService;
 import com.vokerg.voktrader.trade.TradeIntent;
+import com.vokerg.voktrader.trade.TradePositionSupport;
 import com.vokerg.voktrader.trade.TradingProperties;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeEntity;
@@ -160,10 +161,10 @@ public class PaperExecutionService {
 
     private TradeExecutionResult executeSell(TradeIntent intent) {
         ExecutionMode mode = ExecutionMode.PAPER;
-        TradeEntity trade = findLatestTokenTrade(intent, TradeStatus.OPEN).orElse(null);
+        TradeEntity trade = findLatestActivePositionTrade(intent).orElse(null);
         if (trade == null) {
             boolean hasClosedTrade = findLatestTokenTrade(intent, TradeStatus.CLOSED).isPresent();
-            String message = hasClosedTrade ? "trade already closed" : "no open trade to close";
+            String message = hasClosedTrade ? "trade already closed" : "no open or partially open trade to close";
             eventLogger.execution(
                     "TRADE_REJECTED",
                     "EXECUTION",
@@ -190,6 +191,26 @@ public class PaperExecutionService {
             return blocked.get();
         }
 
+        TradePositionSupport.ExitPlan exitPlan = TradePositionSupport.planExit(trade, intent.shares());
+        if (!exitPlan.hasRequestedShares()) {
+            eventLogger.execution(
+                    "TRADE_REJECTED",
+                    "EXECUTION",
+                    intent.strategyId(),
+                    intent.ruleId(),
+                    intent.botId(),
+                    intent.marketId(),
+                    intent.tokenId(),
+                    intent.outcome(),
+                    "open trade has no held shares to close",
+                    TelemetryData.data("mode", mode, "tradeId", trade.getId(), "side", intent.side(), "heldShares", exitPlan.heldShares()),
+                    true
+            );
+            return TradeExecutionResult.rejected(mode, trade.getId(), null, trade.getStatus(), null,
+                    "open trade has no held shares to close");
+        }
+        TradeIntent sellIntent = TradePositionSupport.withSellShares(intent, exitPlan.requestedShares());
+
         BigDecimal exitPrice = intent.observedBid();
         if (exitPrice == null || exitPrice.compareTo(BigDecimal.ZERO) <= 0) {
             eventLogger.execution(
@@ -209,29 +230,11 @@ public class PaperExecutionService {
                     "paper exit price is missing or non-positive");
         }
 
-        BigDecimal shares = trade.getEntryFilledShares();
-        if (shares == null || shares.compareTo(BigDecimal.ZERO) <= 0) {
-            eventLogger.execution(
-                    "TRADE_REJECTED",
-                    "EXECUTION",
-                    intent.strategyId(),
-                    intent.ruleId(),
-                    intent.botId(),
-                    intent.marketId(),
-                    intent.tokenId(),
-                    intent.outcome(),
-                    "open trade has no shares to close",
-                    TelemetryData.data("mode", mode, "tradeId", trade.getId(), "side", intent.side(), "shares", shares),
-                    true
-            );
-            return TradeExecutionResult.rejected(mode, trade.getId(), null, trade.getStatus(), null,
-                    "open trade has no shares to close");
-        }
-
+        BigDecimal shares = sellIntent.shares();
         BigDecimal exitAmountUsd = shares.multiply(exitPrice).setScale(SHARE_SCALE, RoundingMode.HALF_UP);
-        String idempotencyKey = idempotencyKey(intent, mode, trade.getId());
+        String idempotencyKey = idempotencyKey(sellIntent, mode, trade.getId());
         TradeOrderEntity order = TradeOrderEntity.fromIntent(
-                trade.getId(), intent, mode, TradeVenue.PAPER_SIM, idempotencyKey);
+                trade.getId(), sellIntent, mode, TradeVenue.PAPER_SIM, idempotencyKey);
         safetyService.assertNoPaperExitOrderForLiveBackedTrade(order, "PaperExecutionService.beforeExitOrderSave");
         order = tradeOrderRepository.save(order);
         eventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "EXIT_ORDER_CREATED", "paper simulated exit order created", null));
@@ -240,7 +243,14 @@ public class PaperExecutionService {
         order.markFilled(null, exitPrice, shares, exitAmountUsd);
         safetyService.assertNoPaperExitOrderForLiveBackedTrade(order, "PaperExecutionService.beforeFilledExitOrderSave");
         safetyService.assertPaperMayCloseTrade(trade, intent, "PaperExecutionService.beforeMarkClosed");
-        trade.markClosed(exitPrice, shares, exitAmountUsd, fee, order.getCompletedAt());
+        BigDecimal cumulativeExitShares = TradePositionSupport.cumulativeExitShares(trade, shares);
+        BigDecimal cumulativeExitAmountUsd = TradePositionSupport.cumulativeExitAmountUsd(trade, exitAmountUsd);
+        BigDecimal cumulativeExitFeeUsd = TradePositionSupport.cumulativeExitFeeUsd(trade, fee);
+        if (TradePositionSupport.closesPosition(trade, shares)) {
+            trade.markClosed(exitPrice, cumulativeExitShares, cumulativeExitAmountUsd, cumulativeExitFeeUsd, order.getCompletedAt());
+        } else {
+            trade.markPartiallyClosed(exitPrice, cumulativeExitShares, cumulativeExitAmountUsd, cumulativeExitFeeUsd, order.getCompletedAt());
+        }
 
         tradeRepository.save(trade);
         tradeOrderRepository.save(order);
@@ -298,6 +308,24 @@ public class PaperExecutionService {
                 intent.tokenId(),
                 status
         );
+    }
+
+    private Optional<TradeEntity> findLatestActivePositionTrade(TradeIntent intent) {
+        Optional<TradeEntity> trade = intent.botId() != null
+                ? tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
+                intent.botId(),
+                intent.strategyId(),
+                intent.marketId(),
+                intent.tokenId(),
+                TradePositionSupport.EXITABLE_STATUSES
+        )
+                : tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
+                intent.strategyId(),
+                intent.marketId(),
+                intent.tokenId(),
+                TradePositionSupport.EXITABLE_STATUSES
+        );
+        return trade;
     }
 
     private String idempotencyKey(TradeIntent intent, ExecutionMode mode, Long tradeId) {

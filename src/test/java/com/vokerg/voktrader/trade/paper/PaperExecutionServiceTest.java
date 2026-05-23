@@ -5,6 +5,7 @@ import com.vokerg.voktrader.trade.RiskCheckService;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
 import com.vokerg.voktrader.trade.TradeExecutionSafetyService;
 import com.vokerg.voktrader.trade.TradeIntent;
+import com.vokerg.voktrader.trade.TradePositionSupport;
 import com.vokerg.voktrader.trade.TradingProperties;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.RiskSeverity;
@@ -135,11 +136,11 @@ class PaperExecutionServiceTest {
                 Instant.parse("2026-04-30T10:00:00Z")
         );
 
-        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
                 "cost-aware-momentum",
                 "market-id",
                 "up",
-                TradeStatus.OPEN
+                TradePositionSupport.EXITABLE_STATUSES
         )).thenReturn(Optional.of(openTrade));
         when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(tradeOrderRepository.save(any(TradeOrderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -175,11 +176,11 @@ class PaperExecutionServiceTest {
     @Test
     void sellRejectsWhenNoOpenTradeExists() {
         GammaMarketDto market = market();
-        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
                 "cost-aware-momentum",
                 "market-id",
                 "up",
-                TradeStatus.OPEN
+                TradePositionSupport.EXITABLE_STATUSES
         )).thenReturn(Optional.empty());
 
         TradeExecutionResult result = service.execute(TradeIntent.sell(
@@ -192,7 +193,7 @@ class PaperExecutionServiceTest {
         ));
 
         assertThat(result.accepted()).isFalse();
-        assertThat(result.message()).isEqualTo("no open trade to close");
+        assertThat(result.message()).isEqualTo("no open or partially open trade to close");
     }
 
     @Test
@@ -225,12 +226,12 @@ class PaperExecutionServiceTest {
         entryOrder.markSubmitting("entry-local", "{}");
         entryOrder.markFilled("0xec019dfad0d11eedca8c3c47071f4a279dcd74ef548fc7969721f1e7b7a268e7", new BigDecimal("0.51"), new BigDecimal("5"), new BigDecimal("2.55"));
 
-        when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+        when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
                 67L,
                 "MK_GTD_EDGE_A",
                 "market-id",
                 "down",
-                TradeStatus.OPEN
+                TradePositionSupport.EXITABLE_STATUSES
         )).thenReturn(Optional.of(liveTrade));
         when(tradeOrderRepository.findByTradeId(5308L)).thenReturn(List.of(entryOrder));
         when(eventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -296,12 +297,12 @@ class PaperExecutionServiceTest {
         ReflectionTestUtils.setField(entryOrder, "exchangeOrderId", "0xec019dfad0d11eedca8c3c47071f4a279dcd74ef548fc7969721f1e7b7a268e7");
         ReflectionTestUtils.setField(entryOrder, "remoteOrderId", null);
 
-        when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
+        when(tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
                 67L,
                 "MK_GTD_EDGE_A",
                 "market-id",
                 "down",
-                TradeStatus.OPEN
+                TradePositionSupport.EXITABLE_STATUSES
         )).thenReturn(Optional.of(trade));
         when(tradeOrderRepository.findByTradeId(5308L)).thenReturn(List.of(entryOrder));
         when(eventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -330,6 +331,97 @@ class PaperExecutionServiceTest {
         ArgumentCaptor<TradeEventEntity> eventCaptor = ArgumentCaptor.forClass(TradeEventEntity.class);
         verify(eventRepository).save(eventCaptor.capture());
         assertThat(eventCaptor.getValue().getEventType()).isEqualTo("PAPER_EXIT_BLOCKED_LIVE_TRADE");
+    }
+
+    @Test
+    void paperExitCanClosePartiallyOpenTrade() {
+        properties.setPaperFeeRate(BigDecimal.ZERO);
+        GammaMarketDto market = market();
+        TradeEntity trade = TradeEntity.fromIntent(TradeIntent.buy(
+                market,
+                price("up", "Up", "0.49", "0.50"),
+                new BigDecimal("1.00"),
+                "cost-aware-momentum",
+                "cost-aware-momentum",
+                "entry"
+        ), ExecutionMode.PAPER);
+        trade.markPartiallyOpen(
+                new BigDecimal("0.50"),
+                new BigDecimal("4.545453"),
+                new BigDecimal("2.27272650"),
+                BigDecimal.ZERO,
+                Instant.parse("2026-04-30T10:00:00Z")
+        );
+
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
+                "cost-aware-momentum",
+                "market-id",
+                "up",
+                TradePositionSupport.EXITABLE_STATUSES
+        )).thenReturn(Optional.of(trade));
+        when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tradeOrderRepository.save(any(TradeOrderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tradeFillRepository.save(any(TradeFillEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(eventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TradeExecutionResult result = service.execute(TradeIntent.sell(
+                market,
+                price("up", "Up", "0.60", "0.62"),
+                new BigDecimal("4.545453"),
+                "cost-aware-momentum",
+                "cost-aware-momentum",
+                "exit"
+        ));
+
+        assertThat(result.accepted()).isTrue();
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.CLOSED);
+        assertThat(trade.getExitFilledShares()).isEqualByComparingTo("4.545453");
+    }
+
+    @Test
+    void paperExitPartialCloseKeepsPartiallyClosed() {
+        properties.setPaperFeeRate(BigDecimal.ZERO);
+        GammaMarketDto market = market();
+        TradeEntity trade = TradeEntity.fromIntent(TradeIntent.buy(
+                market,
+                price("up", "Up", "0.49", "0.50"),
+                new BigDecimal("1.00"),
+                "cost-aware-momentum",
+                "cost-aware-momentum",
+                "entry"
+        ), ExecutionMode.PAPER);
+        trade.markPartiallyOpen(
+                new BigDecimal("0.50"),
+                new BigDecimal("4.5"),
+                new BigDecimal("2.25"),
+                BigDecimal.ZERO,
+                Instant.parse("2026-04-30T10:00:00Z")
+        );
+
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
+                "cost-aware-momentum",
+                "market-id",
+                "up",
+                TradePositionSupport.EXITABLE_STATUSES
+        )).thenReturn(Optional.of(trade));
+        when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tradeOrderRepository.save(any(TradeOrderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tradeFillRepository.save(any(TradeFillEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(eventRepository.save(any(TradeEventEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TradeExecutionResult result = service.execute(TradeIntent.sell(
+                market,
+                price("up", "Up", "0.60", "0.62"),
+                new BigDecimal("2.0"),
+                "cost-aware-momentum",
+                "cost-aware-momentum",
+                "exit"
+        ));
+
+        assertThat(result.accepted()).isTrue();
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.PARTIALLY_CLOSED);
+        assertThat(trade.getExitFilledShares()).isEqualByComparingTo("2.0");
+        assertThat(TradePositionSupport.heldShares(trade)).isEqualByComparingTo("2.5");
     }
 
     private GammaMarketDto market() {

@@ -211,6 +211,77 @@ class OrderManagerTest {
         verify(reconciliationService).reconcileOrder(order, OrderReconciliationSource.POST_CANCEL);
     }
 
+    @Test
+    void orderManagerSellDoesNotCreateNewTrade() {
+        TradeEntity trade = TradeEntity.fromIntent(intent(TradeSide.BUY), ExecutionMode.LIVE);
+        ReflectionTestUtils.setField(trade, "id", 77L);
+        trade.markPartiallyOpen(
+                new BigDecimal("0.50"),
+                new BigDecimal("4.545453"),
+                new BigDecimal("2.27272650"),
+                BigDecimal.ZERO,
+                Instant.parse("2026-05-09T12:00:00Z")
+        );
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
+                "strategy",
+                "market-id",
+                "token-id",
+                TradePositionSupport.EXITABLE_STATUSES
+        )).thenReturn(Optional.of(trade));
+        when(pythonExecutorClient.submit(any(ExecutorOrderCommand.class))).thenReturn(new ExecutorOrderResponse(
+                true,
+                true,
+                "MATCHED",
+                "remote-exit",
+                new BigDecimal("0.52"),
+                new BigDecimal("4.545453"),
+                new BigDecimal("2.36363556"),
+                BigDecimal.ZERO,
+                "matched",
+                "{}",
+                Instant.parse("2026-05-09T12:00:05Z")
+        ));
+
+        OrderLifecycleResult result = orderManager.submitOrder(intent(TradeSide.SELL), ExecutionMode.LIVE);
+
+        assertThat(result.success()).isTrue();
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.CLOSED);
+
+        ArgumentCaptor<TradeOrderEntity> orderCaptor = ArgumentCaptor.forClass(TradeOrderEntity.class);
+        verify(tradeOrderRepository, org.mockito.Mockito.atLeastOnce()).save(orderCaptor.capture());
+        assertThat(orderCaptor.getAllValues().getLast().getTradeId()).isEqualTo(77L);
+
+        ArgumentCaptor<TradeEntity> tradeCaptor = ArgumentCaptor.forClass(TradeEntity.class);
+        verify(tradeRepository, org.mockito.Mockito.atLeastOnce()).save(tradeCaptor.capture());
+        assertThat(tradeCaptor.getAllValues()).allMatch(saved -> saved == trade);
+    }
+
+    @Test
+    void orderManagerRejectedExitPreservesPosition() {
+        TradeEntity trade = TradeEntity.fromIntent(intent(TradeSide.BUY), ExecutionMode.LIVE);
+        ReflectionTestUtils.setField(trade, "id", 78L);
+        trade.markPartiallyOpen(
+                new BigDecimal("0.50"),
+                new BigDecimal("4.5"),
+                new BigDecimal("2.25"),
+                BigDecimal.ZERO,
+                Instant.parse("2026-05-09T12:00:00Z")
+        );
+        when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
+                "strategy",
+                "market-id",
+                "token-id",
+                TradePositionSupport.EXITABLE_STATUSES
+        )).thenReturn(Optional.of(trade));
+        when(pythonExecutorClient.submit(any(ExecutorOrderCommand.class))).thenReturn(ExecutorOrderResponse.rejected("exchange rejected"));
+
+        OrderLifecycleResult result = orderManager.submitOrder(intent(TradeSide.SELL), ExecutionMode.LIVE);
+
+        assertThat(result.success()).isFalse();
+        assertThat(trade.getStatus()).isEqualTo(TradeStatus.PARTIALLY_OPEN);
+        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.REJECTED);
+    }
+
     private TradeIntent intent(TradeSide side) {
         return side == TradeSide.BUY
                 ? TradeIntent.buy(null, market(), price(), new BigDecimal("1.00"), TradeOrderType.GTC, true, new BigDecimal("0.50"), "strategy", "rule", "entry")

@@ -197,12 +197,6 @@ public class LiveExecutionService {
     }
 
     private TradeExecutionResult executeSell(TradeIntent intent, ExecutionMode mode) {
-        if (intent.shares() == null || intent.shares().compareTo(BigDecimal.ZERO) <= 0) {
-            emitRejected(intent, mode, null, null, "LIVE exit rejected before executor call: sell intent has no positive shares",
-                    TelemetryData.data("shares", intent.shares()));
-            return TradeExecutionResult.rejected(mode, null, null, null, null,
-                    "LIVE exit rejected before executor call: sell intent has no positive shares");
-        }
         if (intent.orderType().canRestOnBook() && executorProperties.isRequireImmediateFill()) {
             String message = "LIVE maker exit rejected before executor call: "
                     + "orderType=" + intent.orderType()
@@ -211,19 +205,28 @@ public class LiveExecutionService {
             return TradeExecutionResult.rejected(mode, null, null, null, null, message);
         }
 
-        TradeEntity trade = findLatestTokenTrade(intent, TradeStatus.OPEN).orElse(null);
+        TradeEntity trade = findLatestActivePositionTrade(intent).orElse(null);
         if (trade == null) {
-            emitRejected(intent, mode, null, null, "No open live trade to close for marketId=" + intent.marketId(), TelemetryData.data("side", intent.side()));
+            emitRejected(intent, mode, null, null, "No open or partially open live trade to close for marketId=" + intent.marketId(), TelemetryData.data("side", intent.side()));
             return TradeExecutionResult.rejected(mode, null, null, null, null,
-                    "No open live trade to close for marketId=" + intent.marketId());
+                    "No open or partially open live trade to close for marketId=" + intent.marketId());
         }
 
-        String idempotencyKey = idempotencyKey(intent, mode, trade.getId());
+        TradePositionSupport.ExitPlan exitPlan = TradePositionSupport.planExit(trade, intent.shares());
+        if (!exitPlan.hasRequestedShares()) {
+            String message = "LIVE exit rejected before executor call: active position has no held shares to close";
+            emitRejected(intent, mode, trade, null, message,
+                    TelemetryData.data("heldShares", exitPlan.heldShares(), "requestedShares", intent.shares()));
+            return TradeExecutionResult.rejected(mode, trade.getId(), null, trade.getStatus(), null, message);
+        }
+        TradeIntent sellIntent = TradePositionSupport.withSellShares(intent, exitPlan.requestedShares());
+
+        String idempotencyKey = idempotencyKey(sellIntent, mode, trade.getId());
         TradeOrderEntity order = tradeOrderRepository.save(TradeOrderEntity.fromIntent(
-                trade.getId(), intent, mode, TradeVenue.POLYMARKET, idempotencyKey));
+                trade.getId(), sellIntent, mode, TradeVenue.POLYMARKET, idempotencyKey));
         tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "EXIT_ORDER_CREATED", mode + " exit order created", null));
 
-        ExecutorOrderCommand command = ExecutorOrderCommand.fromIntent(intent, idempotencyKey, executorProperties.isDryRun());
+        ExecutorOrderCommand command = ExecutorOrderCommand.fromIntent(sellIntent, idempotencyKey, executorProperties.isDryRun());
         order.markSubmitting(command.idempotencyKey(), toJson(command));
         order = tradeOrderRepository.save(order);
 
@@ -232,10 +235,10 @@ public class LiveExecutionService {
 
         if (!response.accepted()) {
             String message = "LIVE exit rejected: " + response.safeMessage();
-            order.markFailed(message, response.rawResponse());
+            order.markRejected(message, response.rawResponse());
             tradeOrderRepository.save(order);
             tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "LIVE_EXIT_REJECTED", message, response.rawResponse()));
-            emitRejected(intent, mode, trade, order, message, TelemetryData.data("executorStatus", response.status(), "executorMessage", response.safeMessage()));
+            emitRejected(sellIntent, mode, trade, order, message, TelemetryData.data("executorStatus", response.status(), "executorMessage", response.safeMessage()));
             return TradeExecutionResult.rejected(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), message);
         }
 
@@ -245,16 +248,18 @@ public class LiveExecutionService {
                 order.markFailed(message, response.rawResponse());
                 tradeOrderRepository.save(order);
                 tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "LIVE_EXIT_UNFILLED", message, response.rawResponse()));
-                emitRejected(intent, mode, trade, order, message, TelemetryData.data("executorStatus", response.status(), "executorMessage", response.safeMessage()));
+                emitRejected(sellIntent, mode, trade, order, message, TelemetryData.data("executorStatus", response.status(), "executorMessage", response.safeMessage()));
                 return TradeExecutionResult.rejected(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), message);
             }
 
             order.markSubmitted(response.exchangeOrderId(), response.rawResponse());
+            trade.markExitPending();
+            tradeRepository.save(trade);
             tradeOrderRepository.save(order);
             tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), null, "LIVE_EXIT_SUBMITTED", response.safeMessage(), response.rawResponse()));
             emitExecution(
                     "LIVE_EXIT_SUBMITTED",
-                    intent,
+                    sellIntent,
                     mode,
                     trade,
                     order,
@@ -264,10 +269,10 @@ public class LiveExecutionService {
             return TradeExecutionResult.accepted(mode, trade.getId(), order.getId(), trade.getStatus(), order.getStatus(), "live exit submitted");
         }
 
-        BigDecimal fillPrice = firstNonNull(response.averagePrice(), intent.expectedPrice());
-        BigDecimal fillShares = firstNonNull(response.filledShares(), firstNonNull(intent.shares(), trade.getEntryFilledShares()));
+        BigDecimal fillPrice = firstNonNull(response.averagePrice(), sellIntent.expectedPrice());
+        BigDecimal fillShares = firstNonNull(response.filledShares(), sellIntent.shares());
         BigDecimal fillAmountUsd = firstNonNull(response.filledAmountUsd(), fillPrice.multiply(fillShares));
-        BigDecimal feeUsd = resolveFeeUsd(intent, response, fillShares, fillPrice);
+        BigDecimal feeUsd = resolveFeeUsd(sellIntent, response, fillShares, fillPrice);
 
         TradeFillEntity fill = tradeFillRepository.save(TradeFillEntity.polymarket(
                 trade.getId(),
@@ -282,13 +287,20 @@ public class LiveExecutionService {
         ));
 
         order.markFilled(response.exchangeOrderId(), fillPrice, fillShares, fillAmountUsd);
-        trade.markClosed(fillPrice, fillShares, fillAmountUsd, feeUsd, fill.getFilledAt());
+        BigDecimal cumulativeExitShares = TradePositionSupport.cumulativeExitShares(trade, fillShares);
+        BigDecimal cumulativeExitAmountUsd = TradePositionSupport.cumulativeExitAmountUsd(trade, fillAmountUsd);
+        BigDecimal cumulativeExitFeeUsd = TradePositionSupport.cumulativeExitFeeUsd(trade, feeUsd);
+        if (TradePositionSupport.closesPosition(trade, fillShares)) {
+            trade.markClosed(fillPrice, cumulativeExitShares, cumulativeExitAmountUsd, cumulativeExitFeeUsd, fill.getFilledAt());
+        } else {
+            trade.markPartiallyClosed(fillPrice, cumulativeExitShares, cumulativeExitAmountUsd, cumulativeExitFeeUsd, fill.getFilledAt());
+        }
         tradeOrderRepository.save(order);
         tradeRepository.save(trade);
         tradeEventRepository.save(TradeEventEntity.of(trade.getId(), order.getId(), fill.getId(), "LIVE_EXIT_FILLED", response.safeMessage(), response.rawResponse()));
         emitExecution(
                 "LIVE_EXIT_FILLED",
-                intent,
+                sellIntent,
                 mode,
                 trade,
                 order,
@@ -362,8 +374,8 @@ public class LiveExecutionService {
                     intent.botId(),
                     intent.strategyId(),
                     intent.marketId(),
-                    intent.tokenId(),
-                    status
+                intent.tokenId(),
+                status
             );
         }
         return tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusOrderByCreatedAtDesc(
@@ -372,6 +384,24 @@ public class LiveExecutionService {
                 intent.tokenId(),
                 status
         );
+    }
+
+    private java.util.Optional<TradeEntity> findLatestActivePositionTrade(TradeIntent intent) {
+        java.util.Optional<TradeEntity> trade = intent.botId() != null
+                ? tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
+                intent.botId(),
+                intent.strategyId(),
+                intent.marketId(),
+                intent.tokenId(),
+                TradePositionSupport.EXITABLE_STATUSES
+        )
+                : tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
+                intent.strategyId(),
+                intent.marketId(),
+                intent.tokenId(),
+                TradePositionSupport.EXITABLE_STATUSES
+        );
+        return trade;
     }
 
     private String botScope(Long botId) {
