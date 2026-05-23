@@ -220,11 +220,13 @@ public class OrderReconciliationService {
     public void applyImmediateFill(TradeEntity trade, TradeOrderEntity order, ExecutorOrderResponse response) {
         BigDecimal fee = response.feeUsd();
         boolean feeKnown = response.feeUsd() != null;
+        BigDecimal filledShares = zeroIfNull(response.filledShares());
+        BigDecimal filledAmountUsd = zeroIfNull(response.filledAmountUsd());
         order.applyFillState(
                 TradeOrderStatus.FILLED,
                 response.averagePrice(),
-                zeroIfNull(response.filledShares()),
-                zeroIfNull(response.filledAmountUsd()),
+                filledShares,
+                filledAmountUsd,
                 BigDecimal.ZERO,
                 fee,
                 feeKnown,
@@ -235,7 +237,14 @@ public class OrderReconciliationService {
         if (order.getPhase() == TradeOrderPhase.ENTRY) {
             trade.markOpen(response.averagePrice(), response.filledShares(), response.filledAmountUsd(), fee, response.exchangeTimestamp());
         } else {
-            trade.markClosed(response.averagePrice(), response.filledShares(), response.filledAmountUsd(), fee, response.exchangeTimestamp());
+            BigDecimal cumulativeExitShares = TradePositionSupport.cumulativeExitShares(trade, filledShares);
+            BigDecimal cumulativeExitAmountUsd = TradePositionSupport.cumulativeExitAmountUsd(trade, filledAmountUsd);
+            BigDecimal cumulativeExitFeeUsd = TradePositionSupport.cumulativeExitFeeUsd(trade, fee);
+            if (TradePositionSupport.closesPosition(trade, filledShares)) {
+                trade.markClosed(response.averagePrice(), cumulativeExitShares, cumulativeExitAmountUsd, cumulativeExitFeeUsd, response.exchangeTimestamp());
+            } else {
+                trade.markPartiallyClosed(response.averagePrice(), cumulativeExitShares, cumulativeExitAmountUsd, cumulativeExitFeeUsd, response.exchangeTimestamp());
+            }
         }
         tradeRepository.save(trade);
     }
@@ -518,12 +527,61 @@ public class OrderReconciliationService {
 
     private void reconcileExitTrade(TradeEntity trade, TradeOrderEntity order) {
         if (order.getStatus() == TradeOrderStatus.FILLED) {
-            trade.markClosed(order.getAvgFillPrice(), order.getFilledShares(), order.getFilledAmountUsd(), order.getRealizedFeeUsd(), order.getCompletedAt());
+            ExitTotals totals = aggregateExitTotals(trade, order);
+            if (closesPosition(trade, totals.shares())) {
+                trade.markClosed(order.getAvgFillPrice(), totals.shares(), totals.amountUsd(), totals.feeUsd(), order.getCompletedAt());
+            } else {
+                trade.markPartiallyClosed(order.getAvgFillPrice(), totals.shares(), totals.amountUsd(), totals.feeUsd(), order.getCompletedAt());
+            }
         } else if (order.getStatus() == TradeOrderStatus.PARTIALLY_FILLED) {
-            trade.markPartiallyClosed(order.getAvgFillPrice(), order.getFilledShares(), order.getFilledAmountUsd(), order.getRealizedFeeUsd(), order.getCompletedAt());
+            ExitTotals totals = aggregateExitTotals(trade, order);
+            if (closesPosition(trade, totals.shares())) {
+                trade.markClosed(order.getAvgFillPrice(), totals.shares(), totals.amountUsd(), totals.feeUsd(), order.getCompletedAt());
+            } else {
+                trade.markPartiallyClosed(order.getAvgFillPrice(), totals.shares(), totals.amountUsd(), totals.feeUsd(), order.getCompletedAt());
+            }
         } else if (order.getStatus() == TradeOrderStatus.RESTING || order.getStatus() == TradeOrderStatus.SUBMITTED) {
             trade.markExitPending();
         }
+    }
+
+    private ExitTotals aggregateExitTotals(TradeEntity trade, TradeOrderEntity order) {
+        BigDecimal shares = BigDecimal.ZERO;
+        BigDecimal amountUsd = BigDecimal.ZERO;
+        BigDecimal feeUsd = BigDecimal.ZERO;
+        boolean feeKnown = true;
+        boolean hasSellFill = false;
+        for (TradeFillEntity fill : tradeFillRepository.findByTradeId(trade.getId())) {
+            if (fill.getSide() != TradeSide.SELL) {
+                continue;
+            }
+            hasSellFill = true;
+            BigDecimal fillShares = zeroIfNull(fill.getShares());
+            shares = shares.add(fillShares);
+            amountUsd = amountUsd.add(fill.getAmountUsd() == null && fill.getPrice() != null
+                    ? fill.getPrice().multiply(fillShares)
+                    : zeroIfNull(fill.getAmountUsd()));
+            if (Boolean.TRUE.equals(fill.getFeeKnown())) {
+                feeUsd = feeUsd.add(zeroIfNull(fill.getFeeUsd()));
+            } else {
+                feeKnown = false;
+            }
+        }
+        if (!hasSellFill) {
+            return new ExitTotals(
+                    zeroIfNull(order.getFilledShares()),
+                    zeroIfNull(order.getFilledAmountUsd()),
+                    order.getRealizedFeeUsd(),
+                    order.getRealizedFeeUsd() != null
+            );
+        }
+        return new ExitTotals(shares, amountUsd, feeKnown ? feeUsd : null, feeKnown);
+    }
+
+    private boolean closesPosition(TradeEntity trade, BigDecimal cumulativeExitShares) {
+        BigDecimal entryShares = zeroIfNull(trade.getEntryFilledShares());
+        return entryShares.compareTo(BigDecimal.ZERO) > 0
+                && zeroIfNull(cumulativeExitShares).compareTo(entryShares) >= 0;
     }
 
     private void emitCancellationIfNew(
@@ -823,6 +881,14 @@ public class OrderReconciliationService {
             boolean feeKnown,
             BigDecimal avgPrice,
             LiquidityRole role
+    ) {
+    }
+
+    private record ExitTotals(
+            BigDecimal shares,
+            BigDecimal amountUsd,
+            BigDecimal feeUsd,
+            boolean feeKnown
     ) {
     }
 }
