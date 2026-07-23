@@ -16,7 +16,7 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 
 ## Current next tasks
 
-After the initial transformation PR is merged, the next independent tasks are expected to be:
+After the transformation baseline is merged, the next independent tasks are:
 
 1. `T010` - live profile capability-only.
 2. `T040` - market WebSocket heartbeat and gap supervision. Parallel infrastructure work.
@@ -29,7 +29,7 @@ Central risk work starts with `T011` and then `T012`.
 ## P0 - Transformation foundation
 | Task | Status | Priority | Depends On | Parallelizable | Title |
 | --- | --- | --- | --- | --- | --- |
-| [T000](./PHASE-0-foundation.md#t000) | READY | P0 | none | no | Create transformation baseline |
+| [T000](./PHASE-0-foundation.md#t000) | DONE | P0 | none | no | Create transformation baseline |
 
 ## P1 - Stop the bleeding
 | Task | Status | Priority | Depends On | Parallelizable | Title |
