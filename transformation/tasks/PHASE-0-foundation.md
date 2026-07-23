@@ -6,14 +6,14 @@ This ledger contains the detailed task contracts for this phase. Agents claim an
 
 ## T000 - Create transformation baseline
 
-Status: READY
+Status: DONE
 Priority: P0
 Phase: P0 - Transformation foundation
-Owner: unclaimed
-Branch:
-PR:
-Started:
-Completed:
+Owner: ChatGPT transformation bootstrap
+Branch: transformation/2.0
+PR: #6
+Started: 2026-07-23T15:20:00Z
+Completed: 2026-07-23T15:37:49Z
 Depends On: none
 Parallelizable: no
 
@@ -33,15 +33,15 @@ This task is part of the Voktrader 2.0 transformation. Read `transformation/MAST
 
 ## Acceptance criteria
 
-- [ ] A fresh agent can read AGENTS.md and identify the next task.
-- [ ] The original audit content and source checksum are present under transformation/original.
-- [ ] The PR explains that no production code was changed.
+- [x] A fresh agent can read AGENTS.md and identify the next task.
+- [x] The original audit content and source checksum are present under transformation/original.
+- [x] The PR explains that no production code was changed.
 
 ## Required tests
 
 - Validate all task links and task IDs.
 - Confirm branch and PR base/head are correct.
-- Record exact checks and results in `transformation/reports/T000-YYYY-MM-DD-create-transformation-baseline.md`.
+- Record exact checks and results in `transformation/reports/T000-2026-07-23-create-transformation-baseline.md`.
 
 ## Safety notes
 
@@ -49,12 +49,6 @@ This task is part of the Voktrader 2.0 transformation. Read `transformation/MAST
 - Do not tune strategy thresholds.
 - Do not modify production code in the baseline PR.
 
-## Completion update protocol
+## Completion update
 
-When the PR is complete:
-
-1. Change `Status` to `DONE`, `BLOCKED`, or `PARTIAL`.
-2. Fill `Branch`, `PR`, `Started`, and `Completed`.
-3. Update `transformation/tasks/INDEX.md`.
-4. Add the required implementation report.
-5. Add or reorder follow-up tasks if new information changes the plan.
+Task completed in PR #6. No production source or configuration was changed. The next sequential task is T010; T040, T042, T044, and T050 are explicitly marked as parallelizable infrastructure tasks.
