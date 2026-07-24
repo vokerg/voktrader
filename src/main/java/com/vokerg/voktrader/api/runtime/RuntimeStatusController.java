@@ -5,6 +5,7 @@ import com.vokerg.voktrader.bot.BotConfigRepository;
 import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.strategy.StrategyProperties;
 import com.vokerg.voktrader.strategy.v2.StrategyV2Properties;
+import com.vokerg.voktrader.trade.LiveArmService;
 import com.vokerg.voktrader.trade.OrderLayerProperties;
 import com.vokerg.voktrader.trade.TradingProperties;
 import org.springframework.core.env.Environment;
@@ -26,6 +27,7 @@ public class RuntimeStatusController {
     private final Environment environment;
     private final TradingProperties tradingProperties;
     private final ExecutorProperties executorProperties;
+    private final LiveArmService liveArmService;
     private final OrderLayerProperties orderLayerProperties;
     private final StrategyProperties strategyProperties;
     private final StrategyV2Properties strategyV2Properties;
@@ -35,6 +37,7 @@ public class RuntimeStatusController {
             Environment environment,
             TradingProperties tradingProperties,
             ExecutorProperties executorProperties,
+            LiveArmService liveArmService,
             OrderLayerProperties orderLayerProperties,
             StrategyProperties strategyProperties,
             StrategyV2Properties strategyV2Properties,
@@ -43,6 +46,7 @@ public class RuntimeStatusController {
         this.environment = environment;
         this.tradingProperties = tradingProperties;
         this.executorProperties = executorProperties;
+        this.liveArmService = liveArmService;
         this.orderLayerProperties = orderLayerProperties;
         this.strategyProperties = strategyProperties;
         this.strategyV2Properties = strategyV2Properties;
@@ -57,6 +61,7 @@ public class RuntimeStatusController {
                 tradingProperties.getMode().name(),
                 tradingProperties.isKillSwitchEnabled(),
                 tradingProperties.isLiveEnabled(),
+                liveArmService.status(),
                 tradingProperties.getMaxOrderUsd(),
                 tradingProperties.getMaxTradesPerMarket(),
                 tradingProperties.getMaxOpenLiveTrades(),
@@ -92,6 +97,7 @@ public class RuntimeStatusController {
             String tradingMode,
             boolean killSwitchEnabled,
             boolean liveEnabled,
+            LiveArmService.LiveArmStatus liveArm,
             BigDecimal maxOrderUsd,
             int maxTradesPerMarket,
             int maxOpenLiveTrades,
