@@ -2,16 +2,15 @@ package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.marketdata.LatestPriceState;
-import com.vokerg.voktrader.trade.ExecutionRouter;
+import com.vokerg.voktrader.trade.EntryIntent;
+import com.vokerg.voktrader.trade.LegacyStrategyIntentAdapter;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
-import com.vokerg.voktrader.trade.TradeIntent;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 @Deprecated
 public class SimpleDownCheapTightSpreadStrategy implements TradingStrategy {
 
@@ -19,9 +18,40 @@ public class SimpleDownCheapTightSpreadStrategy implements TradingStrategy {
 
     private final LatestPriceState latestPriceState;
     private final TrackedMarketState trackedMarketState;
-    private final ExecutionRouter executionRouter;
+    private final LegacyStrategyIntentAdapter intentAdapter;
     private final StrategyProperties strategyProperties;
     private final StrategyTimeWindow strategyTimeWindow;
+
+    @Autowired
+    public SimpleDownCheapTightSpreadStrategy(
+            LatestPriceState latestPriceState,
+            TrackedMarketState trackedMarketState,
+            LegacyStrategyIntentAdapter intentAdapter,
+            StrategyProperties strategyProperties,
+            StrategyTimeWindow strategyTimeWindow
+    ) {
+        this.latestPriceState = latestPriceState;
+        this.trackedMarketState = trackedMarketState;
+        this.intentAdapter = intentAdapter;
+        this.strategyProperties = strategyProperties;
+        this.strategyTimeWindow = strategyTimeWindow;
+    }
+
+    public SimpleDownCheapTightSpreadStrategy(
+            LatestPriceState latestPriceState,
+            TrackedMarketState trackedMarketState,
+            Object legacyRouter,
+            StrategyProperties strategyProperties,
+            StrategyTimeWindow strategyTimeWindow
+    ) {
+        this(
+                latestPriceState,
+                trackedMarketState,
+                LegacyStrategyIntentAdapter.fromLegacyRouter(legacyRouter),
+                strategyProperties,
+                strategyTimeWindow
+        );
+    }
 
     @Override
     public String id() {
@@ -71,7 +101,7 @@ public class SimpleDownCheapTightSpreadStrategy implements TradingStrategy {
             return;
         }
 
-        TradeExecutionResult result = executionRouter.route(TradeIntent.buy(
+        TradeExecutionResult result = intentAdapter.routeEntry(EntryIntent.buy(
                 market,
                 down,
                 config.orderSizeUsdOrDefault(),

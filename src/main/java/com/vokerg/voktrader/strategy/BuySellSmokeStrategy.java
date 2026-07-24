@@ -4,15 +4,16 @@ import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.marketdata.LatestPriceState;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-import com.vokerg.voktrader.trade.ExecutionRouter;
+import com.vokerg.voktrader.trade.EntryIntent;
+import com.vokerg.voktrader.trade.ExitIntent;
+import com.vokerg.voktrader.trade.LegacyStrategyIntentAdapter;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
-import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeStatus;
+import com.vokerg.voktrader.trade.persistence.TradeRepository;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.Comparator;
@@ -20,7 +21,6 @@ import java.util.Optional;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 @Deprecated
 public class BuySellSmokeStrategy implements TradingStrategy {
 
@@ -28,10 +28,45 @@ public class BuySellSmokeStrategy implements TradingStrategy {
 
     private final LatestPriceState latestPriceState;
     private final TrackedMarketState trackedMarketState;
-    private final ExecutionRouter executionRouter;
+    private final LegacyStrategyIntentAdapter intentAdapter;
     private final TradeRepository tradeRepository;
     private final StrategyProperties strategyProperties;
     private final StrategyTimeWindow strategyTimeWindow;
+
+    @Autowired
+    public BuySellSmokeStrategy(
+            LatestPriceState latestPriceState,
+            TrackedMarketState trackedMarketState,
+            LegacyStrategyIntentAdapter intentAdapter,
+            TradeRepository tradeRepository,
+            StrategyProperties strategyProperties,
+            StrategyTimeWindow strategyTimeWindow
+    ) {
+        this.latestPriceState = latestPriceState;
+        this.trackedMarketState = trackedMarketState;
+        this.intentAdapter = intentAdapter;
+        this.tradeRepository = tradeRepository;
+        this.strategyProperties = strategyProperties;
+        this.strategyTimeWindow = strategyTimeWindow;
+    }
+
+    public BuySellSmokeStrategy(
+            LatestPriceState latestPriceState,
+            TrackedMarketState trackedMarketState,
+            Object legacyRouter,
+            TradeRepository tradeRepository,
+            StrategyProperties strategyProperties,
+            StrategyTimeWindow strategyTimeWindow
+    ) {
+        this(
+                latestPriceState,
+                trackedMarketState,
+                LegacyStrategyIntentAdapter.fromLegacyRouter(legacyRouter),
+                tradeRepository,
+                strategyProperties,
+                strategyTimeWindow
+        );
+    }
 
     @Override
     public String id() {
@@ -97,7 +132,7 @@ public class BuySellSmokeStrategy implements TradingStrategy {
                 continue;
             }
 
-            TradeExecutionResult result = executionRouter.route(TradeIntent.sell(
+            TradeExecutionResult result = intentAdapter.routeExit(ExitIntent.sell(
                     market,
                     price,
                     trade.getEntryFilledShares(),
@@ -132,7 +167,7 @@ public class BuySellSmokeStrategy implements TradingStrategy {
 
         var config = strategyProperties.buySellSmokeOrDefault();
 
-        TradeExecutionResult result = executionRouter.route(TradeIntent.buy(
+        TradeExecutionResult result = intentAdapter.routeEntry(EntryIntent.buy(
                 market,
                 candidate,
                 config.orderSizeUsdOrDefault(),
