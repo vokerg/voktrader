@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - task/T011-typed-entry-exit-intents
+  pull_request:
+    branches:
+      - transformation/2.0
 
 jobs:
   test:
