@@ -51,6 +51,27 @@ public class StrategyEntrySupport {
         this(latestPriceState, trackedMarketState, strategyTimeWindow, tradeSupport, intentAdapter, eventLogger, marketDataProvider, Clock.systemUTC());
     }
 
+    public StrategyEntrySupport(
+            LatestPriceState latestPriceState,
+            TrackedMarketState trackedMarketState,
+            StrategyTimeWindow strategyTimeWindow,
+            StrategyTradeSupport tradeSupport,
+            Object legacyRouter,
+            TradingEventLogger eventLogger,
+            StrategyMarketDataProvider marketDataProvider
+    ) {
+        this(
+                latestPriceState,
+                trackedMarketState,
+                strategyTimeWindow,
+                tradeSupport,
+                LegacyStrategyIntentAdapter.fromLegacyRouter(legacyRouter),
+                eventLogger,
+                marketDataProvider,
+                Clock.systemUTC()
+        );
+    }
+
     StrategyEntrySupport(
             LatestPriceState latestPriceState,
             TrackedMarketState trackedMarketState,
