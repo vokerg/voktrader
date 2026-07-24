@@ -2,13 +2,11 @@ package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeStatus;
-import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
-import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
-import com.vokerg.voktrader.trade.persistence.TradeRiskCheckRepository;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -33,7 +31,13 @@ class RiskCheckServiceTest {
     private final TradingProperties properties = new TradingProperties();
     private final TradeRepository tradeRepository = mock(TradeRepository.class);
     private final TradeOrderRepository tradeOrderRepository = mock(TradeOrderRepository.class);
-    private final RiskCheckService service = new RiskCheckService(properties, tradeRepository, tradeOrderRepository);
+    private final LiveArmService liveArmService = mock(LiveArmService.class);
+    private final RiskCheckService service = new RiskCheckService(properties, tradeRepository, tradeOrderRepository, liveArmService);
+
+    @BeforeEach
+    void setUp() {
+        when(liveArmService.status()).thenReturn(armedStatus());
+    }
 
     @Test
     void maxTradesPerMarketIgnoresRejectedTrades() {
@@ -148,6 +152,45 @@ class RiskCheckServiceTest {
     }
 
     @Test
+    void unarmedLiveEntryAddsBlockingPersistableRiskCheck() {
+        properties.setAllowedStrategyIds(Set.of("cost-aware-momentum"));
+        properties.setMaxOrderUsd(new BigDecimal("1.00"));
+        properties.setMaxSpread(new BigDecimal("0.03"));
+        properties.setMaxPriceAgeMs(1500);
+        properties.setMinSecondsToExpiry(30);
+        properties.setMaxTradesPerMarket(5);
+        properties.setMaxOpenLiveTrades(3);
+        properties.setKillSwitchEnabled(false);
+        properties.setLiveEnabled(true);
+        when(liveArmService.status()).thenReturn(unarmedStatus());
+        when(tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(any(), any(), any(), anyCollection())).thenReturn(0L);
+        when(tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(any(), any(), anyCollection())).thenReturn(0L);
+        when(tradeOrderRepository.findByClientOrderId("key")).thenReturn(Optional.empty());
+        when(tradeRepository.countLiveCapacityTrades(eq(List.of(ExecutionMode.LIVE)), anyCollection(), any(Instant.class)))
+                .thenReturn(0L);
+
+        RiskAssessment assessment = service.assess(TradeIntent.buy(
+                market(),
+                price(),
+                new BigDecimal("1.00"),
+                "cost-aware-momentum",
+                "cost-aware-momentum",
+                "entry"
+        ), ExecutionMode.LIVE, null, null, "key");
+
+        assertThat(assessment.passed()).isFalse();
+        assertThat(assessment.checks())
+                .filteredOn(check -> "LIVE_ARM".equals(check.getCheckName()))
+                .singleElement()
+                .satisfies(check -> {
+                    assertThat(check.isPassed()).isFalse();
+                    assertThat(check.getObservedValue()).isEqualTo("false");
+                    assertThat(check.getLimitValue()).isEqualTo("true");
+                    assertThat(check.getMessage()).contains("live arm is not active");
+                });
+    }
+
+    @Test
     void liveOpenTradeLimitCountsActiveLiveTradesBeforeCreatingCurrentTrade() {
         properties.setAllowedStrategyIds(Set.of("cost-aware-momentum"));
         properties.setMaxOrderUsd(new BigDecimal("1.00"));
@@ -228,6 +271,36 @@ class RiskCheckServiceTest {
         verify(tradeRepository).countLiveCapacityTrades(eq(List.of(ExecutionMode.LIVE)), statusCaptor.capture(), any(Instant.class));
         assertThat(statusCaptor.getValue())
                 .contains(TradeStatus.PARTIALLY_OPEN, TradeStatus.PARTIALLY_CLOSED);
+    }
+
+    private LiveArmService.LiveArmStatus armedStatus() {
+        return new LiveArmService.LiveArmStatus(
+                true,
+                Instant.parse("2026-07-24T06:00:00Z"),
+                Instant.parse("2026-07-24T06:15:00Z"),
+                "0xexpected",
+                true,
+                true,
+                true,
+                true,
+                List.of(),
+                List.of()
+        );
+    }
+
+    private LiveArmService.LiveArmStatus unarmedStatus() {
+        return new LiveArmService.LiveArmStatus(
+                false,
+                null,
+                null,
+                null,
+                true,
+                true,
+                true,
+                false,
+                List.of(),
+                List.of("live arm is not active")
+        );
     }
 
     private GammaMarketDto market() {
