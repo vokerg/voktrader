@@ -6,14 +6,14 @@ This ledger contains the detailed task contracts for this phase. Agents claim an
 
 ## T010 - Make live profile capability-only
 
-Status: IN_PROGRESS
+Status: DONE
 Priority: P0
 Phase: P1 - Stop the bleeding
 Owner: openai-gpt-5.6-thinking
 Branch: task/T010-live-profile-capability-only
 PR: #7
 Started: 2026-07-24T05:38:12Z
-Completed:
+Completed: 2026-07-24T06:16:00Z
 Depends On: T000
 Parallelizable: no
 
@@ -34,9 +34,9 @@ Read `transformation/MASTER_PLAN.md` and `AGENTS.md` before implementation. Keep
 
 ## Acceptance criteria
 
-- [ ] Live-capable profile starts in unarmed state.
-- [ ] Submitting a live entry while unarmed is rejected before executor submit.
-- [ ] Exit and cancel remain available for existing live orders/positions.
+- [x] Live-capable profile starts in unarmed state.
+- [x] Submitting a live entry while unarmed is rejected before executor submit.
+- [x] Exit and cancel remain available for existing live orders/positions.
 
 ## Required tests
 
