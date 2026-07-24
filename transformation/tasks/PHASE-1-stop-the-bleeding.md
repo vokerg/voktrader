@@ -51,14 +51,14 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 
 ## T011 - Introduce typed entry and exit intent boundary
 
-Status: READY
+Status: DONE
 Priority: P0
 Phase: P1 - Stop the bleeding
-Owner: unclaimed
-Branch:
-PR:
-Started:
-Completed:
+Owner: openai-gpt-5.6-thinking
+Branch: task/T011-typed-entry-exit-intents
+PR: #8
+Started: 2026-07-24T18:16:52Z
+Completed: 2026-07-24T18:41:51Z
 Depends On: T010
 Parallelizable: no
 
@@ -75,9 +75,9 @@ Replace generic strategy-to-execution plumbing with explicit EntryIntent and Exi
 
 ## Acceptance criteria
 
-- [ ] No strategy class directly selects live order gateway or executor route.
-- [ ] Entry and exit APIs make bypass harder by type design.
-- [ ] Compiler prevents Strategy V2 from directly calling Python executor.
+- [x] No strategy class directly selects live order gateway or executor route.
+- [x] Entry and exit APIs make bypass harder by type design.
+- [x] Compiler prevents Strategy V2 from directly calling Python executor.
 
 ## Required tests
 
@@ -91,7 +91,7 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 
 ## T012 - Centralize entry risk policy
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P1 - Stop the bleeding
 Owner: unclaimed
