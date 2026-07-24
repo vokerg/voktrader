@@ -33,6 +33,7 @@ public class OrderManager {
     private final TradeFillRepository tradeFillRepository;
     private final PythonExecutorClient pythonExecutorClient;
     private final ExecutorProperties executorProperties;
+    private final LiveArmService liveArmService;
     private final OrderReconciliationService reconciliationService;
     private final OrderCancellationEventEmitter cancellationEventEmitter;
     private final ObjectMapper objectMapper;
@@ -41,6 +42,24 @@ public class OrderManager {
     public OrderLifecycleResult submitOrder(TradeIntent intent, ExecutionMode mode) {
         if (intent.side() == TradeSide.SELL) {
             return submitExitOrder(intent, mode);
+        }
+
+        if (mode == ExecutionMode.LIVE) {
+            LiveArmService.LiveArmStatus armStatus = liveArmService.status();
+            if (!armStatus.entryAllowed()) {
+                String message = "LIVE entry rejected before executor call: " + armStatus.entryBlockReason();
+                return new OrderLifecycleResult(
+                        false,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        message,
+                        message
+                );
+            }
         }
 
         TradeEntity trade = tradeRepository.save(TradeEntity.fromIntent(intent, mode));

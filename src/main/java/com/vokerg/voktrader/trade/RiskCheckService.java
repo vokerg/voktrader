@@ -40,6 +40,7 @@ public class RiskCheckService {
     private final TradingProperties properties;
     private final TradeRepository tradeRepository;
     private final TradeOrderRepository tradeOrderRepository;
+    private final LiveArmService liveArmService;
 
     public RiskAssessment assess(TradeIntent intent, ExecutionMode mode, Long tradeId, Long orderId, String idempotencyKey) {
         RiskAssessment assessment = new RiskAssessment();
@@ -124,6 +125,13 @@ public class RiskCheckService {
             assessment.add(check(tradeId, orderId, mode, "LIVE_ENABLED", liveEnabledOk,
                     properties.isLiveEnabled(), true,
                     liveEnabledOk ? "live trading explicitly enabled" : "live trading not explicitly enabled"));
+
+            if (intent.side() == TradeSide.BUY) {
+                LiveArmService.LiveArmStatus armStatus = liveArmService.status();
+                assessment.add(check(tradeId, orderId, mode, "LIVE_ARM", armStatus.entryAllowed(),
+                        armStatus.armed(), true,
+                        armStatus.entryAllowed() ? "live arm active" : armStatus.entryBlockReason()));
+            }
 
             long openLiveTradesIncludingCurrent = tradeRepository.countLiveCapacityTrades(
                     List.of(ExecutionMode.LIVE), ACTIVE_STATUSES, TimeMachine.now());

@@ -6,6 +6,7 @@ import com.vokerg.voktrader.bot.MarketFamily;
 import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.strategy.StrategyProperties;
 import com.vokerg.voktrader.strategy.v2.StrategyV2Properties;
+import com.vokerg.voktrader.trade.LiveArmService;
 import com.vokerg.voktrader.trade.OrderLayerProperties;
 import com.vokerg.voktrader.trade.TradingProperties;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 
@@ -23,7 +25,7 @@ import static org.mockito.Mockito.when;
 
 class RuntimeStatusControllerTest {
     @Test
-    void statusReturnsTradingRiskExecutorAndBotConfig() {
+    void statusReturnsTradingRiskExecutorArmAndBotConfig() {
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("spring.datasource.url", "jdbc:postgresql://localhost/db?password=secret");
         environment.setActiveProfiles("live", "live-test");
@@ -32,6 +34,8 @@ class RuntimeStatusControllerTest {
         trading.setMode(ExecutionMode.LIVE);
         trading.setKillSwitchEnabled(false);
         trading.setLiveEnabled(true);
+        trading.setExpectedAccountId("0xexpected");
+        trading.setLiveArmTtl(Duration.ofMinutes(15));
         trading.setMaxOrderUsd(new BigDecimal("1.00"));
         trading.setMaxTradesPerMarket(1);
         trading.setMaxOpenLiveTrades(1);
@@ -40,7 +44,9 @@ class RuntimeStatusControllerTest {
         ExecutorProperties executor = new ExecutorProperties();
         executor.setEnabled(true);
         executor.setDryRun(false);
+        executor.setApiToken("non-default-token");
         executor.setBaseUrl("http://127.0.0.1:8099");
+        LiveArmService liveArmService = new LiveArmService(trading, executor);
 
         OrderLayerProperties orderLayer = new OrderLayerProperties();
         orderLayer.setEnabled(false);
@@ -56,6 +62,7 @@ class RuntimeStatusControllerTest {
                 environment,
                 trading,
                 executor,
+                liveArmService,
                 orderLayer,
                 new StrategyProperties("strategy-v2", null, null, null, null, null, null, null, null),
                 strategyV2,
@@ -69,6 +76,12 @@ class RuntimeStatusControllerTest {
         assertThat(response.tradingMode()).isEqualTo("LIVE");
         assertThat(response.killSwitchEnabled()).isFalse();
         assertThat(response.liveEnabled()).isTrue();
+        assertThat(response.liveArm().capabilityReady()).isTrue();
+        assertThat(response.liveArm().executorTokenConfigured()).isTrue();
+        assertThat(response.liveArm().expectedAccountConfigured()).isTrue();
+        assertThat(response.liveArm().armed()).isFalse();
+        assertThat(response.liveArm().entryAllowed()).isFalse();
+        assertThat(response.liveArm().entryBlockers()).containsExactly("live arm is not active");
         assertThat(response.maxOrderUsd()).isEqualByComparingTo("1.00");
         assertThat(response.allowedStrategyIds()).containsExactly("strategy-v2");
         assertThat(response.executor().enabled()).isTrue();

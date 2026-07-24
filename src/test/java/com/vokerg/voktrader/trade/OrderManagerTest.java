@@ -38,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -49,6 +50,7 @@ class OrderManagerTest {
     private final PythonExecutorClient pythonExecutorClient = mock(PythonExecutorClient.class);
     private final OrderReconciliationService reconciliationService = mock(OrderReconciliationService.class);
     private final ExecutorProperties executorProperties = new ExecutorProperties();
+    private final LiveArmService liveArmService = mock(LiveArmService.class);
     private final List<TradeEventEntity> savedEvents = new ArrayList<>();
     private final OrderCancellationEventEmitter cancellationEventEmitter = new OrderCancellationEventEmitter(
             tradeEventRepository,
@@ -61,6 +63,7 @@ class OrderManagerTest {
             tradeFillRepository,
             pythonExecutorClient,
             executorProperties,
+            liveArmService,
             reconciliationService,
             cancellationEventEmitter,
             objectMapper
@@ -69,6 +72,7 @@ class OrderManagerTest {
     @BeforeEach
     void setUp() {
         savedEvents.clear();
+        when(liveArmService.status()).thenReturn(armedStatus());
         when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> {
             TradeEntity trade = invocation.getArgument(0);
             if (trade.getId() == null) {
@@ -96,6 +100,19 @@ class OrderManagerTest {
             return savedEvents.stream().anyMatch(event -> orderId.equals(event.getTradeOrderId())
                     && eventType.equals(event.getEventType()));
         });
+    }
+
+    @Test
+    void unarmedLiveEntryIsRejectedBeforePersistenceAndExecutorSubmit() {
+        when(liveArmService.status()).thenReturn(unarmedStatus());
+
+        OrderLifecycleResult result = orderManager.submitOrder(intent(TradeSide.BUY), ExecutionMode.LIVE);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains("LIVE entry rejected before executor call", "live arm is not active");
+        verify(tradeRepository, never()).save(any(TradeEntity.class));
+        verify(tradeOrderRepository, never()).save(any(TradeOrderEntity.class));
+        verify(pythonExecutorClient, never()).submit(any(ExecutorOrderCommand.class));
     }
 
     @Test
@@ -171,7 +188,8 @@ class OrderManagerTest {
     }
 
     @Test
-    void cancelOrderMarksCancelRequestedAndLeavesFinalStateForReconciliation() {
+    void cancelOrderMarksCancelRequestedAndLeavesFinalStateForReconciliationWhileUnarmed() {
+        when(liveArmService.status()).thenReturn(unarmedStatus());
         TradeOrderEntity order = TradeOrderEntity.fromIntent(1L, intent(TradeSide.BUY), ExecutionMode.LIVE, TradeVenue.POLYMARKET, "local-1");
         ReflectionTestUtils.setField(order, "id", 6358L);
         order.markSubmitted("remote-1", "{}");
@@ -189,6 +207,7 @@ class OrderManagerTest {
         assertThat(result.success()).isTrue();
         assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.CANCELLED);
         verify(reconciliationService).reconcileOrder(order, OrderReconciliationSource.POST_CANCEL);
+        verify(liveArmService, never()).status();
         assertThat(savedEvents)
                 .extracting(TradeEventEntity::getEventType)
                 .containsExactly(OrderCancellationEventEmitter.CANCEL_REQUESTED_EVENT);
@@ -212,7 +231,8 @@ class OrderManagerTest {
     }
 
     @Test
-    void orderManagerSellDoesNotCreateNewTrade() {
+    void orderManagerSellDoesNotCreateNewTradeAndRemainsAvailableWhileUnarmed() {
+        when(liveArmService.status()).thenReturn(unarmedStatus());
         TradeEntity trade = TradeEntity.fromIntent(intent(TradeSide.BUY), ExecutionMode.LIVE);
         ReflectionTestUtils.setField(trade, "id", 77L);
         trade.markPartiallyOpen(
@@ -246,6 +266,7 @@ class OrderManagerTest {
 
         assertThat(result.success()).isTrue();
         assertThat(trade.getStatus()).isEqualTo(TradeStatus.CLOSED);
+        verify(liveArmService, never()).status();
 
         ArgumentCaptor<TradeOrderEntity> orderCaptor = ArgumentCaptor.forClass(TradeOrderEntity.class);
         verify(tradeOrderRepository, org.mockito.Mockito.atLeastOnce()).save(orderCaptor.capture());
@@ -280,6 +301,36 @@ class OrderManagerTest {
         assertThat(result.success()).isFalse();
         assertThat(trade.getStatus()).isEqualTo(TradeStatus.PARTIALLY_OPEN);
         assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.REJECTED);
+    }
+
+    private LiveArmService.LiveArmStatus armedStatus() {
+        return new LiveArmService.LiveArmStatus(
+                true,
+                Instant.parse("2026-07-24T06:00:00Z"),
+                Instant.parse("2026-07-24T06:15:00Z"),
+                "0xexpected",
+                true,
+                true,
+                true,
+                true,
+                List.of(),
+                List.of()
+        );
+    }
+
+    private LiveArmService.LiveArmStatus unarmedStatus() {
+        return new LiveArmService.LiveArmStatus(
+                false,
+                null,
+                null,
+                null,
+                true,
+                true,
+                true,
+                false,
+                List.of(),
+                List.of("live arm is not active")
+        );
     }
 
     private TradeIntent intent(TradeSide side) {

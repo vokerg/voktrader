@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -22,6 +23,16 @@ public class TradingProperties {
 
     /** A second explicit switch. Real live modes require liveEnabled=true and killSwitchEnabled=false. */
     private boolean liveEnabled = false;
+
+    /**
+     * Operator-declared account identity that must be repeated when creating a short-lived live arm.
+     */
+    private String expectedAccountId = "";
+
+    /**
+     * Maximum lifetime of one explicit live arm. Every arm expires automatically.
+     */
+    private Duration liveArmTtl = Duration.ofMinutes(15);
 
     private BigDecimal maxOrderUsd = new BigDecimal("1.00");
     private BigDecimal minMakerOrderShares = new BigDecimal("5.00");
@@ -62,6 +73,22 @@ public class TradingProperties {
 
     public void setLiveEnabled(boolean liveEnabled) {
         this.liveEnabled = liveEnabled;
+    }
+
+    public String getExpectedAccountId() {
+        return expectedAccountId;
+    }
+
+    public void setExpectedAccountId(String expectedAccountId) {
+        this.expectedAccountId = expectedAccountId;
+    }
+
+    public Duration getLiveArmTtl() {
+        return liveArmTtl;
+    }
+
+    public void setLiveArmTtl(Duration liveArmTtl) {
+        this.liveArmTtl = liveArmTtl;
     }
 
     public BigDecimal getMaxOrderUsd() {
