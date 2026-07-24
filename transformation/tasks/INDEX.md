@@ -16,15 +16,15 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 
 ## Current next tasks
 
-After the transformation baseline is merged, the next independent tasks are:
+The next independent tasks are:
 
-1. `T010` - live profile capability-only.
+1. `T011` - typed entry and exit intent boundary.
 2. `T040` - market WebSocket heartbeat and gap supervision. Parallel infrastructure work.
 3. `T042` - unified fee model. Parallel infrastructure work.
 4. `T044` - control-plane security. Parallel infrastructure work.
 5. `T050` - CI pipeline. Parallel infrastructure work.
 
-Central risk work starts with `T011` and then `T012`.
+Central risk work continues with `T011` and then `T012`.
 
 ## P0 - Transformation foundation
 | Task | Status | Priority | Depends On | Parallelizable | Title |
@@ -34,7 +34,7 @@ Central risk work starts with `T011` and then `T012`.
 ## P1 - Stop the bleeding
 | Task | Status | Priority | Depends On | Parallelizable | Title |
 | --- | --- | --- | --- | --- | --- |
-| [T010](./PHASE-1-stop-the-bleeding.md#t010) | IN_PROGRESS | P0 | T000 | no | Make live profile capability-only |
+| [T010](./PHASE-1-stop-the-bleeding.md#t010) | DONE | P0 | T000 | no | Make live profile capability-only |
 | [T011](./PHASE-1-stop-the-bleeding.md#t011) | READY | P0 | T010 | no | Introduce typed entry and exit intent boundary |
 | [T012](./PHASE-1-stop-the-bleeding.md#t012) | BLOCKED | P0 | T011 | no | Centralize entry risk policy |
 | [T013](./PHASE-1-stop-the-bleeding.md#t013) | BLOCKED | P0 | T012 | no | Define portfolio exposure invariants |
