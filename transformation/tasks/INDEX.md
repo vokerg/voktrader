@@ -34,7 +34,7 @@ Central risk work starts with `T011` and then `T012`.
 ## P1 - Stop the bleeding
 | Task | Status | Priority | Depends On | Parallelizable | Title |
 | --- | --- | --- | --- | --- | --- |
-| [T010](./PHASE-1-stop-the-bleeding.md#t010) | READY | P0 | T000 | no | Make live profile capability-only |
+| [T010](./PHASE-1-stop-the-bleeding.md#t010) | IN_PROGRESS | P0 | T000 | no | Make live profile capability-only |
 | [T011](./PHASE-1-stop-the-bleeding.md#t011) | READY | P0 | T010 | no | Introduce typed entry and exit intent boundary |
 | [T012](./PHASE-1-stop-the-bleeding.md#t012) | BLOCKED | P0 | T011 | no | Centralize entry risk policy |
 | [T013](./PHASE-1-stop-the-bleeding.md#t013) | BLOCKED | P0 | T012 | no | Define portfolio exposure invariants |
