@@ -6,13 +6,13 @@ This ledger contains the detailed task contracts for this phase. Agents claim an
 
 ## T010 - Make live profile capability-only
 
-Status: READY
+Status: IN_PROGRESS
 Priority: P0
 Phase: P1 - Stop the bleeding
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: openai-gpt-5.6-thinking
+Branch: task/T010-live-profile-capability-only
+PR: #7
+Started: 2026-07-24T05:38:12Z
 Completed:
 Depends On: T000
 Parallelizable: no
