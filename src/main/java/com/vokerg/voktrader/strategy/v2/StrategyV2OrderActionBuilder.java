@@ -2,17 +2,15 @@ package com.vokerg.voktrader.strategy.v2;
 
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
-import com.vokerg.voktrader.trade.ExecutionRouter;
-import com.vokerg.voktrader.trade.OrderGateway;
-import com.vokerg.voktrader.trade.OrderGatewayContext;
-import com.vokerg.voktrader.trade.StrategyInstanceKey;
+import com.vokerg.voktrader.trade.EntryAcceptanceService;
+import com.vokerg.voktrader.trade.EntryIntent;
+import com.vokerg.voktrader.trade.ExitIntent;
+import com.vokerg.voktrader.trade.ExitSubmissionService;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
-import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradingProperties;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeSide;
-
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -21,20 +19,18 @@ import java.math.RoundingMode;
 @Component
 public class StrategyV2OrderActionBuilder {
     private static final int SCALE = 8;
-    private final StrategyV2ExecutionProperties executionProperties;
-    private final ExecutionRouter executionRouter;
-    private final OrderGateway orderGateway;
+
+    private final EntryAcceptanceService entryAcceptanceService;
+    private final ExitSubmissionService exitSubmissionService;
     private final TradingProperties tradingProperties;
 
     public StrategyV2OrderActionBuilder(
-            StrategyV2ExecutionProperties executionProperties,
-            ExecutionRouter executionRouter,
-            OrderGateway orderGateway,
+            EntryAcceptanceService entryAcceptanceService,
+            ExitSubmissionService exitSubmissionService,
             TradingProperties tradingProperties
     ) {
-        this.executionProperties = executionProperties;
-        this.executionRouter = executionRouter;
-        this.orderGateway = orderGateway;
+        this.entryAcceptanceService = entryAcceptanceService;
+        this.exitSubmissionService = exitSubmissionService;
         this.tradingProperties = tradingProperties;
     }
 
@@ -66,7 +62,7 @@ public class StrategyV2OrderActionBuilder {
                 context.candidate().spread(),
                 context.now()
         );
-        TradeIntent intent = TradeIntent.buy(
+        EntryIntent intent = EntryIntent.buy(
                 BotRuntimeContextHolder.currentBotId().orElse(null),
                 context.market(),
                 outcomePrice,
@@ -79,14 +75,7 @@ public class StrategyV2OrderActionBuilder {
                 strategy.getEntry().getRuleId(),
                 reason(strategy, context)
         ).withRestingTtlSeconds(restingTtlSeconds(action, orderType));
-        if (executionProperties.isUseOrderLayer()) {
-            OrderGateway gateway = OrderGatewayContext.current().orElse(orderGateway);
-            return TradeExecutionResult.fromOrderLifecycle(
-                    mode,
-                    gateway.submitOrder(intent, StrategyInstanceKey.of(intent.botId(), strategy.getStrategyId()), mode)
-            );
-        }
-        return executionRouter.route(intent);
+        return entryAcceptanceService.accept(intent);
     }
 
     public TradeExecutionResult routeExit(
@@ -114,7 +103,7 @@ public class StrategyV2OrderActionBuilder {
                 context.candidate().spread(),
                 context.now()
         );
-        TradeIntent intent = TradeIntent.sell(
+        ExitIntent intent = ExitIntent.sell(
                 BotRuntimeContextHolder.currentBotId().orElse(null),
                 context.market(),
                 outcomePrice,
@@ -126,14 +115,7 @@ public class StrategyV2OrderActionBuilder {
                 ruleId(strategy, rule),
                 exitReason(strategy, rule, context)
         );
-        if (executionProperties.isUseOrderLayer()) {
-            OrderGateway gateway = OrderGatewayContext.current().orElse(orderGateway);
-            return TradeExecutionResult.fromOrderLifecycle(
-                    mode,
-                    gateway.submitOrder(intent, StrategyInstanceKey.of(intent.botId(), strategy.getStrategyId()), mode)
-            );
-        }
-        return executionRouter.route(intent);
+        return exitSubmissionService.submit(intent);
     }
 
     private ExecutionMode configuredMode() {
