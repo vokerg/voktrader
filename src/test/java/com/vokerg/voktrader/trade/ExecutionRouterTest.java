@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -24,10 +25,12 @@ class ExecutionRouterTest {
     private final TradingProperties properties = new TradingProperties();
     private final PaperExecutionService paperExecutionService = mock(PaperExecutionService.class);
     private final LiveExecutionService liveExecutionService = mock(LiveExecutionService.class);
+    private final LiveArmService liveArmService = mock(LiveArmService.class);
     private final ExecutionRouter router = new ExecutionRouter(
             properties,
             paperExecutionService,
-            liveExecutionService
+            liveExecutionService,
+            liveArmService
     );
 
     @Test
@@ -48,11 +51,46 @@ class ExecutionRouterTest {
 
         assertThat(result).isSameAs(paperResult);
         verify(paperExecutionService).execute(intent);
-        verifyNoInteractions(liveExecutionService);
+        verifyNoInteractions(liveExecutionService, liveArmService);
     }
 
     @Test
-    void liveModeRoutesEverythingToLiveExecutor() {
+    void unarmedLiveEntryIsRejectedBeforeLiveExecutorCall() {
+        properties.setMode(ExecutionMode.LIVE);
+        when(liveArmService.status()).thenReturn(unarmedStatus());
+
+        TradeExecutionResult result = router.route(buyIntent());
+
+        assertThat(result.accepted()).isFalse();
+        assertThat(result.message()).contains("LIVE entry rejected before executor call", "live arm is not active");
+        verify(liveArmService).status();
+        verifyNoInteractions(liveExecutionService, paperExecutionService);
+    }
+
+    @Test
+    void armedLiveEntryRoutesToLiveExecutor() {
+        properties.setMode(ExecutionMode.LIVE);
+        TradeIntent intent = buyIntent();
+        TradeExecutionResult liveResult = TradeExecutionResult.accepted(
+                ExecutionMode.LIVE,
+                5317L,
+                6363L,
+                TradeStatus.ENTRY_PENDING,
+                TradeOrderStatus.SUBMITTED,
+                "live entry submitted"
+        );
+        when(liveArmService.status()).thenReturn(armedStatus());
+        when(liveExecutionService.execute(intent, ExecutionMode.LIVE)).thenReturn(liveResult);
+
+        TradeExecutionResult result = router.route(intent);
+
+        assertThat(result).isSameAs(liveResult);
+        verify(liveExecutionService).execute(intent, ExecutionMode.LIVE);
+        verifyNoInteractions(paperExecutionService);
+    }
+
+    @Test
+    void unarmedLiveExitStillRoutesToLiveExecutor() {
         properties.setMode(ExecutionMode.LIVE);
         TradeIntent intent = sellIntent();
         TradeExecutionResult liveResult = TradeExecutionResult.accepted(
@@ -69,7 +107,7 @@ class ExecutionRouterTest {
 
         assertThat(result).isSameAs(liveResult);
         verify(liveExecutionService).execute(intent, ExecutionMode.LIVE);
-        verifyNoInteractions(paperExecutionService);
+        verifyNoInteractions(paperExecutionService, liveArmService);
     }
 
     @Test
@@ -79,7 +117,53 @@ class ExecutionRouterTest {
         assertThatThrownBy(() -> router.route(sellIntent()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("voktrader.trading.mode");
-        verifyNoInteractions(paperExecutionService, liveExecutionService);
+        verifyNoInteractions(paperExecutionService, liveExecutionService, liveArmService);
+    }
+
+    private LiveArmService.LiveArmStatus unarmedStatus() {
+        return new LiveArmService.LiveArmStatus(
+                false,
+                null,
+                null,
+                null,
+                true,
+                true,
+                true,
+                false,
+                List.of(),
+                List.of("live arm is not active")
+        );
+    }
+
+    private LiveArmService.LiveArmStatus armedStatus() {
+        return new LiveArmService.LiveArmStatus(
+                true,
+                Instant.parse("2026-07-24T06:00:00Z"),
+                Instant.parse("2026-07-24T06:15:00Z"),
+                "0xexpected",
+                true,
+                true,
+                true,
+                true,
+                List.of(),
+                List.of()
+        );
+    }
+
+    private TradeIntent buyIntent() {
+        return TradeIntent.buy(
+                67L,
+                market(),
+                price("down", "Down", "0.56", "0.57"),
+                new BigDecimal("2.85"),
+                new BigDecimal("5"),
+                TradeOrderType.FAK,
+                true,
+                new BigDecimal("0.57"),
+                "MK_GTD_EDGE_A",
+                "entry",
+                "strategy-v2 entry"
+        );
     }
 
     private TradeIntent sellIntent() {
