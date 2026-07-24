@@ -2,17 +2,16 @@ package com.vokerg.voktrader.strategy.v2;
 
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.strategy.StrategyOutcomeView;
-import com.vokerg.voktrader.trade.ExecutionRouter;
-import com.vokerg.voktrader.trade.OrderGateway;
-import com.vokerg.voktrader.trade.OrderLifecycleResult;
+import com.vokerg.voktrader.trade.EntryAcceptanceService;
+import com.vokerg.voktrader.trade.EntryIntent;
+import com.vokerg.voktrader.trade.ExitSubmissionService;
 import com.vokerg.voktrader.trade.TradeExecutionResult;
-import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.TradingProperties;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeStatus;
-
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -29,105 +28,47 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class StrategyV2OrderActionBuilderTest {
-    private final StrategyV2ExecutionProperties executionProperties = new StrategyV2ExecutionProperties();
-    private final ExecutionRouter executionRouter = mock(ExecutionRouter.class);
-    private final OrderGateway orderGateway = mock(OrderGateway.class);
+    private final EntryAcceptanceService entryAcceptanceService = mock(EntryAcceptanceService.class);
+    private final ExitSubmissionService exitSubmissionService = mock(ExitSubmissionService.class);
     private final TradingProperties tradingProperties = new TradingProperties();
     private final StrategyV2OrderActionBuilder builder = new StrategyV2OrderActionBuilder(
-            executionProperties,
-            executionRouter,
-            orderGateway,
+            entryAcceptanceService,
+            exitSubmissionService,
             tradingProperties
     );
 
-    @Test
-    void flagDisabledRoutesThroughExistingExecutionRouter() {
-        when(executionRouter.route(any(TradeIntent.class))).thenReturn(TradeExecutionResult.accepted(
-                ExecutionMode.LIVE,
+    @BeforeEach
+    void setUp() {
+        tradingProperties.setMode(ExecutionMode.PAPER);
+        when(entryAcceptanceService.accept(any(EntryIntent.class))).thenReturn(TradeExecutionResult.accepted(
+                ExecutionMode.PAPER,
                 1L,
                 2L,
                 TradeStatus.OPEN,
                 TradeOrderStatus.FILLED,
                 "accepted"
         ));
-
-        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context());
-
-        assertThat(result.accepted()).isTrue();
-        verify(executionRouter).route(any(TradeIntent.class));
-        verify(orderGateway, never()).submitOrder(any(), any(), any());
     }
 
     @Test
-    void flagEnabledRoutesThroughOrderManager() {
-        executionProperties.setUseOrderLayer(true);
-        when(orderGateway.submitOrder(any(TradeIntent.class), any(), any())).thenReturn(new OrderLifecycleResult(
-                true,
-                1L,
-                2L,
-                "local-1",
-                "remote-1",
-                TradeStatus.OPEN,
-                TradeOrderStatus.FILLED,
-                "filled",
-                null
-        ));
-
+    void routeEntryEmitsTypedIntentOnly() {
         TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context());
 
         assertThat(result.accepted()).isTrue();
-        assertThat(result.localOrderId()).isEqualTo("local-1");
-        assertThat(result.remoteOrderId()).isEqualTo("remote-1");
-        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.FILLED);
-        verify(orderGateway).submitOrder(any(TradeIntent.class), any(), any());
-        verify(executionRouter, never()).route(any());
-    }
-
-    @Test
-    void flagEnabledPreservesNonImmediateSubmittedResult() {
-        executionProperties.setUseOrderLayer(true);
-        when(orderGateway.submitOrder(any(TradeIntent.class), any(), any())).thenReturn(new OrderLifecycleResult(
-                true,
-                1L,
-                2L,
-                "local-1",
-                "remote-1",
-                TradeStatus.ENTRY_PENDING,
-                TradeOrderStatus.SUBMITTED,
-                "submitted",
-                null
-        ));
-
-        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.GTC), context());
-
-        assertThat(result.accepted()).isTrue();
-        assertThat(result.tradeStatus()).isEqualTo(TradeStatus.ENTRY_PENDING);
-        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.SUBMITTED);
-
-        ArgumentCaptor<TradeIntent> intent = ArgumentCaptor.forClass(TradeIntent.class);
-        verify(orderGateway).submitOrder(intent.capture(), any(), any());
-        assertThat(intent.getValue().orderType()).isEqualTo(TradeOrderType.GTC);
+        ArgumentCaptor<EntryIntent> intent = ArgumentCaptor.forClass(EntryIntent.class);
+        verify(entryAcceptanceService).accept(intent.capture());
+        verify(exitSubmissionService, never()).submit(any());
+        assertThat(intent.getValue().side().name()).isEqualTo("BUY");
+        assertThat(intent.getValue().strategyId()).isEqualTo("strategy-v2-test");
+        assertThat(intent.getValue().orderType()).isEqualTo(TradeOrderType.FOK);
     }
 
     @Test
     void fixedSharesSizeSetsRequestedSharesAndNotionalFromLimitPrice() {
-        executionProperties.setUseOrderLayer(true);
-        when(orderGateway.submitOrder(any(TradeIntent.class), any(), any())).thenReturn(new OrderLifecycleResult(
-                true,
-                1L,
-                2L,
-                "local-1",
-                "remote-1",
-                TradeStatus.ENTRY_PENDING,
-                TradeOrderStatus.RESTING,
-                "resting",
-                null
-        ));
-
         builder.routeEntry(fixedSharesStrategy(), context());
 
-        ArgumentCaptor<TradeIntent> intent = ArgumentCaptor.forClass(TradeIntent.class);
-        verify(orderGateway).submitOrder(intent.capture(), any(), any());
+        ArgumentCaptor<EntryIntent> intent = ArgumentCaptor.forClass(EntryIntent.class);
+        verify(entryAcceptanceService).accept(intent.capture());
         assertThat(intent.getValue().shares()).isEqualByComparingTo("5.00");
         assertThat(intent.getValue().amountUsd()).isEqualByComparingTo("2.55");
     }
@@ -135,33 +76,33 @@ class StrategyV2OrderActionBuilderTest {
     @Test
     void makerFixedSharesUsesConfiguredMinimumWhenSharesOmitted() {
         tradingProperties.setMinMakerOrderShares(new BigDecimal("6.00"));
-        executionProperties.setUseOrderLayer(true);
-        when(orderGateway.submitOrder(any(TradeIntent.class), any(), any())).thenReturn(new OrderLifecycleResult(
-                true,
-                1L,
-                2L,
-                "local-1",
-                "remote-1",
-                TradeStatus.ENTRY_PENDING,
-                TradeOrderStatus.RESTING,
-                "resting",
-                null
-        ));
-
         StrategyV2Properties.Strategy strategy = fixedSharesStrategy();
         strategy.getEntry().getAction().getSize().setShares(null);
 
         builder.routeEntry(strategy, context());
 
-        ArgumentCaptor<TradeIntent> intent = ArgumentCaptor.forClass(TradeIntent.class);
-        verify(orderGateway).submitOrder(intent.capture(), any(), any());
+        ArgumentCaptor<EntryIntent> intent = ArgumentCaptor.forClass(EntryIntent.class);
+        verify(entryAcceptanceService).accept(intent.capture());
         assertThat(intent.getValue().shares()).isEqualByComparingTo("6.00");
         assertThat(intent.getValue().amountUsd()).isEqualByComparingTo("3.06");
     }
 
     @Test
-    void fixedSharesRejectsWhenNotionalExceedsMaxUsd() {
-        executionProperties.setUseOrderLayer(true);
+    void gtdEntryCarriesTypedRestingTtl() {
+        StrategyV2Properties.Strategy strategy = fixedSharesStrategy();
+        StrategyV2Properties.MakerLifecycle lifecycle = new StrategyV2Properties.MakerLifecycle();
+        lifecycle.setCancelAfterSeconds(12);
+        strategy.getEntry().getAction().setMakerLifecycle(lifecycle);
+
+        builder.routeEntry(strategy, context());
+
+        ArgumentCaptor<EntryIntent> intent = ArgumentCaptor.forClass(EntryIntent.class);
+        verify(entryAcceptanceService).accept(intent.capture());
+        assertThat(intent.getValue().restingTtlSeconds()).isEqualTo(12);
+    }
+
+    @Test
+    void fixedSharesRejectsWhenNotionalExceedsMaxUsdBeforeBoundary() {
         StrategyV2Properties.Strategy strategy = fixedSharesStrategy();
         strategy.getEntry().getAction().getSize().setMaxUsd(new BigDecimal("2.50"));
 
@@ -169,51 +110,7 @@ class StrategyV2OrderActionBuilderTest {
 
         assertThat(result.accepted()).isFalse();
         assertThat(result.error()).contains("fixed_shares");
-        verify(orderGateway, never()).submitOrder(any(), any(), any());
-        verify(executionRouter, never()).route(any());
-    }
-
-    @Test
-    void fixedSharesRejectsWhenConfiguredMinimumWouldExceedMaxUsd() {
-        tradingProperties.setMinMakerOrderShares(new BigDecimal("6.00"));
-        executionProperties.setUseOrderLayer(true);
-        StrategyV2Properties.Strategy strategy = fixedSharesStrategy();
-        strategy.getEntry().getAction().getSize().setShares(null);
-        strategy.getEntry().getAction().getSize().setMaxUsd(new BigDecimal("3.00"));
-
-        TradeExecutionResult result = builder.routeEntry(strategy, context());
-
-        assertThat(result.accepted()).isFalse();
-        verify(orderGateway, never()).submitOrder(any(), any(), any());
-        verify(executionRouter, never()).route(any());
-    }
-
-
-    @Test
-    void flagEnabledSurfacesRejectedOrderManagerResult() {
-        executionProperties.setUseOrderLayer(true);
-        when(orderGateway.submitOrder(any(TradeIntent.class), any(), any())).thenReturn(new OrderLifecycleResult(
-                false,
-                1L,
-                2L,
-                "local-1",
-                null,
-                TradeStatus.FAILED,
-                TradeOrderStatus.REJECTED,
-                "rejected",
-                "rejected"
-        ));
-
-        TradeExecutionResult result = builder.routeEntry(strategy(TradeOrderType.FOK), context());
-
-        assertThat(result.accepted()).isFalse();
-        assertThat(result.error()).isEqualTo("rejected");
-        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.REJECTED);
-    }
-
-    @Test
-    void defaultConfigKeepsOrderLayerDisabled() {
-        assertThat(new StrategyV2ExecutionProperties().isUseOrderLayer()).isFalse();
+        verify(entryAcceptanceService, never()).accept(any());
     }
 
     private StrategyV2Properties.Strategy strategy(TradeOrderType orderType) {
