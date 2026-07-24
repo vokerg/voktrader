@@ -4,17 +4,17 @@ import com.vokerg.voktrader.economy.ExitEconomy;
 import com.vokerg.voktrader.economy.LiquidityRole;
 import com.vokerg.voktrader.economy.TradeEconomy;
 import com.vokerg.voktrader.market.TrackedMarketState;
-import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.LatestPriceState;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
+import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.telemetry.TelemetryData;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
-import com.vokerg.voktrader.trade.ExecutionRouter;
-import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.time.TimeMachine;
-import lombok.RequiredArgsConstructor;
+import com.vokerg.voktrader.trade.ExitIntent;
+import com.vokerg.voktrader.trade.LegacyStrategyIntentAdapter;
+import com.vokerg.voktrader.trade.model.TradeEntity;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -23,16 +23,50 @@ import java.util.Optional;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class StrategyExitSupport {
     private static final BigDecimal TWO = new BigDecimal("2");
 
     private final TrackedMarketState trackedMarketState;
     private final LatestPriceState latestPriceState;
     private final StrategyTradeSupport tradeSupport;
-    private final ExecutionRouter executionRouter;
+    private final LegacyStrategyIntentAdapter intentAdapter;
     private final TradeEconomy tradeEconomy;
     private final TradingEventLogger eventLogger;
+
+    @Autowired
+    public StrategyExitSupport(
+            TrackedMarketState trackedMarketState,
+            LatestPriceState latestPriceState,
+            StrategyTradeSupport tradeSupport,
+            LegacyStrategyIntentAdapter intentAdapter,
+            TradeEconomy tradeEconomy,
+            TradingEventLogger eventLogger
+    ) {
+        this.trackedMarketState = trackedMarketState;
+        this.latestPriceState = latestPriceState;
+        this.tradeSupport = tradeSupport;
+        this.intentAdapter = intentAdapter;
+        this.tradeEconomy = tradeEconomy;
+        this.eventLogger = eventLogger;
+    }
+
+    public StrategyExitSupport(
+            TrackedMarketState trackedMarketState,
+            LatestPriceState latestPriceState,
+            StrategyTradeSupport tradeSupport,
+            Object legacyRouter,
+            TradeEconomy tradeEconomy,
+            TradingEventLogger eventLogger
+    ) {
+        this(
+                trackedMarketState,
+                latestPriceState,
+                tradeSupport,
+                LegacyStrategyIntentAdapter.fromLegacyRouter(legacyRouter),
+                tradeEconomy,
+                eventLogger
+        );
+    }
 
     public void evaluateCurrentMarketOpenTrades(
             String strategyId,
@@ -185,7 +219,7 @@ public class StrategyExitSupport {
             OutcomePrice price,
             String reason
     ) {
-        var result = executionRouter.route(TradeIntent.sell(
+        var result = intentAdapter.routeExit(ExitIntent.sell(
                 market,
                 price,
                 trade.getEntryFilledShares(),
