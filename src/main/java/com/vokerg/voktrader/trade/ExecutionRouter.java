@@ -1,11 +1,11 @@
 package com.vokerg.voktrader.trade;
 
+import com.vokerg.voktrader.marketdata.TickSizeService;
+import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.paper.PaperExecutionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
-import com.vokerg.voktrader.trade.model.ExecutionMode;
 
 @Slf4j
 @Service
@@ -14,17 +14,31 @@ public class ExecutionRouter {
     private final TradingProperties properties;
     private final PaperExecutionService paperExecutionService;
     private final LiveExecutionService liveExecutionService;
+    private final TickSizeService tickSizeService;
 
     public TradeExecutionResult route(TradeIntent intent) {
         TradeIntentExecutor override = ExecutionOverrideContext.current();
+        ExecutionMode mode = override == null ? properties.getMode() : ExecutionMode.BACKTEST;
+        if (mode == null) {
+            throw new IllegalStateException("voktrader.trading.mode must be configured explicitly");
+        }
+
+        TickSizeService.TickValidation tickValidation = tickSizeService.validate(intent.tokenId(), intent.expectedPrice());
+        if (!tickValidation.valid()) {
+            return TradeExecutionResult.rejected(
+                    mode,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "Trade intent rejected by tick metadata: " + tickValidation.reason()
+            );
+        }
+
         if (override != null) {
             return override.execute(intent);
         }
 
-        ExecutionMode mode = properties.getMode();
-        if (mode == null) {
-            throw new IllegalStateException("voktrader.trading.mode must be configured explicitly");
-        }
         log.debug("Routing trade intent: mode={} strategy={} marketId={} tokenId={} outcome={} side={} amountUsd={} limitPrice={} reason={}",
                 mode, intent.strategyId(), intent.marketId(), intent.tokenId(), intent.outcome(), intent.side(), intent.amountUsd(), intent.expectedPrice(), intent.reason());
         return switch (mode) {
