@@ -2,6 +2,7 @@ package com.vokerg.voktrader.polymarket.client;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.vokerg.voktrader.config.PolymarketProperties;
+import com.vokerg.voktrader.marketdata.TickSizeService;
 import com.vokerg.voktrader.polymarket.dto.MarketWsMessageDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +20,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -29,6 +31,7 @@ public class PolymarketWebSocketClient {
 
     private final PolymarketProperties properties;
     private final ObjectMapper objectMapper;
+    private final TickSizeService tickSizeService;
 
     private final ReactorNettyWebSocketClient webSocketClient = new ReactorNettyWebSocketClient();
 
@@ -163,9 +166,34 @@ public class PolymarketWebSocketClient {
                     message.assetId()
             );
 
+            if (message.isTickSizeChange()) {
+                tickSizeService.recordTickSizeChange(
+                        message.assetId(),
+                        message.market(),
+                        message.oldTickSize(),
+                        message.newTickSize(),
+                        parseTimestamp(message.timestamp())
+                );
+            }
             onMessage.accept(message);
         } catch (Exception e) {
             log.warn("Could not map WS message: {}", node, e);
+        }
+    }
+
+    private Instant parseTimestamp(String value) {
+        if (value == null || value.isBlank()) {
+            return Instant.now();
+        }
+        try {
+            long raw = Long.parseLong(value);
+            return value.length() <= 10 ? Instant.ofEpochSecond(raw) : Instant.ofEpochMilli(raw);
+        } catch (NumberFormatException ignored) {
+            try {
+                return Instant.parse(value);
+            } catch (DateTimeParseException invalidTimestamp) {
+                return Instant.now();
+            }
         }
     }
 
