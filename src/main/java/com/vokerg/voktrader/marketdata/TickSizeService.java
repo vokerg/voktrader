@@ -3,8 +3,6 @@ package com.vokerg.voktrader.marketdata;
 import com.vokerg.voktrader.marketdata.model.TickSizeMetadataEntity;
 import com.vokerg.voktrader.marketdata.persistence.TickSizeMetadataRepository;
 import com.vokerg.voktrader.time.TimeMachine;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,14 +14,16 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class TickSizeService {
     private static final ThreadLocal<Map<String, TickSizeMetadata>> HISTORICAL_OVERRIDE = new ThreadLocal<>();
 
     private final TickSizeMetadataRepository repository;
     private final Map<String, TickSizeMetadata> currentByTokenId = new ConcurrentHashMap<>();
+
+    public TickSizeService(TickSizeMetadataRepository repository) {
+        this.repository = repository;
+    }
 
     @Transactional
     public TickSizeMetadata recordRestBook(
@@ -43,13 +43,9 @@ public class TickSizeService {
             String newTickSize,
             Instant effectiveAt
     ) {
-        BigDecimal oldTick = oldTickSize == null || oldTickSize.isBlank() ? null : TickMath.parseTick(oldTickSize);
-        currentMetadata(tokenId).ifPresent(current -> {
-            if (oldTick != null && current.tickSize().compareTo(oldTick) != 0) {
-                log.warn("Tick change old value differs from current metadata tokenId={} current={} eventOld={} eventNew={}",
-                        tokenId, current.tickSize(), oldTick, newTickSize);
-            }
-        });
+        if (oldTickSize != null && !oldTickSize.isBlank()) {
+            TickMath.parseTick(oldTickSize);
+        }
         return record(tokenId, marketId, newTickSize, effectiveAt, TickSizeSource.MARKET_WEBSOCKET);
     }
 
