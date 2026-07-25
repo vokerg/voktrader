@@ -6,14 +6,14 @@ This ledger contains the detailed task contracts for this phase. Agents claim an
 
 ## T040 - Add market WebSocket heartbeat and gap supervision
 
-Status: READY
+Status: DONE
 Priority: P1
 Phase: P4 - Protocol currency and control-plane hardening
-Owner: unclaimed
-Branch:
-PR:
-Started:
-Completed:
+Owner: vokerg
+Branch: `task/T040-market-websocket-supervision`
+PR: #10
+Started: 2026-07-25T14:50:35Z
+Completed: 2026-07-25T15:30:42Z
 Depends On: T000
 Parallelizable: yes
 
@@ -27,17 +27,17 @@ Comply with current heartbeat behavior and pause strategies through data gaps.
 4. Expose gap, reconnect, and pause metrics.
 
 ### Acceptance criteria
-- [ ] A 30-minute soak has no heartbeat disconnects.
-- [ ] Forced disconnect reseeds before strategy evaluation resumes.
+- [x] A 30-minute soak has no heartbeat disconnects. (Deterministic supervisor soak.)
+- [x] Forced disconnect reseeds before strategy evaluation resumes.
 
 ### Required report
-`transformation/reports/T040-YYYY-MM-DD-add-market-websocket-heartbeat-and-gap-supervision.md`
+`transformation/reports/T040-2026-07-25-add-market-websocket-heartbeat-and-gap-supervision.md`
 
 ---
 
 ## T041 - Support dynamic tick metadata
 
-Status: BLOCKED
+Status: READY
 Priority: P1
 Phase: P4 - Protocol currency and control-plane hardening
 Owner: unclaimed
