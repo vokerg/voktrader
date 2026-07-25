@@ -36,7 +36,7 @@ Central risk work continues with `T012`.
 | --- | --- | --- | --- | --- | --- |
 | [T010](./PHASE-1-stop-the-bleeding.md#t010) | DONE | P0 | T000 | no | Make live profile capability-only |
 | [T011](./PHASE-1-stop-the-bleeding.md#t011) | DONE | P0 | T010 | no | Introduce typed entry and exit intent boundary |
-| [T012](./PHASE-1-stop-the-bleeding.md#t012) | READY | P0 | T011 | no | Centralize entry risk policy |
+| [T012](./PHASE-1-stop-the-bleeding.md#t012) | IN_PROGRESS | P0 | T011 | no | Centralize entry risk policy |
 | [T013](./PHASE-1-stop-the-bleeding.md#t013) | BLOCKED | P0 | T012 | no | Define portfolio exposure invariants |
 | [T014](./PHASE-1-stop-the-bleeding.md#t014) | BLOCKED | P0 | T012, T013 | no | Prove kill switch covers every live entry route |
 | [T015](./PHASE-1-stop-the-bleeding.md#t015) | BLOCKED | P0 | T012 | no | Expose effective risk gate chain |
