@@ -91,14 +91,14 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 
 ## T012 - Centralize entry risk policy
 
-Status: IN_PROGRESS
+Status: DONE
 Priority: P0
 Phase: P1 - Stop the bleeding
 Owner: openai-gpt-5.6-thinking
 Branch: task/T012-centralize-entry-risk-policy
 PR: #9
 Started: 2026-07-25T06:36:53Z
-Completed:
+Completed: 2026-07-25T06:54:40Z
 Depends On: T011
 Parallelizable: no
 
@@ -115,9 +115,9 @@ Move RiskCheckService semantics behind the sole entry boundary and make all new-
 
 ## Acceptance criteria
 
-- [ ] Every BUY/new-position path calls central risk policy exactly once.
-- [ ] Risk checks are saved with intent/order correlation IDs.
-- [ ] Mutation removing the risk call fails tests.
+- [x] Every BUY/new-position path calls central risk policy exactly once.
+- [x] Risk checks are saved with intent/order correlation IDs.
+- [x] Mutation removing the risk call fails tests.
 
 ## Required tests
 
@@ -131,7 +131,7 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 
 ## T013 - Define portfolio exposure invariants
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P1 - Stop the bleeding
 Owner: unclaimed
@@ -210,7 +210,7 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 
 ## T015 - Expose effective risk gate chain
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P1 - Stop the bleeding
 Owner: unclaimed
