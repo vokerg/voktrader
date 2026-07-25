@@ -37,13 +37,13 @@ Comply with current heartbeat behavior and pause strategies through data gaps.
 
 ## T041 - Support dynamic tick metadata
 
-Status: READY
+Status: IN_PROGRESS
 Priority: P1
 Phase: P4 - Protocol currency and control-plane hardening
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: vokerg
+Branch: `task/T041-dynamic-tick-metadata`
+PR: #11
+Started: 2026-07-25T16:43:52Z
 Completed:
 Depends On: T040
 Parallelizable: no
