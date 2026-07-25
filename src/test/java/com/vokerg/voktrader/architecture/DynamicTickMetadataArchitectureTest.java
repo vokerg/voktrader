@@ -16,6 +16,7 @@ class DynamicTickMetadataArchitectureTest {
         assertThat(source).contains("tickSizeService.requireTickSize");
         assertThat(source).contains("tickSizeService.round");
         assertThat(source).doesNotContain("new BigDecimal(\"0.01\")");
+        assertThat(source).doesNotContain("config.getTickSize()");
     }
 
     @Test
