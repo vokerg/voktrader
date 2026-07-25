@@ -1,7 +1,6 @@
 package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.marketdata.OutcomePrice;
-import com.vokerg.voktrader.marketdata.TickSizeService;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.trade.paper.PaperExecutionService;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
@@ -9,7 +8,6 @@ import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeStatus;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -17,8 +15,6 @@ import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -28,22 +24,11 @@ class ExecutionRouterTest {
     private final TradingProperties properties = new TradingProperties();
     private final PaperExecutionService paperExecutionService = mock(PaperExecutionService.class);
     private final LiveExecutionService liveExecutionService = mock(LiveExecutionService.class);
-    private final TickSizeService tickSizeService = mock(TickSizeService.class);
     private final ExecutionRouter router = new ExecutionRouter(
             properties,
             paperExecutionService,
-            liveExecutionService,
-            tickSizeService
+            liveExecutionService
     );
-
-    @BeforeEach
-    void setUp() {
-        when(tickSizeService.validate(anyString(), any(BigDecimal.class)))
-                .thenAnswer(invocation -> TickSizeService.TickValidation.accepted(
-                        new BigDecimal("0.01"),
-                        invocation.getArgument(1)
-                ));
-    }
 
     @Test
     void paperModeRoutesEverythingToPaperExecutor() {
@@ -85,23 +70,6 @@ class ExecutionRouterTest {
         assertThat(result).isSameAs(liveResult);
         verify(liveExecutionService).execute(intent, ExecutionMode.LIVE);
         verifyNoInteractions(paperExecutionService);
-    }
-
-    @Test
-    void invalidTickRejectsBeforeAnyExecutionModeBoundary() {
-        properties.setMode(ExecutionMode.LIVE);
-        TradeIntent intent = sellIntent();
-        when(tickSizeService.validate(intent.tokenId(), intent.expectedPrice()))
-                .thenReturn(TickSizeService.TickValidation.rejected(
-                        new BigDecimal("0.01"),
-                        "price 0.561 is not aligned to tick 0.01"
-                ));
-
-        TradeExecutionResult result = router.route(intent);
-
-        assertThat(result.accepted()).isFalse();
-        assertThat(result.error()).contains("tick metadata", "not aligned");
-        verifyNoInteractions(paperExecutionService, liveExecutionService);
     }
 
     @Test
