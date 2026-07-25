@@ -1,5 +1,8 @@
 package com.vokerg.voktrader.strategy.v2;
 
+import com.vokerg.voktrader.marketdata.TickMath;
+import com.vokerg.voktrader.marketdata.TickRounding;
+import com.vokerg.voktrader.marketdata.TickSizeService;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.strategy.StrategyOutcomeView;
 import com.vokerg.voktrader.trade.EntryAcceptanceService;
@@ -22,6 +25,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -31,15 +35,24 @@ class StrategyV2OrderActionBuilderTest {
     private final EntryAcceptanceService entryAcceptanceService = mock(EntryAcceptanceService.class);
     private final ExitSubmissionService exitSubmissionService = mock(ExitSubmissionService.class);
     private final TradingProperties tradingProperties = new TradingProperties();
+    private final TickSizeService tickSizeService = mock(TickSizeService.class);
     private final StrategyV2OrderActionBuilder builder = new StrategyV2OrderActionBuilder(
             entryAcceptanceService,
             exitSubmissionService,
-            tradingProperties
+            tradingProperties,
+            tickSizeService
     );
 
     @BeforeEach
     void setUp() {
         tradingProperties.setMode(ExecutionMode.PAPER);
+        when(tickSizeService.requireTickSize(anyString())).thenReturn(new BigDecimal("0.01"));
+        when(tickSizeService.round(anyString(), any(BigDecimal.class), any(TickRounding.class)))
+                .thenAnswer(invocation -> TickMath.round(
+                        invocation.getArgument(1),
+                        new BigDecimal("0.01"),
+                        invocation.getArgument(2)
+                ));
         when(entryAcceptanceService.accept(any(EntryIntent.class))).thenReturn(TradeExecutionResult.accepted(
                 ExecutionMode.PAPER,
                 1L,
@@ -110,6 +123,18 @@ class StrategyV2OrderActionBuilderTest {
 
         assertThat(result.accepted()).isFalse();
         assertThat(result.error()).contains("fixed_shares");
+        verify(entryAcceptanceService, never()).accept(any());
+    }
+
+    @Test
+    void staleConfiguredTickIsRejectedBeforeEntryBoundary() {
+        StrategyV2Properties.Strategy strategy = strategy(TradeOrderType.FOK);
+        strategy.getEntry().getAction().getPrice().setTickSize(new BigDecimal("0.001"));
+
+        TradeExecutionResult result = builder.routeEntry(strategy, context());
+
+        assertThat(result.accepted()).isFalse();
+        assertThat(result.error()).contains("configured tick", "current tick");
         verify(entryAcceptanceService, never()).accept(any());
     }
 
