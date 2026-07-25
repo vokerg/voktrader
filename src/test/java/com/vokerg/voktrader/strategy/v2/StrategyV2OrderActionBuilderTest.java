@@ -127,15 +127,24 @@ class StrategyV2OrderActionBuilderTest {
     }
 
     @Test
-    void staleConfiguredTickIsRejectedBeforeEntryBoundary() {
+    void legacyConfiguredTickDoesNotOverrideDynamicMetadata() {
+        when(tickSizeService.requireTickSize("token-id")).thenReturn(new BigDecimal("0.001"));
+        when(tickSizeService.round(anyString(), any(BigDecimal.class), any(TickRounding.class)))
+                .thenAnswer(invocation -> TickMath.round(
+                        invocation.getArgument(1),
+                        new BigDecimal("0.001"),
+                        invocation.getArgument(2)
+                ));
         StrategyV2Properties.Strategy strategy = strategy(TradeOrderType.FOK);
-        strategy.getEntry().getAction().getPrice().setTickSize(new BigDecimal("0.001"));
+        strategy.getEntry().getAction().getPrice().setTickSize(new BigDecimal("0.01"));
+        strategy.getEntry().getAction().getPrice().setOffsetTicks(1);
 
         TradeExecutionResult result = builder.routeEntry(strategy, context());
 
-        assertThat(result.accepted()).isFalse();
-        assertThat(result.error()).contains("configured tick", "current tick");
-        verify(entryAcceptanceService, never()).accept(any());
+        assertThat(result.accepted()).isTrue();
+        ArgumentCaptor<EntryIntent> intent = ArgumentCaptor.forClass(EntryIntent.class);
+        verify(entryAcceptanceService).accept(intent.capture());
+        assertThat(intent.getValue().limitPrice()).isEqualByComparingTo("0.511");
     }
 
     private StrategyV2Properties.Strategy strategy(TradeOrderType orderType) {
