@@ -18,13 +18,13 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 
 The next independent tasks are:
 
-1. `T012` - centralize entry risk policy.
+1. `T013` - define portfolio exposure invariants.
 2. `T040` - market WebSocket heartbeat and gap supervision. Parallel infrastructure work.
 3. `T042` - unified fee model. Parallel infrastructure work.
 4. `T044` - control-plane security. Parallel infrastructure work.
 5. `T050` - CI pipeline. Parallel infrastructure work.
 
-Central risk work continues with `T012`.
+The next primary safety task is `T013`; `T015` and `T020` are also dependency-ready but remain behind the lower-numbered P0 safety sequence.
 
 ## P0 - Transformation foundation
 | Task | Status | Priority | Depends On | Parallelizable | Title |
@@ -36,15 +36,15 @@ Central risk work continues with `T012`.
 | --- | --- | --- | --- | --- | --- |
 | [T010](./PHASE-1-stop-the-bleeding.md#t010) | DONE | P0 | T000 | no | Make live profile capability-only |
 | [T011](./PHASE-1-stop-the-bleeding.md#t011) | DONE | P0 | T010 | no | Introduce typed entry and exit intent boundary |
-| [T012](./PHASE-1-stop-the-bleeding.md#t012) | IN_PROGRESS | P0 | T011 | no | Centralize entry risk policy |
-| [T013](./PHASE-1-stop-the-bleeding.md#t013) | BLOCKED | P0 | T012 | no | Define portfolio exposure invariants |
+| [T012](./PHASE-1-stop-the-bleeding.md#t012) | DONE | P0 | T011 | no | Centralize entry risk policy |
+| [T013](./PHASE-1-stop-the-bleeding.md#t013) | READY | P0 | T012 | no | Define portfolio exposure invariants |
 | [T014](./PHASE-1-stop-the-bleeding.md#t014) | BLOCKED | P0 | T012, T013 | no | Prove kill switch covers every live entry route |
-| [T015](./PHASE-1-stop-the-bleeding.md#t015) | BLOCKED | P0 | T012 | no | Expose effective risk gate chain |
+| [T015](./PHASE-1-stop-the-bleeding.md#t015) | READY | P0 | T012 | no | Expose effective risk gate chain |
 
 ## P2 - Durable order lifecycle
 | Task | Status | Priority | Depends On | Parallelizable | Title |
 | --- | --- | --- | --- | --- | --- |
-| [T020](./PHASE-2-durable-order-lifecycle.md#t020) | BLOCKED | P0 | T012 | no | Create transactional order outbox schema |
+| [T020](./PHASE-2-durable-order-lifecycle.md#t020) | READY | P0 | T012 | no | Create transactional order outbox schema |
 | [T021](./PHASE-2-durable-order-lifecycle.md#t021) | BLOCKED | P0 | T020 | no | Implement outbox worker and claim lease |
 | [T022](./PHASE-2-durable-order-lifecycle.md#t022) | BLOCKED | P0 | T021 | no | Make executor idempotency durable |
 | [T023](./PHASE-2-durable-order-lifecycle.md#t023) | BLOCKED | P0 | T021, T022 | no | Handle unknown submission outcomes |
