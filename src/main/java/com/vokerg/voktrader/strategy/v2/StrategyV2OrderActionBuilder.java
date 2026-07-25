@@ -2,6 +2,8 @@ package com.vokerg.voktrader.strategy.v2;
 
 import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
+import com.vokerg.voktrader.marketdata.TickRounding;
+import com.vokerg.voktrader.marketdata.TickSizeService;
 import com.vokerg.voktrader.trade.EntryAcceptanceService;
 import com.vokerg.voktrader.trade.EntryIntent;
 import com.vokerg.voktrader.trade.ExitIntent;
@@ -23,15 +25,18 @@ public class StrategyV2OrderActionBuilder {
     private final EntryAcceptanceService entryAcceptanceService;
     private final ExitSubmissionService exitSubmissionService;
     private final TradingProperties tradingProperties;
+    private final TickSizeService tickSizeService;
 
     public StrategyV2OrderActionBuilder(
             EntryAcceptanceService entryAcceptanceService,
             ExitSubmissionService exitSubmissionService,
-            TradingProperties tradingProperties
+            TradingProperties tradingProperties,
+            TickSizeService tickSizeService
     ) {
         this.entryAcceptanceService = entryAcceptanceService;
         this.exitSubmissionService = exitSubmissionService;
         this.tradingProperties = tradingProperties;
+        this.tickSizeService = tickSizeService;
     }
 
     public TradeExecutionResult routeEntry(
@@ -47,7 +52,13 @@ public class StrategyV2OrderActionBuilder {
         boolean postOnly = action.getPostOnly() != null
                 ? action.getPostOnly()
                 : "maker".equalsIgnoreCase(action.getLiquidityRole());
-        BigDecimal price = price(action, context);
+        BigDecimal price;
+        try {
+            price = price(action, context);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return TradeExecutionResult.rejected(mode, null, null, null, null,
+                    "Strategy V2 tick validation failed: " + e.getMessage());
+        }
         BigDecimal shares = shares(action, orderType, postOnly);
         BigDecimal amountUsd = amountUsd(action, price, shares);
         if (amountUsd == null && "fixed_shares".equalsIgnoreCase(action.getSize().getType())) {
@@ -94,7 +105,13 @@ public class StrategyV2OrderActionBuilder {
         boolean postOnly = liquidityRole != null
                 ? "maker".equalsIgnoreCase(liquidityRole)
                 : orderType.prefersMaker();
-        BigDecimal price = exitPrice(context, orderType, postOnly);
+        BigDecimal price;
+        try {
+            price = exitPrice(context, orderType, postOnly);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return TradeExecutionResult.rejected(mode, null, null, null, null,
+                    "Strategy V2 exit tick validation failed: " + e.getMessage());
+        }
         OutcomePrice outcomePrice = new OutcomePrice(
                 context.candidate().tokenId(),
                 context.candidate().outcome(),
@@ -202,16 +219,15 @@ public class StrategyV2OrderActionBuilder {
         if (price == null) {
             price = context.decimal("candidate.ask");
         }
-        BigDecimal tick = config.getTickSize() == null ? new BigDecimal("0.01") : config.getTickSize();
+        String tokenId = context.candidate().tokenId();
+        BigDecimal tick = tickSizeService.requireTickSize(tokenId);
+        if (config.getTickSize() != null && config.getTickSize().compareTo(tick) != 0) {
+            throw new IllegalArgumentException("configured tick " + config.getTickSize() + " differs from current tick " + tick);
+        }
         int ticks = config.getOffsetTicks() + config.getImproveByTicks();
         if (ticks != 0) {
             BigDecimal offset = tick.multiply(new BigDecimal(ticks));
             price = TradeSide.BUY.name().equalsIgnoreCase(action.getSide()) ? price.add(offset) : price.subtract(offset);
-        }
-        if ("ceil_to_tick".equalsIgnoreCase(config.getRounding())) {
-            price = price.divide(tick, 0, RoundingMode.CEILING).multiply(tick);
-        } else if ("floor_to_tick".equalsIgnoreCase(config.getRounding())) {
-            price = price.divide(tick, 0, RoundingMode.FLOOR).multiply(tick);
         }
         if (config.getMinPrice() != null) {
             price = price.max(config.getMinPrice());
@@ -219,7 +235,13 @@ public class StrategyV2OrderActionBuilder {
         if (config.getMaxPrice() != null) {
             price = price.min(config.getMaxPrice());
         }
-        return price.setScale(SCALE, RoundingMode.HALF_UP).stripTrailingZeros();
+        TickRounding rounding = switch (config.getRounding() == null ? "exact" : config.getRounding()) {
+            case "ceil_to_tick" -> TickRounding.CEILING;
+            case "floor_to_tick" -> TickRounding.FLOOR;
+            case "nearest_to_tick" -> TickRounding.HALF_UP;
+            default -> TickRounding.EXACT;
+        };
+        return tickSizeService.round(tokenId, price, rounding);
     }
 
     private TradeOrderType orderType(String value) {
@@ -237,7 +259,7 @@ public class StrategyV2OrderActionBuilder {
         if (price == null) {
             price = context.decimal("candidate.mid");
         }
-        return price == null ? null : price.setScale(SCALE, RoundingMode.HALF_UP).stripTrailingZeros();
+        return price == null ? null : tickSizeService.round(context.candidate().tokenId(), price, TickRounding.EXACT);
     }
 
     private String ruleId(StrategyV2Properties.Strategy strategy, StrategyV2Properties.ExitRule rule) {
