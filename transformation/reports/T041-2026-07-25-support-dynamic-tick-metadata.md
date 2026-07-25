@@ -15,7 +15,7 @@ The task is complete. Both acceptance criteria pass in isolated Java 21 harnesse
 - Branch: `task/T041-dynamic-tick-metadata`
 - PR: #11
 - Status at completion: DONE
-- Completed: 2026-07-25T17:13:09Z
+- Completed: 2026-07-25T17:21:00Z
 
 ## Files changed
 
@@ -47,7 +47,7 @@ The task is complete. Both acceptance criteria pass in isolated Java 21 harnesse
 - `src/main/java/com/vokerg/voktrader/polymarket/dto/MarketWsMessageDto.java`
   - Maps `old_tick_size` and `new_tick_size`; preserves the previous direct-construction signature.
 - `src/main/java/com/vokerg/voktrader/strategy/v2/StrategyV2OrderActionBuilder.java`
-  - Removes the hard-coded `0.01` default and routes offsets, rounding, and exact validation through `TickSizeService`.
+  - Removes the hard-coded `0.01` fallback from runtime behavior and routes offsets, rounding, and exact validation through `TickSizeService`.
 - `src/main/java/com/vokerg/voktrader/executor/PythonExecutorClient.java`
   - Rejects invalid/missing tick metadata before constructing the order HTTP request.
 - `src/main/java/com/vokerg/voktrader/time/TimeMachine.java`
@@ -73,8 +73,8 @@ The task is complete. Both acceptance criteria pass in isolated Java 21 harnesse
 
 1. **One change-only per-token timeline.** Identical observations are not duplicated. Tick changes are persisted with effective time, observation time, market, token, and source.
 2. **Live and replay share one service.** Live reads the latest cached/persisted value. When `TimeMachine` is active, the same service performs an as-of query and does not consult the live cache.
-3. **Protocol metadata is authoritative.** REST order books seed `tick_size`; WebSocket `tick_size_change` supplies the new value. Strategy configuration may assert an expected tick but cannot replace current protocol metadata.
-4. **Fail closed.** Missing metadata, non-positive/out-of-range prices, and non-aligned prices are rejected. No implicit `0.01` fallback remains in Strategy V2.
+3. **Protocol metadata is authoritative.** REST order books seed `tick_size`; WebSocket `tick_size_change` supplies the new value. Legacy Strategy V2 tick fields remain in the configuration schema for compatibility but are not consulted by order construction and cannot override protocol metadata.
+4. **Fail closed.** Missing metadata, non-positive/out-of-range prices, and non-aligned prices are rejected. No implicit `0.01` fallback remains in Strategy V2 runtime behavior.
 5. **Defense at the executor boundary.** The Java-to-Python order client validates immediately before any order HTTP construction. The existing disabled-executor response remains unchanged because no submission is possible in that state.
 6. **Additive migration version.** V18 was selected because the separately claimed T012 PR already introduces V17; this avoids a known migration-number collision without touching T012 scope.
 7. **No unnecessary overlap with T012.** A broader `ExecutionRouter` change was considered and removed because T012 already owns that central risk boundary. T041 remains independently mergeable.
@@ -125,6 +125,13 @@ T041 websocket DTO harness: PASS (compatibility constructor + tick fields)
 
 This verifies that the new `old_tick_size`/`new_tick_size` record fields compile and that the previous direct-construction signature remains valid.
 
+### Committed JUnit regression coverage
+
+- `TickSizeServiceTest` proves the immediate `0.01` to `0.001` transition and as-of replay lookup.
+- `StrategyV2OrderActionBuilderTest` proves a legacy configured `0.01` cannot override dynamic `0.001`; a one-tick offset from `0.51` is `0.511`, not `0.52`.
+- `PythonExecutorClientTickValidationTest` proves invalid combinations do not construct an HTTP client.
+- `DynamicTickMetadataArchitectureTest` guards REST/WS ingestion, replay lookup, central rounding, protocol authority, and pre-HTTP validation.
+
 ### Full repository suite unavailable in this environment
 
 Repository checkout verification:
@@ -156,7 +163,7 @@ The repository does contain `mvnw`, but the branch could not be checked out and 
 ## Safety impact
 
 - Live order submission now fails before executor HTTP when tick metadata is absent or the limit price is not aligned.
-- Strategy V2 can no longer silently assume a one-cent tick.
+- Strategy V2 can no longer silently assume or obey a stale one-cent tick.
 - Replay cannot accidentally use the latest live tick while replay time is active.
 - REST fetching occurs before the transactional metadata write; no remote exchange side effect was moved into a database transaction.
 - SELL/CANCEL availability was not modified.
@@ -167,7 +174,7 @@ The repository does contain `mvnw`, but the branch could not be checked out and 
 - The market WebSocket DTO retains its previous constructor signature for existing tests and call sites.
 - The executor-disabled response remains the existing explicit disabled message.
 - V18 is additive and does not alter existing tables.
-- Existing Strategy V2 configuration with no explicit tick now uses protocol metadata. An explicitly configured stale tick is rejected rather than silently overriding the exchange contract; this is an intentional fail-closed behavior change.
+- Legacy Strategy V2 tick configuration fields remain bindable but are no longer authoritative. Runtime protocol metadata always determines tick offsets and rounding; this is the intentional behavior change required by T041.
 
 ## Remaining risks
 
