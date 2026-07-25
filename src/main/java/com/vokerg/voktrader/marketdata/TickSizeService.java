@@ -2,6 +2,7 @@ package com.vokerg.voktrader.marketdata;
 
 import com.vokerg.voktrader.marketdata.model.TickSizeMetadataEntity;
 import com.vokerg.voktrader.marketdata.persistence.TickSizeMetadataRepository;
+import com.vokerg.voktrader.time.TimeMachine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -57,6 +58,11 @@ public class TickSizeService {
         Map<String, TickSizeMetadata> historical = HISTORICAL_OVERRIDE.get();
         if (historical != null) {
             return Optional.ofNullable(historical.get(requiredTokenId));
+        }
+        if (TimeMachine.isOverridden()) {
+            return repository
+                    .findFirstByTokenIdAndEffectiveAtLessThanEqualOrderByEffectiveAtDescIdDesc(requiredTokenId, TimeMachine.now())
+                    .map(TickSizeMetadataEntity::toMetadata);
         }
         TickSizeMetadata cached = currentByTokenId.get(requiredTokenId);
         if (cached != null) {
