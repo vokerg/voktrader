@@ -40,14 +40,14 @@ public class PythonExecutorClient {
         if (command == null) {
             return ExecutorOrderResponse.rejected("Executor submission rejected before HTTP: command is required");
         }
+        if (!properties.isEnabled()) {
+            return ExecutorOrderResponse.rejected("Python executor is disabled: set voktrader.executor.enabled=true");
+        }
         TickSizeService.TickValidation tickValidation = tickSizeService.validate(command.tokenId(), command.limitPrice());
         if (!tickValidation.valid()) {
             return ExecutorOrderResponse.rejected(
                     "Executor submission rejected before HTTP: " + tickValidation.reason()
             );
-        }
-        if (!properties.isEnabled()) {
-            return ExecutorOrderResponse.rejected("Python executor is disabled: set voktrader.executor.enabled=true");
         }
 
         try {
