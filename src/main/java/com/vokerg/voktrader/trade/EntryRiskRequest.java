@@ -42,15 +42,7 @@ public record EntryRiskRequest(
     }
 
     boolean matches(TradeIntent candidate, ExecutionMode candidateMode) {
-        TradeIntent expected = tradeIntent();
-        return candidateMode == mode
-                && candidate != null
-                && candidate.side() == TradeSide.BUY
-                && Objects.equals(candidate.botId(), expected.botId())
-                && Objects.equals(candidate.strategyId(), expected.strategyId())
-                && Objects.equals(candidate.marketId(), expected.marketId())
-                && Objects.equals(candidate.tokenId(), expected.tokenId())
-                && Objects.equals(candidate.decisionAt(), expected.decisionAt());
+        return candidateMode == mode && Objects.equals(candidate, tradeIntent());
     }
 
     private static String correlationId(TradeIntent intent, ExecutionMode mode) {
