@@ -76,7 +76,7 @@ public class MarketPriceFeedService {
         if (created) {
             feed.start();
         }
-        log.info("{}Market price feed acquired marketId={} botId={} subscribers={}",
+        log.info("{}Market price feed acquired marketId={} botId={} subscribers={}{}",
                 LogColors.MARKET, market.id(), botId, feed.subscriberCount(), LogColors.RESET);
         return new MarketPriceFeedHandle(this, market.id(), botId, market, feed.latestPriceState(), feed.orderBookState());
     }
@@ -95,7 +95,7 @@ public class MarketPriceFeedService {
         }
         feedsByMarketId.computeIfPresent(marketId, (ignored, feed) -> {
             feed.removeSubscriber(botId);
-            log.info("{}Market price feed released marketId={} botId={} subscribers={}",
+            log.info("{}Market price feed released marketId={} botId={} subscribers={}{}",
                     LogColors.MARKET, marketId, botId, feed.subscriberCount(), LogColors.RESET);
             if (feed.hasSubscribers()) {
                 return feed;
@@ -290,7 +290,7 @@ public class MarketPriceFeedService {
             String remaining = formatRemaining(remainingDuration);
 
             log.info(
-                    "{}SNAPSHOT scope=market marketId={} remaining={} | Up {}/{} spread={} | Down {}/{} spread={}",
+                    "{}SNAPSHOT scope=market marketId={} remaining={} | Up {}/{} spread={} | Down {}/{} spread={}{}",
                     LogColors.SNAPSHOT,
                     market.id(),
                     remaining,
@@ -337,7 +337,7 @@ public class MarketPriceFeedService {
                     OrderBookDto book = clobClient.getOrderBook(tokenId).block();
                     if (book == null) {
                         complete = false;
-                        log.warn("{}No REST order book returned for marketId={} outcome={} tokenId={}",
+                        log.warn("{}No REST order book returned for marketId={} outcome={} tokenId={}{}",
                                 LogColors.MARKET, market.id(), outcome, tokenId, LogColors.RESET);
                         eventLogger.price(
                                 "PRICE_SEED_MISSING_BOOK",
@@ -353,7 +353,7 @@ public class MarketPriceFeedService {
                     booksByTokenId.put(tokenId, book);
                 } catch (Exception e) {
                     complete = false;
-                    log.warn("{}Failed to seed REST book for marketId={} outcome={} tokenId={}",
+                    log.warn("{}Failed to seed REST book for marketId={} outcome={} tokenId={}{}",
                             LogColors.MARKET, market.id(), outcome, tokenId, LogColors.RESET, e);
                     eventLogger.price(
                             "PRICE_SEED_FAILED",
@@ -388,7 +388,7 @@ public class MarketPriceFeedService {
             Instant updatedAt = Instant.now();
             orderBookState.update(tokenId, outcome, book.bids(), book.asks(), updatedAt);
             latestPriceState.update(tokenId, outcome, book.bestBid().orElse(null), book.bestAsk().orElse(null), updatedAt);
-            log.info("{}Seeded market price state marketId={} outcome={} tokenId={} bid={} ask={} spread={}",
+            log.info("{}Seeded market price state marketId={} outcome={} tokenId={} bid={} ask={} spread={}{}",
                     LogColors.MARKET, market.id(), outcome, tokenId,
                     book.bestBid().orElse(null), book.bestAsk().orElse(null), book.spread().orElse(null), LogColors.RESET);
             eventLogger.price(
@@ -481,7 +481,7 @@ public class MarketPriceFeedService {
                 return;
             }
             lastPriceLogByTokenId.put(tokenId, now);
-            log.info("{}Live market price update marketId={} event={} outcome={} tokenId={} bid={} ask={} spread={}",
+            log.info("{}Live market price update marketId={} event={} outcome={} tokenId={} bid={} ask={} spread={}{}",
                     LogColors.SNAPSHOT, market.id(), eventType, outcome, tokenId, bid, ask,
                     ask != null && bid != null ? ask.subtract(bid) : null, LogColors.RESET);
             eventLogger.price(
@@ -513,7 +513,7 @@ public class MarketPriceFeedService {
 
         private void emitSupervision(String eventType, String description, boolean important) {
             MarketStreamSupervisor.Snapshot snapshot = supervisor.snapshot();
-            log.warn("{}{} marketId={} generation={} state={} paused={} reason={} reconnects={} gaps={} stale={} reseeds={}",
+            log.warn("{}{} marketId={} generation={} state={} paused={} reason={} reconnects={} gaps={} stale={} reseeds={}{}",
                     LogColors.MARKET,
                     eventType,
                     market.id(),
