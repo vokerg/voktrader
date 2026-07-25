@@ -91,13 +91,13 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 
 ## T012 - Centralize entry risk policy
 
-Status: READY
+Status: IN_PROGRESS
 Priority: P0
 Phase: P1 - Stop the bleeding
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: openai-gpt-5.6-thinking
+Branch: task/T012-centralize-entry-risk-policy
+PR: #9
+Started: 2026-07-25T06:36:53Z
 Completed:
 Depends On: T011
 Parallelizable: no
