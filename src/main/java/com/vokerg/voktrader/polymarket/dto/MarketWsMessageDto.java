@@ -38,6 +38,10 @@ public record MarketWsMessageDto(
 
         List<String> outcomes,
 
+        @JsonProperty("old_tick_size") String oldTickSize,
+
+        @JsonProperty("new_tick_size") String newTickSize,
+
         @JsonProperty("winning_asset_id") String winningAssetId,
 
         @JsonProperty("winning_outcome") String winningOutcome) {
@@ -51,6 +55,10 @@ public record MarketWsMessageDto(
 
     public boolean isBestBidAsk() {
         return "best_bid_ask".equals(eventType);
+    }
+
+    public boolean isTickSizeChange() {
+        return "tick_size_change".equals(eventType);
     }
 
     public boolean isMarketResolved() {
