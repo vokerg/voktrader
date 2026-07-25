@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.polymarket.client;
 
+import com.vokerg.voktrader.marketdata.TickSizeService;
 import com.vokerg.voktrader.polymarket.dto.OrderBookDto;
 import com.vokerg.voktrader.polymarket.dto.ClobMarketInfoDto;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +10,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -16,6 +20,7 @@ public class ClobClient {
 
     @Qualifier("clobWebClient")
     private final WebClient clobWebClient;
+    private final TickSizeService tickSizeService;
 
     public Mono<OrderBookDto> getOrderBook(String tokenId) {
         return clobWebClient.get()
@@ -26,12 +31,19 @@ public class ClobClient {
                 .retrieve()
                 .bodyToMono(OrderBookDto.class)
                 .doOnSubscribe(s -> log.debug("Fetching order book tokenId={}", tokenId))
+                .doOnNext(book -> tickSizeService.recordRestBook(
+                        tokenId,
+                        book.market(),
+                        book.tickSize(),
+                        parseTimestamp(book.timestamp())
+                ))
                 .doOnNext(book -> log.debug(
-                        "Order book tokenId={} bestBid={} bestAsk={} spread={}",
+                        "Order book tokenId={} bestBid={} bestAsk={} spread={} tickSize={}",
                         tokenId,
                         book.bestBid().orElse(null),
                         book.bestAsk().orElse(null),
-                        book.spread().orElse(null)
+                        book.spread().orElse(null),
+                        book.tickSize()
                 ))
                 .doOnError(e -> log.error("Failed to fetch order book tokenId={}", tokenId, e));
     }
@@ -50,5 +62,21 @@ public class ClobClient {
                         info.platformFeeRate()
                 ))
                 .doOnError(e -> log.error("Failed to fetch CLOB market info conditionId={}", conditionId, e));
+    }
+
+    private Instant parseTimestamp(String value) {
+        if (value == null || value.isBlank()) {
+            return Instant.now();
+        }
+        try {
+            long raw = Long.parseLong(value);
+            return value.length() <= 10 ? Instant.ofEpochSecond(raw) : Instant.ofEpochMilli(raw);
+        } catch (NumberFormatException ignored) {
+            try {
+                return Instant.parse(value);
+            } catch (DateTimeParseException invalidTimestamp) {
+                return Instant.now();
+            }
+        }
     }
 }
