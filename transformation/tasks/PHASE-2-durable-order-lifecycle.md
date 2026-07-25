@@ -6,7 +6,7 @@ This ledger contains the detailed task contracts for this phase. Agents claim an
 
 ## T020 - Create transactional order outbox schema
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P2 - Durable order lifecycle
 Owner: unclaimed
