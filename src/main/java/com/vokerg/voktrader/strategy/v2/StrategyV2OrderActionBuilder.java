@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Locale;
 
 @Component
 public class StrategyV2OrderActionBuilder {
@@ -221,9 +222,6 @@ public class StrategyV2OrderActionBuilder {
         }
         String tokenId = context.candidate().tokenId();
         BigDecimal tick = tickSizeService.requireTickSize(tokenId);
-        if (config.getTickSize() != null && config.getTickSize().compareTo(tick) != 0) {
-            throw new IllegalArgumentException("configured tick " + config.getTickSize() + " differs from current tick " + tick);
-        }
         int ticks = config.getOffsetTicks() + config.getImproveByTicks();
         if (ticks != 0) {
             BigDecimal offset = tick.multiply(new BigDecimal(ticks));
@@ -235,7 +233,8 @@ public class StrategyV2OrderActionBuilder {
         if (config.getMaxPrice() != null) {
             price = price.min(config.getMaxPrice());
         }
-        TickRounding rounding = switch (config.getRounding() == null ? "exact" : config.getRounding()) {
+        String roundingValue = config.getRounding() == null ? "exact" : config.getRounding().toLowerCase(Locale.ROOT);
+        TickRounding rounding = switch (roundingValue) {
             case "ceil_to_tick" -> TickRounding.CEILING;
             case "floor_to_tick" -> TickRounding.FLOOR;
             case "nearest_to_tick" -> TickRounding.HALF_UP;
@@ -246,7 +245,7 @@ public class StrategyV2OrderActionBuilder {
 
     private TradeOrderType orderType(String value) {
         try {
-            return TradeOrderType.valueOf(value == null ? "FOK" : value.toUpperCase());
+            return TradeOrderType.valueOf(value == null ? "FOK" : value.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException("Unknown Strategy V2 order_type: " + value);
         }
