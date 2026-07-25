@@ -10,9 +10,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 
 public class OrderBookState {
     private final Map<String, OutcomeOrderBook> booksByTokenId = new ConcurrentHashMap<>();
+    private final BooleanSupplier readable;
+
+    public OrderBookState() {
+        this(() -> true);
+    }
+
+    OrderBookState(BooleanSupplier readable) {
+        this.readable = readable == null ? () -> true : readable;
+    }
 
     public void update(
             String tokenId,
@@ -70,7 +80,7 @@ public class OrderBookState {
         if (delegate.isPresent()) {
             return delegate.get().byTokenId(tokenId);
         }
-        if (tokenId == null || tokenId.isBlank()) {
+        if (!readable.getAsBoolean() || tokenId == null || tokenId.isBlank()) {
             return Optional.empty();
         }
         return Optional.ofNullable(booksByTokenId.get(tokenId));
@@ -81,7 +91,7 @@ public class OrderBookState {
         if (delegate.isPresent()) {
             return delegate.get().byOutcome(outcome);
         }
-        if (outcome == null || outcome.isBlank()) {
+        if (!readable.getAsBoolean() || outcome == null || outcome.isBlank()) {
             return Optional.empty();
         }
         return booksByTokenId.values().stream()
@@ -94,6 +104,9 @@ public class OrderBookState {
         if (delegate.isPresent()) {
             return delegate.get().allByTokenId();
         }
+        if (!readable.getAsBoolean()) {
+            return Map.of();
+        }
         return Map.copyOf(booksByTokenId);
     }
 
@@ -101,6 +114,9 @@ public class OrderBookState {
         Optional<OrderBookState> delegate = delegate();
         if (delegate.isPresent()) {
             return delegate.get().allByOutcome();
+        }
+        if (!readable.getAsBoolean()) {
+            return Map.of();
         }
         Map<String, OutcomeOrderBook> books = new LinkedHashMap<>();
         booksByTokenId.values().forEach(book -> {

@@ -16,15 +16,14 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 
 ## Current next tasks
 
-The next independent tasks are:
+The next unclaimed tasks are:
 
-1. `T012` - centralize entry risk policy.
-2. `T040` - market WebSocket heartbeat and gap supervision. Parallel infrastructure work.
-3. `T042` - unified fee model. Parallel infrastructure work.
-4. `T044` - control-plane security. Parallel infrastructure work.
-5. `T050` - CI pipeline. Parallel infrastructure work.
+1. `T041` - dynamic tick metadata.
+2. `T042` - unified fee model. Parallel infrastructure work.
+3. `T044` - control-plane security. Parallel infrastructure work.
+4. `T050` - CI pipeline. Parallel infrastructure work.
 
-Central risk work continues with `T012`.
+Central risk work `T012` is already claimed by open PR #9.
 
 ## P0 - Transformation foundation
 | Task | Status | Priority | Depends On | Parallelizable | Title |
@@ -64,8 +63,8 @@ Central risk work continues with `T012`.
 ## P4 - Protocol currency and control-plane hardening
 | Task | Status | Priority | Depends On | Parallelizable | Title |
 | --- | --- | --- | --- | --- | --- |
-| [T040](./PHASE-4-protocol-and-control-plane.md#t040) | READY | P1 | T000 | yes | Add market WebSocket heartbeat and gap supervision |
-| [T041](./PHASE-4-protocol-and-control-plane.md#t041) | BLOCKED | P1 | T040 | no | Support dynamic tick metadata |
+| [T040](./PHASE-4-protocol-and-control-plane.md#t040) | DONE | P1 | T000 | yes | Add market WebSocket heartbeat and gap supervision |
+| [T041](./PHASE-4-protocol-and-control-plane.md#t041) | READY | P1 | T040 | no | Support dynamic tick metadata |
 | [T042](./PHASE-4-protocol-and-control-plane.md#t042) | READY | P1 | T000 | yes | Replace hard-coded fee assumptions |
 | [T043](./PHASE-4-protocol-and-control-plane.md#t043) | BLOCKED | P1 | T021 | no | Map matching-engine restart modes |
 | [T044](./PHASE-4-protocol-and-control-plane.md#t044) | READY | P1 | T000 | yes | Harden live control plane security |
