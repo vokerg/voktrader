@@ -9,10 +9,20 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 
 @Component
 public class LatestPriceState {
     private final Map<String, OutcomePrice> byTokenId = new ConcurrentHashMap<>();
+    private final BooleanSupplier readable;
+
+    public LatestPriceState() {
+        this(() -> true);
+    }
+
+    LatestPriceState(BooleanSupplier readable) {
+        this.readable = readable == null ? () -> true : readable;
+    }
 
     public void update(String tokenId, String outcome, BigDecimal bid, BigDecimal ask) {
         update(tokenId, outcome, bid, ask, TimeMachine.now());
@@ -39,6 +49,9 @@ public class LatestPriceState {
         if (delegate.isPresent()) {
             return delegate.get().byTokenId(tokenId);
         }
+        if (!readable.getAsBoolean()) {
+            return Optional.empty();
+        }
         return Optional.ofNullable(byTokenId.get(tokenId));
     }
 
@@ -46,6 +59,9 @@ public class LatestPriceState {
         Optional<LatestPriceState> delegate = delegate();
         if (delegate.isPresent()) {
             return delegate.get().byOutcome(outcome);
+        }
+        if (!readable.getAsBoolean()) {
+            return Optional.empty();
         }
         return byTokenId.values().stream()
                 .filter(price -> price.outcome().equalsIgnoreCase(outcome))
@@ -56,6 +72,9 @@ public class LatestPriceState {
         Optional<LatestPriceState> delegate = delegate();
         if (delegate.isPresent()) {
             return delegate.get().allByTokenId();
+        }
+        if (!readable.getAsBoolean()) {
+            return Map.of();
         }
         return Map.copyOf(byTokenId);
     }
