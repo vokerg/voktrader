@@ -37,14 +37,14 @@ Comply with current heartbeat behavior and pause strategies through data gaps.
 
 ## T041 - Support dynamic tick metadata
 
-Status: READY
+Status: DONE
 Priority: P1
 Phase: P4 - Protocol currency and control-plane hardening
-Owner: unclaimed
-Branch:
-PR:
-Started:
-Completed:
+Owner: vokerg
+Branch: `task/T041-dynamic-tick-metadata`
+PR: #11
+Started: 2026-07-25T16:43:52Z
+Completed: 2026-07-25T17:21:00Z
 Depends On: T040
 Parallelizable: no
 
@@ -58,11 +58,11 @@ Fetch and react to tick-size changes for order rounding and validation.
 4. Reject invalid price/tick combinations before executor submission.
 
 ### Acceptance criteria
-- [ ] A change from .01 to .001 changes validation immediately.
-- [ ] Replay and live use identical tick metadata.
+- [x] A change from .01 to .001 changes validation immediately.
+- [x] Replay and live use identical tick metadata.
 
 ### Required report
-`transformation/reports/T041-YYYY-MM-DD-support-dynamic-tick-metadata.md`
+`transformation/reports/T041-2026-07-25-support-dynamic-tick-metadata.md`
 
 ---
 
@@ -281,6 +281,37 @@ Make Java/Python/Angular installs reproducible and detect protocol drift.
 
 ### Required report
 `transformation/reports/T052-YYYY-MM-DD-lock-dependency-and-sdk-contracts.md`
+
+---
+
+## T053 - Backfill historical tick provenance
+
+Status: READY
+Priority: P2
+Phase: P4 - Protocol currency and control-plane hardening
+Owner: unclaimed
+Branch:
+PR:
+Started:
+Completed:
+Depends On: T041
+Parallelizable: yes
+
+### Objective
+Make pre-T041 replay datasets explicit and trustworthy without inventing historical tick metadata.
+
+### Implementation steps
+1. Inventory replay snapshots captured before dynamic tick persistence existed.
+2. Backfill only tick observations that can be verified from retained REST books, event payloads, or another documented source.
+3. Persist source and coverage provenance for each backfilled interval.
+4. Mark unresolved intervals as replay blockers instead of falling back to an assumed tick.
+
+### Acceptance criteria
+- [ ] Every pre-T041 replay interval either resolves to sourced tick metadata or reports an explicit coverage blocker.
+- [ ] No backfill path introduces an implicit `0.01` fallback.
+
+### Required report
+`transformation/reports/T053-YYYY-MM-DD-backfill-historical-tick-provenance.md`
 
 ## Phase-wide safety rule
 

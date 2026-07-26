@@ -18,10 +18,10 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 
 The next unclaimed tasks are:
 
-1. `T041` - dynamic tick metadata.
-2. `T042` - unified fee model. Parallel infrastructure work.
-3. `T044` - control-plane security. Parallel infrastructure work.
-4. `T050` - CI pipeline. Parallel infrastructure work.
+1. `T042` - unified fee model. Parallel infrastructure work.
+2. `T044` - control-plane security. Parallel infrastructure work.
+3. `T050` - CI pipeline. Parallel infrastructure work.
+4. `T053` - backfill historical tick provenance. Parallel legacy-data quality work after T041.
 
 Central risk work `T012` is already claimed by open PR #9.
 
@@ -64,7 +64,7 @@ Central risk work `T012` is already claimed by open PR #9.
 | Task | Status | Priority | Depends On | Parallelizable | Title |
 | --- | --- | --- | --- | --- | --- |
 | [T040](./PHASE-4-protocol-and-control-plane.md#t040) | DONE | P1 | T000 | yes | Add market WebSocket heartbeat and gap supervision |
-| [T041](./PHASE-4-protocol-and-control-plane.md#t041) | READY | P1 | T040 | no | Support dynamic tick metadata |
+| [T041](./PHASE-4-protocol-and-control-plane.md#t041) | DONE | P1 | T040 | no | Support dynamic tick metadata |
 | [T042](./PHASE-4-protocol-and-control-plane.md#t042) | READY | P1 | T000 | yes | Replace hard-coded fee assumptions |
 | [T043](./PHASE-4-protocol-and-control-plane.md#t043) | BLOCKED | P1 | T021 | no | Map matching-engine restart modes |
 | [T044](./PHASE-4-protocol-and-control-plane.md#t044) | READY | P1 | T000 | yes | Harden live control plane security |
@@ -72,6 +72,7 @@ Central risk work `T012` is already claimed by open PR #9.
 | [T050](./PHASE-4-protocol-and-control-plane.md#t050) | READY | P1 | T000 | yes | Add CI pipeline and smoke compose |
 | [T051](./PHASE-4-protocol-and-control-plane.md#t051) | BLOCKED | P2 | T050 | no | Enforce Flyway schema authority |
 | [T052](./PHASE-4-protocol-and-control-plane.md#t052) | BLOCKED | P2 | T050 | no | Lock dependency and SDK contracts |
+| [T053](./PHASE-4-protocol-and-control-plane.md#t053) | READY | P2 | T041 | yes | Backfill historical tick provenance |
 
 ## P5 - Simulation honesty
 | Task | Status | Priority | Depends On | Parallelizable | Title |

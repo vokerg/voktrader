@@ -38,9 +38,59 @@ public record MarketWsMessageDto(
 
         List<String> outcomes,
 
+        @JsonProperty("old_tick_size") String oldTickSize,
+
+        @JsonProperty("new_tick_size") String newTickSize,
+
         @JsonProperty("winning_asset_id") String winningAssetId,
 
         @JsonProperty("winning_outcome") String winningOutcome) {
+    public MarketWsMessageDto(
+            String eventType,
+            String assetId,
+            String market,
+            List<PriceLevelDto> bids,
+            List<PriceLevelDto> asks,
+            List<PriceChangeDto> priceChanges,
+            String bestBid,
+            String bestAsk,
+            String spread,
+            String timestamp,
+            String hash,
+            String id,
+            String question,
+            String slug,
+            String description,
+            List<String> assetIds,
+            List<String> outcomes,
+            String winningAssetId,
+            String winningOutcome
+    ) {
+        this(
+                eventType,
+                assetId,
+                market,
+                bids,
+                asks,
+                priceChanges,
+                bestBid,
+                bestAsk,
+                spread,
+                timestamp,
+                hash,
+                id,
+                question,
+                slug,
+                description,
+                assetIds,
+                outcomes,
+                null,
+                null,
+                winningAssetId,
+                winningOutcome
+        );
+    }
+
     public boolean isBook() {
         return "book".equals(eventType);
     }
@@ -51,6 +101,10 @@ public record MarketWsMessageDto(
 
     public boolean isBestBidAsk() {
         return "best_bid_ask".equals(eventType);
+    }
+
+    public boolean isTickSizeChange() {
+        return "tick_size_change".equals(eventType);
     }
 
     public boolean isMarketResolved() {

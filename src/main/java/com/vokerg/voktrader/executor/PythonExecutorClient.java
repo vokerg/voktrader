@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.executor;
 
+import com.vokerg.voktrader.marketdata.TickSizeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -21,16 +22,32 @@ public class PythonExecutorClient {
     private final ExecutorProperties properties;
     private final WebClient.Builder webClientBuilder;
     private final ObjectMapper objectMapper;
+    private final TickSizeService tickSizeService;
 
-    public PythonExecutorClient(ExecutorProperties properties, WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
+    public PythonExecutorClient(
+            ExecutorProperties properties,
+            WebClient.Builder webClientBuilder,
+            ObjectMapper objectMapper,
+            TickSizeService tickSizeService
+    ) {
         this.properties = properties;
         this.webClientBuilder = webClientBuilder;
         this.objectMapper = objectMapper;
+        this.tickSizeService = tickSizeService;
     }
 
     public ExecutorOrderResponse submit(ExecutorOrderCommand command) {
+        if (command == null) {
+            return ExecutorOrderResponse.rejected("Executor submission rejected before HTTP: command is required");
+        }
         if (!properties.isEnabled()) {
             return ExecutorOrderResponse.rejected("Python executor is disabled: set voktrader.executor.enabled=true");
+        }
+        TickSizeService.TickValidation tickValidation = tickSizeService.validate(command.tokenId(), command.limitPrice());
+        if (!tickValidation.valid()) {
+            return ExecutorOrderResponse.rejected(
+                    "Executor submission rejected before HTTP: " + tickValidation.reason()
+            );
         }
 
         try {
@@ -45,7 +62,7 @@ public class PythonExecutorClient {
                     .bodyToMono(String.class)
                     .timeout(properties.getTimeout())
                     .block();
-            
+
             ExecutorOrderResponse response = objectMapper.readValue(body, ExecutorOrderResponse.class);
             return copyWithRawResponse(response, body);
         } catch (WebClientResponseException e) {
