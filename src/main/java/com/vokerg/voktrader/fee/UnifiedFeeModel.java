@@ -11,7 +11,7 @@ import java.util.Objects;
 public final class UnifiedFeeModel implements FeeModel {
     public static final String VERSION = "polymarket-fee-v1";
     private static final MathContext MATH_CONTEXT = MathContext.DECIMAL128;
-    private static final int OUTPUT_SCALE = 6;
+    private static final int OUTPUT_SCALE = 5;
 
     @Override
     public String version() {
