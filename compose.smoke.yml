@@ -34,6 +34,8 @@ services:
       SPRING_DATASOURCE_URL: jdbc:h2:mem:voktrader_smoke;DB_CLOSE_DELAY=-1
       SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
       SPRING_FLYWAY_ENABLED: "false"
+      VOKTRADER_BOTS_ENABLED: "true"
+      VOKTRADER_BOTS_INCLUDE_IDS: "-1"
       VOKTRADER_EXECUTOR_ENABLED: "true"
       VOKTRADER_EXECUTOR_DRY_RUN: "true"
       VOKTRADER_EXECUTOR_BASE_URL: http://executor:8099
