@@ -25,6 +25,10 @@ ALLOWED_DEFAULT_TOKEN_LINES = {
         "src/main/resources/application-live.properties",
         "voktrader.executor.api-token=${VOKTRADER_EXECUTOR_API_TOKEN:change-me}",
     ),
+    (
+        "executor-python/voktrader_executor/config.py",
+        'executor_api_token: str = Field(default="change-me", alias="EXECUTOR_API_TOKEN")',
+    ),
 }
 
 SENSITIVE_DEFAULT_TOKEN_PATHS = (
