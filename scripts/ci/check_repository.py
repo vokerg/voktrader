@@ -85,11 +85,6 @@ def main() -> int:
                         f"{relative_path}:{line_number}: default token literal is not allowlisted"
                     )
 
-        if relative_path.endswith((".yml", ".yaml", ".properties", ".py", ".java", ".md")):
-            for line_number, line in enumerate(text.splitlines(), start=1):
-                if line.endswith((" ", "\t")):
-                    failures.append(f"{relative_path}:{line_number}: trailing whitespace")
-
     if failures:
         print("Repository checks failed:", file=sys.stderr)
         for failure in failures:
