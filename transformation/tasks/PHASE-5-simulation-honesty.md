@@ -6,7 +6,7 @@ This ledger contains the detailed task contracts for this phase. Agents claim an
 
 ## T060 - Replay exact recorded depth levels
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P5 - Simulation honesty
 Owner: unclaimed
