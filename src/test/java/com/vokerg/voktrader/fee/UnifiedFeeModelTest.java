@@ -12,15 +12,15 @@ class UnifiedFeeModelTest {
     private final UnifiedFeeModel model = new UnifiedFeeModel();
     private final FeeMetadata metadata = new FeeMetadata(
             "market-1",
-            new BigDecimal("0.25"),
+            new BigDecimal("0.02"),
             2,
             true,
-            "official-api",
+            "clob-market-info",
             Instant.parse("2026-07-28T00:00:00Z")
     );
 
     @Test
-    void officialExampleUsesConfiguredRateAndExponent() {
+    void officialFeeScheduleExampleUsesConfiguredRateAndExponent() {
         BigDecimal fee = model.calculate(
                 metadata,
                 FeeLiquidityRole.TAKER,
@@ -28,7 +28,7 @@ class UnifiedFeeModelTest {
                 new BigDecimal("100")
         );
 
-        assertEquals(new BigDecimal("1.562500"), fee);
+        assertEquals(new BigDecimal("0.12500"), fee);
     }
 
     @Test
@@ -52,7 +52,7 @@ class UnifiedFeeModelTest {
 
     @Test
     void takerOnlyMetadataMakesMakerFeeZero() {
-        assertEquals(new BigDecimal("0.000000"), model.calculate(
+        assertEquals(new BigDecimal("0.00000"), model.calculate(
                 metadata,
                 FeeLiquidityRole.MAKER,
                 new BigDecimal("0.50"),
