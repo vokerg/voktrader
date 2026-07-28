@@ -198,14 +198,14 @@ Aggregate profile, arm state, kill switch, account/executor identity, WS health,
 
 ## T050 - Add CI pipeline and smoke compose
 
-Status: IN_PROGRESS
+Status: DONE
 Priority: P1
 Phase: P4 - Protocol currency and control-plane hardening
 Owner: vokerg
 Branch: `task/T050-ci-pipeline-smoke-compose`
 PR: #13
 Started: 2026-07-28T15:48:37Z
-Completed:
+Completed: 2026-07-28T16:25:50Z
 Depends On: T000
 Parallelizable: yes
 
@@ -220,9 +220,9 @@ Protect main and transformation branches with repeatable evidence.
 4. Add secret/default-token scanning.
 
 ### Acceptance criteria
-- [ ] CI runs on PRs targeting transformation/2.0.
-- [ ] Clean-database migration test runs.
-- [ ] Default local test commands are documented.
+- [x] CI runs on PRs targeting transformation/2.0.
+- [x] Clean-database migration test runs.
+- [x] Default local test commands are documented.
 
 ### Required report
 `transformation/reports/T050-2026-07-28-add-ci-pipeline-and-smoke-compose.md`
@@ -231,7 +231,7 @@ Protect main and transformation branches with repeatable evidence.
 
 ## T051 - Enforce Flyway schema authority
 
-Status: BLOCKED
+Status: READY
 Priority: P2
 Phase: P4 - Protocol currency and control-plane hardening
 Owner: unclaimed
@@ -263,7 +263,7 @@ Stop Hibernate from mutating production schema implicitly.
 
 ## T052 - Lock dependency and SDK contracts
 
-Status: BLOCKED
+Status: READY
 Priority: P2
 Phase: P4 - Protocol currency and control-plane hardening
 Owner: unclaimed
