@@ -1,0 +1,42 @@
+name: voktrader-smoke
+
+services:
+  executor:
+    build:
+      context: ./executor-python
+      dockerfile: Dockerfile.smoke
+    environment:
+      EXECUTOR_API_TOKEN: ci-smoke-token
+      EXECUTOR_DRY_RUN: "true"
+      MAX_ORDER_AMOUNT_USD: "5"
+      REQUIRE_FOK: "false"
+    ports:
+      - "18099:8099"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8099/health', timeout=2)"
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.smoke
+    depends_on:
+      executor:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: optimizer
+      SPRING_DATASOURCE_URL: jdbc:h2:mem:voktrader_smoke;DB_CLOSE_DELAY=-1
+      SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+      SPRING_FLYWAY_ENABLED: "false"
+      VOKTRADER_EXECUTOR_ENABLED: "true"
+      VOKTRADER_EXECUTOR_DRY_RUN: "true"
+      VOKTRADER_EXECUTOR_BASE_URL: http://executor:8099
+      VOKTRADER_EXECUTOR_API_TOKEN: ci-smoke-token
+    ports:
+      - "18080:8080"
