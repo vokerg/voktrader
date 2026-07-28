@@ -18,12 +18,12 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 
 The next unclaimed tasks are:
 
-1. `T042` - unified fee model. Parallel infrastructure work.
-2. `T044` - control-plane security. Parallel infrastructure work.
-3. `T050` - CI pipeline. Parallel infrastructure work.
-4. `T053` - backfill historical tick provenance. Parallel legacy-data quality work after T041.
+1. `T044` - control-plane security. Parallel infrastructure work.
+2. `T050` - CI pipeline. Parallel infrastructure work.
+3. `T053` - backfill historical tick provenance. Parallel legacy-data quality work after T041.
 
 Central risk work `T012` is already claimed by open PR #9.
+Unified fee work `T042` is already claimed by draft PR #12.
 
 ## P0 - Transformation foundation
 | Task | Status | Priority | Depends On | Parallelizable | Title |
@@ -65,7 +65,7 @@ Central risk work `T012` is already claimed by open PR #9.
 | --- | --- | --- | --- | --- | --- |
 | [T040](./PHASE-4-protocol-and-control-plane.md#t040) | DONE | P1 | T000 | yes | Add market WebSocket heartbeat and gap supervision |
 | [T041](./PHASE-4-protocol-and-control-plane.md#t041) | DONE | P1 | T040 | no | Support dynamic tick metadata |
-| [T042](./PHASE-4-protocol-and-control-plane.md#t042) | READY | P1 | T000 | yes | Replace hard-coded fee assumptions |
+| [T042](./PHASE-4-protocol-and-control-plane.md#t042) | IN_PROGRESS | P1 | T000 | yes | Replace hard-coded fee assumptions |
 | [T043](./PHASE-4-protocol-and-control-plane.md#t043) | BLOCKED | P1 | T021 | no | Map matching-engine restart modes |
 | [T044](./PHASE-4-protocol-and-control-plane.md#t044) | READY | P1 | T000 | yes | Harden live control plane security |
 | [T045](./PHASE-4-protocol-and-control-plane.md#t045) | BLOCKED | P1 | T010, T034, T040, T041, T042, T044 | no | Add live preflight endpoint |

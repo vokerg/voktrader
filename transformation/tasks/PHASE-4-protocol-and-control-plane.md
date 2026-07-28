@@ -68,13 +68,13 @@ Fetch and react to tick-size changes for order rounding and validation.
 
 ## T042 - Replace hard-coded fee assumptions
 
-Status: READY
+Status: IN_PROGRESS
 Priority: P1
 Phase: P4 - Protocol currency and control-plane hardening
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: vokerg
+Branch: `task/T042-unified-fee-model`
+PR: #12
+Started: 2026-07-28T08:46:10Z
 Completed:
 Depends On: T000
 Parallelizable: yes
@@ -93,7 +93,7 @@ Use one fee model across live, paper, replay, and Strategy V2.
 - [ ] Strategy V2 has no separate fee fallback.
 
 ### Required report
-`transformation/reports/T042-YYYY-MM-DD-replace-hard-coded-fee-assumptions.md`
+`transformation/reports/T042-2026-07-28-replace-hard-coded-fee-assumptions.md`
 
 ---
 
