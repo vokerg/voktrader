@@ -4,17 +4,24 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
 import tools.jackson.databind.ObjectMapper;
 
+import com.vokerg.voktrader.marketdata.TickSizeService;
 import com.vokerg.voktrader.trade.model.TradeSide;
 
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class PythonExecutorClientOrderManagementTest {
     @Test
     void disabledClientReturnsStructuredErrorsForOrderManagementCalls() {
         ExecutorProperties properties = new ExecutorProperties();
-        PythonExecutorClient client = new PythonExecutorClient(properties, WebClient.builder(), new ObjectMapper());
+        PythonExecutorClient client = new PythonExecutorClient(
+                properties,
+                WebClient.builder(),
+                new ObjectMapper(),
+                mock(TickSizeService.class)
+        );
 
         ExecutorCancelOrderResponse cancel = client.cancelOrder("remote-1");
         ExecutorOrderStatusResponse status = client.getOrderStatus("remote-1");
