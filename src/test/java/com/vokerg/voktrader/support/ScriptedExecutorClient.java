@@ -8,6 +8,7 @@ import com.vokerg.voktrader.executor.ExecutorOrderResponse;
 import com.vokerg.voktrader.executor.ExecutorOrderStatusResponse;
 import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.executor.PythonExecutorClient;
+import com.vokerg.voktrader.marketdata.TickSizeService;
 
 import org.springframework.web.reactive.function.client.WebClient;
 import tools.jackson.databind.ObjectMapper;
@@ -20,6 +21,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.mockito.Mockito.mock;
+
 public class ScriptedExecutorClient extends PythonExecutorClient {
     private final Deque<ExecutorOrderResponse> submitResponses = new ArrayDeque<>();
     private final Map<String, Deque<ExecutorOrderStatusResponse>> orderStatuses = new ConcurrentHashMap<>();
@@ -28,7 +31,7 @@ public class ScriptedExecutorClient extends PythonExecutorClient {
     private final List<ExecutorOrderCommand> submittedCommands = new ArrayList<>();
 
     public ScriptedExecutorClient() {
-        super(new ExecutorProperties(), WebClient.builder(), new ObjectMapper());
+        super(new ExecutorProperties(), WebClient.builder(), new ObjectMapper(), mock(TickSizeService.class));
     }
 
     public synchronized void reset() {
