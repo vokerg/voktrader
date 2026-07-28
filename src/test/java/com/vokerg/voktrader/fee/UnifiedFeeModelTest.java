@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.EnumSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -63,9 +62,6 @@ class UnifiedFeeModelTest {
 
     @Test
     void rejectsInvalidInputs() {
-        for (BigDecimal invalidPrice : EnumSet.noneOf(Dummy.class).stream().map(ignored -> BigDecimal.ZERO).toList()) {
-            // Kept empty intentionally; explicit assertions below document both probability bounds.
-        }
         assertThrows(IllegalArgumentException.class, () -> model.calculate(
                 metadata, FeeLiquidityRole.TAKER, BigDecimal.ZERO, BigDecimal.ONE));
         assertThrows(IllegalArgumentException.class, () -> model.calculate(
@@ -73,6 +69,4 @@ class UnifiedFeeModelTest {
         assertThrows(IllegalArgumentException.class, () -> model.calculate(
                 metadata, FeeLiquidityRole.TAKER, new BigDecimal("0.5"), BigDecimal.ZERO));
     }
-
-    private enum Dummy { VALUE }
 }
