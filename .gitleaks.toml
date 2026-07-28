@@ -1,0 +1,14 @@
+title = "Voktrader secret scanning"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented non-secret sentinels and source-preserved audit text"
+paths = [
+  '''^transformation/original/''',
+]
+regexes = [
+  '''change-me''',
+  '''ci-smoke-token''',
+]
