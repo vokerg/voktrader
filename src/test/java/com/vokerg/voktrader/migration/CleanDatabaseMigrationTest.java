@@ -26,6 +26,9 @@ class CleanDatabaseMigrationTest {
                 .load();
 
         flyway.clean();
+        System.out.println("Resolved Flyway migration plan: " + Arrays.stream(flyway.info().pending())
+                .map(info -> info.getVersion() + " - " + info.getDescription())
+                .toList());
         flyway.migrate();
         flyway.validate();
 
