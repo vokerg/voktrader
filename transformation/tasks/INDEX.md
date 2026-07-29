@@ -16,15 +16,14 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 
 ## Current next tasks
 
-The next unclaimed tasks after T044 completes are:
+The next unclaimed tasks after T051 completes are:
 
 1. `T042` - unified fee model. Parallel infrastructure work.
-2. `T051` - enforce Flyway schema authority and resolve the clean-database migration blocker.
-3. `T052` - lock dependency and SDK contracts.
-4. `T053` - backfill historical tick provenance. Parallel legacy-data quality work after T041.
-5. `T060` - replay exact recorded depth levels. P0 simulation-honesty work now unblocked by CI.
+2. `T052` - lock dependency and SDK contracts.
+3. `T053` - backfill historical tick provenance. Parallel legacy-data quality work after T041.
+4. `T060` - replay exact recorded depth levels. P0 simulation-honesty work now unblocked by CI.
 
-Central risk work `T012` is already claimed by open PR #9. CI task `T050` merged through PR #13. Control-plane security task `T044` is complete in draft PR #14.
+Central risk work `T012` is already claimed by open PR #9. CI task `T050` merged through PR #13. Control-plane security task `T044` merged through PR #14. Flyway schema authority task `T051` is complete in PR #15.
 
 ## P0 - Transformation foundation
 | Task | Status | Priority | Depends On | Parallelizable | Title |
@@ -71,7 +70,7 @@ Central risk work `T012` is already claimed by open PR #9. CI task `T050` merged
 | [T044](./PHASE-4-protocol-and-control-plane.md#t044) | DONE | P1 | T000 | yes | Harden live control plane security |
 | [T045](./PHASE-4-protocol-and-control-plane.md#t045) | BLOCKED | P1 | T010, T034, T040, T041, T042, T044 | no | Add live preflight endpoint |
 | [T050](./PHASE-4-protocol-and-control-plane.md#t050) | DONE | P1 | T000 | yes | Add CI pipeline and smoke compose |
-| [T051](./PHASE-4-protocol-and-control-plane.md#t051) | READY | P2 | T050 | no | Enforce Flyway schema authority |
+| [T051](./PHASE-4-protocol-and-control-plane.md#t051) | DONE | P2 | T050 | no | Enforce Flyway schema authority |
 | [T052](./PHASE-4-protocol-and-control-plane.md#t052) | READY | P2 | T050 | no | Lock dependency and SDK contracts |
 | [T053](./PHASE-4-protocol-and-control-plane.md#t053) | READY | P2 | T041 | yes | Backfill historical tick provenance |
 

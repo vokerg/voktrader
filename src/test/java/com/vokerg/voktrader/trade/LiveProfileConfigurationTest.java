@@ -11,11 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LiveProfileConfigurationTest {
     @Test
     void liveProfileIsCapabilityOnlyLocalAndDoesNotAutoArm() throws IOException {
-        Properties properties = new Properties();
-        try (InputStream input = getClass().getClassLoader().getResourceAsStream("application-live.properties")) {
-            assertThat(input).as("application-live.properties").isNotNull();
-            properties.load(input);
-        }
+        Properties properties = loadLiveProperties();
 
         assertThat(properties.getProperty("server.address"))
                 .isEqualTo("${VOKTRADER_LIVE_BIND_ADDRESS:127.0.0.1}");
@@ -41,5 +37,25 @@ class LiveProfileConfigurationTest {
                 .isEqualTo("${VOKTRADER_LIVE_ARM_TTL:15m}");
         assertThat(properties.getProperty("voktrader.executor.api-token"))
                 .isEqualTo("${VOKTRADER_EXECUTOR_API_TOKEN:change-me}");
+    }
+
+    @Test
+    void liveProfileKeepsFlywayAuthoritativeAndHibernateSchemaReadOnly() throws IOException {
+        Properties properties = loadLiveProperties();
+
+        assertThat(properties.getProperty("spring.flyway.enabled")).isEqualTo("true");
+        assertThat(properties.getProperty("spring.flyway.validate-on-migrate")).isEqualTo("true");
+        assertThat(properties.getProperty("spring.flyway.baseline-on-migrate")).isEqualTo("false");
+        assertThat(properties.getProperty("spring.flyway.clean-disabled")).isEqualTo("true");
+        assertThat(properties.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
+    }
+
+    private Properties loadLiveProperties() throws IOException {
+        Properties properties = new Properties();
+        try (InputStream input = getClass().getClassLoader().getResourceAsStream("application-live.properties")) {
+            assertThat(input).as("application-live.properties").isNotNull();
+            properties.load(input);
+        }
+        return properties;
     }
 }

@@ -46,6 +46,14 @@ python -m compileall -q executor-python/voktrader_executor
 
 The repository check rejects unresolved merge markers, high-confidence secret formats, and unapproved default-token literals in live-capable configuration, workflow, compose, Docker, and executor source files. Gitleaks runs separately in GitHub Actions.
 
+## Schema authority
+
+Flyway is the production schema authority. The `live` profile explicitly enables migration validation, disables automatic baselining and cleaning, and sets `spring.jpa.hibernate.ddl-auto=validate`. A live startup therefore fails closed when migration history is missing, invalid, or inconsistent with the mapped entities; Hibernate cannot create or alter production tables.
+
+The unprofiled `application.properties` file retains `spring.jpa.hibernate.ddl-auto=update` and `spring.flyway.baseline-on-migrate=true` only for the legacy local H2 development database. Treat that as a local-development compatibility override, never as a production policy. Do not use those values for PostgreSQL deployments or combine them with live operation.
+
+New schema changes must be append-only versioned migrations under `src/main/resources/db/migration`. Do not edit an already-applied migration checksum or silently baseline an existing production schema.
+
 ## Clean PostgreSQL migration
 
 Start an empty PostgreSQL database:
@@ -68,6 +76,8 @@ VOKTRADER_MIGRATION_DB_USER=postgres \
 VOKTRADER_MIGRATION_DB_PASSWORD=postgres \
 ./mvnw -B -ntp -Dtest=CleanDatabaseMigrationTest test
 ```
+
+The test cleans the disposable database, migrates every script, validates migration checksums and naming, and runs `migrate` a second time to prove that no additional migration is executed.
 
 Stop the local database when finished:
 
