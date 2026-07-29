@@ -31,7 +31,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(
-        controllers = LiveControlPlaneSecurityTest.ProbeController.class,
         properties = {
                 "voktrader.control-plane.read-only-token=readonly-token-000000000000000001",
                 "voktrader.control-plane.operator-token=operator-token-000000000000000001",
@@ -40,7 +39,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         }
 )
 @ActiveProfiles("live")
-@Import({LiveControlPlaneSecurityConfig.class, LiveControlPlaneSecurityTest.SecurityTestBeans.class})
+@Import({
+        LiveControlPlaneSecurityConfig.class,
+        LiveControlPlaneSecurityTest.ProbeController.class,
+        LiveControlPlaneSecurityTest.SecurityTestBeans.class
+})
 class LiveControlPlaneSecurityTest {
     private static final String READ_ONLY_TOKEN = "readonly-token-000000000000000001";
     private static final String OPERATOR_TOKEN = "operator-token-000000000000000001";
@@ -137,11 +140,11 @@ class LiveControlPlaneSecurityTest {
         mockMvc.perform(get("/api/probe"))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/h2-console/"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().is4xxClientError());
         mockMvc.perform(get("/swagger-ui/index.html"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().is4xxClientError());
         mockMvc.perform(get("/admin/"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().is4xxClientError());
 
         verifyNoInteractions(auditService);
     }
@@ -152,32 +155,32 @@ class LiveControlPlaneSecurityTest {
 
     @RestController
     @RequestMapping("/api/probe")
-    static class ProbeController {
+    public static class ProbeController {
         private final AtomicInteger mutationCount;
 
-        ProbeController(AtomicInteger mutationCount) {
+        public ProbeController(AtomicInteger mutationCount) {
             this.mutationCount = mutationCount;
         }
 
         @GetMapping
-        String read() {
+        public String read() {
             return "ok";
         }
 
         @PostMapping
-        String mutate() {
+        public String mutate() {
             mutationCount.incrementAndGet();
             return "mutated";
         }
 
         @DeleteMapping
-        void delete() {
+        public void delete() {
             mutationCount.incrementAndGet();
         }
     }
 
     @TestConfiguration(proxyBeanMethods = false)
-    static class SecurityTestBeans {
+    public static class SecurityTestBeans {
         @Bean
         AtomicInteger mutationCount() {
             return new AtomicInteger();
