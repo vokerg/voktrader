@@ -32,7 +32,7 @@ class TradeOrderPersistenceInvariantMigrationTest {
 
         assertThat(sql)
                 .contains("ADD COLUMN IF NOT EXISTS remote_fill_key VARCHAR(1000)")
-                .contains("ALTER COLUMN remote_fill_key VARCHAR(1000)")
+                .contains("ALTER COLUMN remote_fill_key SET DATA TYPE VARCHAR(1000)")
                 .contains("idx_trade_fills_remote_key");
     }
 }
