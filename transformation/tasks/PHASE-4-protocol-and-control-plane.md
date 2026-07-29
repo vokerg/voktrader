@@ -231,14 +231,14 @@ Protect main and transformation branches with repeatable evidence.
 
 ## T051 - Enforce Flyway schema authority
 
-Status: IN_PROGRESS
+Status: DONE
 Priority: P2
 Phase: P4 - Protocol currency and control-plane hardening
 Owner: vokerg
 Branch: `task/T051-flyway-schema-authority`
 PR: #15
 Started: 2026-07-29T14:34:41Z
-Completed:
+Completed: 2026-07-29T17:00:00Z
 Depends On: T050
 Parallelizable: no
 
@@ -253,8 +253,8 @@ Stop Hibernate from mutating production schema implicitly.
 4. Document any local-development override.
 
 ### Acceptance criteria
-- [ ] Clean DB migrates deterministically.
-- [ ] Production cannot auto-update schema.
+- [x] Clean DB migrates deterministically.
+- [x] Production cannot auto-update schema.
 
 ### Required report
 `transformation/reports/T051-2026-07-29-enforce-flyway-schema-authority.md`
