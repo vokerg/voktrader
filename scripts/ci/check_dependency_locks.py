@@ -42,8 +42,12 @@ def parse_exact_requirement(spec: str, source: str, failures: list[str]) -> tupl
 
 
 def validate_python(failures: list[str]) -> None:
-    project = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]
+    document = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+    project = document["project"]
     declared: dict[str, str] = {}
+
+    for spec in document.get("build-system", {}).get("requires", []):
+        parse_exact_requirement(spec, "executor-python/pyproject.toml build-system.requires", failures)
 
     groups = {
         "project.dependencies": project.get("dependencies", []),
