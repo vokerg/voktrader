@@ -16,14 +16,16 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 
 ## Current next tasks
 
-The next unclaimed tasks are:
+The next unclaimed tasks after T050 merges are:
 
 1. `T042` - unified fee model. Parallel infrastructure work.
 2. `T044` - control-plane security. Parallel infrastructure work.
-3. `T050` - CI pipeline. Parallel infrastructure work.
-4. `T053` - backfill historical tick provenance. Parallel legacy-data quality work after T041.
+3. `T051` - enforce Flyway schema authority and resolve the clean-database migration blocker.
+4. `T052` - lock dependency and SDK contracts.
+5. `T053` - backfill historical tick provenance. Parallel legacy-data quality work after T041.
+6. `T060` - replay exact recorded depth levels. P0 simulation-honesty work now unblocked by CI.
 
-Central risk work `T012` is already claimed by open PR #9.
+Central risk work `T012` is already claimed by open PR #9. CI task `T050` is complete in draft PR #13.
 
 ## P0 - Transformation foundation
 | Task | Status | Priority | Depends On | Parallelizable | Title |
@@ -69,15 +71,15 @@ Central risk work `T012` is already claimed by open PR #9.
 | [T043](./PHASE-4-protocol-and-control-plane.md#t043) | BLOCKED | P1 | T021 | no | Map matching-engine restart modes |
 | [T044](./PHASE-4-protocol-and-control-plane.md#t044) | READY | P1 | T000 | yes | Harden live control plane security |
 | [T045](./PHASE-4-protocol-and-control-plane.md#t045) | BLOCKED | P1 | T010, T034, T040, T041, T042, T044 | no | Add live preflight endpoint |
-| [T050](./PHASE-4-protocol-and-control-plane.md#t050) | READY | P1 | T000 | yes | Add CI pipeline and smoke compose |
-| [T051](./PHASE-4-protocol-and-control-plane.md#t051) | BLOCKED | P2 | T050 | no | Enforce Flyway schema authority |
-| [T052](./PHASE-4-protocol-and-control-plane.md#t052) | BLOCKED | P2 | T050 | no | Lock dependency and SDK contracts |
+| [T050](./PHASE-4-protocol-and-control-plane.md#t050) | DONE | P1 | T000 | yes | Add CI pipeline and smoke compose |
+| [T051](./PHASE-4-protocol-and-control-plane.md#t051) | READY | P2 | T050 | no | Enforce Flyway schema authority |
+| [T052](./PHASE-4-protocol-and-control-plane.md#t052) | READY | P2 | T050 | no | Lock dependency and SDK contracts |
 | [T053](./PHASE-4-protocol-and-control-plane.md#t053) | READY | P2 | T041 | yes | Backfill historical tick provenance |
 
 ## P5 - Simulation honesty
 | Task | Status | Priority | Depends On | Parallelizable | Title |
 | --- | --- | --- | --- | --- | --- |
-| [T060](./PHASE-5-simulation-honesty.md#t060) | BLOCKED | P0 | T050 | no | Replay exact recorded depth levels |
+| [T060](./PHASE-5-simulation-honesty.md#t060) | READY | P0 | T050 | no | Replay exact recorded depth levels |
 | [T061](./PHASE-5-simulation-honesty.md#t061) | BLOCKED | P1 | T040, T030 | no | Persist normalized event log |
 | [T062](./PHASE-5-simulation-honesty.md#t062) | BLOCKED | P1 | T060, T061, T012, T042, T041 | no | Build live/replay parity tests |
 | [T063](./PHASE-5-simulation-honesty.md#t063) | BLOCKED | P1 | T060, T031 | no | Implement calibrated execution simulator |

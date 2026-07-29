@@ -18,6 +18,7 @@ Depends On: T000
 Parallelizable: yes
 
 ### Objective
+
 Comply with current heartbeat behavior and pause strategies through data gaps.
 
 ### Implementation steps
@@ -49,6 +50,7 @@ Depends On: T040
 Parallelizable: no
 
 ### Objective
+
 Fetch and react to tick-size changes for order rounding and validation.
 
 ### Implementation steps
@@ -80,6 +82,7 @@ Depends On: T000
 Parallelizable: yes
 
 ### Objective
+
 Use one fee model across live, paper, replay, and Strategy V2.
 
 ### Implementation steps
@@ -111,6 +114,7 @@ Depends On: T021
 Parallelizable: no
 
 ### Objective
+
 Handle 425, 503, Retry-After, cancel-only, and post-only modes explicitly.
 
 ### Implementation steps
@@ -143,6 +147,7 @@ Depends On: T000
 Parallelizable: yes
 
 ### Objective
+
 Prevent anonymous or unsafe control-plane mutation.
 
 ### Implementation steps
@@ -176,6 +181,7 @@ Depends On: T010, T034, T040, T041, T042, T044
 Parallelizable: no
 
 ### Objective
+
 Expose one fail-closed, operator-readable live-readiness result.
 
 ### Implementation steps
@@ -192,18 +198,19 @@ Aggregate profile, arm state, kill switch, account/executor identity, WS health,
 
 ## T050 - Add CI pipeline and smoke compose
 
-Status: READY
+Status: DONE
 Priority: P1
 Phase: P4 - Protocol currency and control-plane hardening
-Owner: unclaimed
-Branch:
-PR:
-Started:
-Completed:
+Owner: vokerg
+Branch: `task/T050-ci-pipeline-smoke-compose`
+PR: #13
+Started: 2026-07-28T15:48:37Z
+Completed: 2026-07-28T16:25:50Z
 Depends On: T000
 Parallelizable: yes
 
 ### Objective
+
 Protect main and transformation branches with repeatable evidence.
 
 ### Implementation steps
@@ -213,18 +220,18 @@ Protect main and transformation branches with repeatable evidence.
 4. Add secret/default-token scanning.
 
 ### Acceptance criteria
-- [ ] CI runs on PRs targeting transformation/2.0.
-- [ ] Clean-database migration test runs.
-- [ ] Default local test commands are documented.
+- [x] CI runs on PRs targeting transformation/2.0.
+- [x] Clean-database migration test runs.
+- [x] Default local test commands are documented.
 
 ### Required report
-`transformation/reports/T050-YYYY-MM-DD-add-ci-pipeline-and-smoke-compose.md`
+`transformation/reports/T050-2026-07-28-add-ci-pipeline-and-smoke-compose.md`
 
 ---
 
 ## T051 - Enforce Flyway schema authority
 
-Status: BLOCKED
+Status: READY
 Priority: P2
 Phase: P4 - Protocol currency and control-plane hardening
 Owner: unclaimed
@@ -236,6 +243,7 @@ Depends On: T050
 Parallelizable: no
 
 ### Objective
+
 Stop Hibernate from mutating production schema implicitly.
 
 ### Implementation steps
@@ -255,7 +263,7 @@ Stop Hibernate from mutating production schema implicitly.
 
 ## T052 - Lock dependency and SDK contracts
 
-Status: BLOCKED
+Status: READY
 Priority: P2
 Phase: P4 - Protocol currency and control-plane hardening
 Owner: unclaimed
@@ -267,6 +275,7 @@ Depends On: T050
 Parallelizable: no
 
 ### Objective
+
 Make Java/Python/Angular installs reproducible and detect protocol drift.
 
 ### Implementation steps
@@ -298,6 +307,7 @@ Depends On: T041
 Parallelizable: yes
 
 ### Objective
+
 Make pre-T041 replay datasets explicit and trustworthy without inventing historical tick metadata.
 
 ### Implementation steps

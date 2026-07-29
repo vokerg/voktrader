@@ -37,6 +37,10 @@ $env:SPRING_PROFILES_ACTIVE="live,live-test"
 .\mvnw.cmd spring-boot:run
 ```
 
+## Verification
+
+See [`docs/ci.md`](docs/ci.md) for the default Java, Python, Angular, migration, static, secret, and compose smoke commands used by CI.
+
 ## Config Locations
 
 - Main app config: `src/main/resources/application.properties`
@@ -46,4 +50,3 @@ $env:SPRING_PROFILES_ACTIVE="live,live-test"
 - Python executor: `executor-python/`
 
 See [docs/runbook.md](docs/runbook.md) for the operational source of truth.
-
