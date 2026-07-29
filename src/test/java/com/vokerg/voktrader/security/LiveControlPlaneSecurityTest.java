@@ -133,7 +133,7 @@ class LiveControlPlaneSecurityTest {
         mockMvc.perform(delete("/api/bots/1")
                         .header(HttpHeaders.AUTHORIZATION, bearer(ADMIN_TOKEN))
                         .header(ControlPlaneProperties.CONFIRMATION_HEADER, CONFIRMATION_TOKEN))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isMethodNotAllowed());
     }
 
     @Test
