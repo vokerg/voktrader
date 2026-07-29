@@ -1,5 +1,7 @@
 package com.vokerg.voktrader.security;
 
+import com.vokerg.voktrader.api.bot.BotApiController;
+import com.vokerg.voktrader.api.bot.BotApiService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
@@ -9,29 +11,24 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(
-        controllers = LiveControlPlaneSecurityTest.ProbeController.class,
+        controllers = BotApiController.class,
         properties = {
                 "voktrader.control-plane.read-only-token=readonly-token-000000000000000001",
                 "voktrader.control-plane.operator-token=operator-token-000000000000000001",
@@ -51,23 +48,32 @@ class LiveControlPlaneSecurityTest {
     private MockMvc mockMvc;
 
     @Autowired
-    private AtomicInteger mutationCount;
+    private BotApiService botApiService;
 
     @Autowired
     private ControlPlaneAuditService auditService;
 
     @BeforeEach
     void resetState() {
-        mutationCount.set(0);
-        reset(auditService);
+        reset(botApiService, auditService);
+        when(botApiService.killAll()).thenReturn(List.of());
+        when(botApiService.list(
+                ArgumentMatchers.any(),
+                ArgumentMatchers.any(),
+                ArgumentMatchers.any(),
+                ArgumentMatchers.any(),
+                ArgumentMatchers.any(),
+                ArgumentMatchers.any(),
+                ArgumentMatchers.any()
+        )).thenReturn(List.of());
     }
 
     @Test
     void anonymousMutationIsUnauthorizedAndDoesNotReachController() throws Exception {
-        mockMvc.perform(post("/api/probe").contentType(MediaType.APPLICATION_JSON))
+        mockMvc.perform(post("/api/bots/kill-all"))
                 .andExpect(status().isUnauthorized());
 
-        assertThat(mutationCount).hasValue(0);
+        verify(botApiService, never()).killAll();
         verify(auditService).recordMutationAttempt(
                 ArgumentMatchers.any(),
                 ArgumentMatchers.any(),
@@ -77,24 +83,24 @@ class LiveControlPlaneSecurityTest {
 
     @Test
     void readOnlyCredentialCanReadButCannotMutate() throws Exception {
-        mockMvc.perform(get("/api/probe").header(HttpHeaders.AUTHORIZATION, bearer(READ_ONLY_TOKEN)))
+        mockMvc.perform(get("/api/bots").header(HttpHeaders.AUTHORIZATION, bearer(READ_ONLY_TOKEN)))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/probe")
+        mockMvc.perform(post("/api/bots/kill-all")
                         .header(HttpHeaders.AUTHORIZATION, bearer(READ_ONLY_TOKEN))
                         .header(ControlPlaneProperties.CONFIRMATION_HEADER, CONFIRMATION_TOKEN))
                 .andExpect(status().isForbidden());
 
-        assertThat(mutationCount).hasValue(0);
+        verify(botApiService, never()).killAll();
     }
 
     @Test
     void operatorMutationRequiresSeparateConfirmation() throws Exception {
-        mockMvc.perform(post("/api/probe")
+        mockMvc.perform(post("/api/bots/kill-all")
                         .header(HttpHeaders.AUTHORIZATION, bearer(OPERATOR_TOKEN)))
                 .andExpect(status().isForbidden());
 
-        assertThat(mutationCount).hasValue(0);
+        verify(botApiService, never()).killAll();
         verify(auditService).recordMutationAttempt(
                 ArgumentMatchers.any(),
                 ArgumentMatchers.any(),
@@ -103,13 +109,13 @@ class LiveControlPlaneSecurityTest {
     }
 
     @Test
-    void operatorCanPerformConfirmedNonDestructiveMutation() throws Exception {
-        mockMvc.perform(post("/api/probe")
+    void operatorCanPerformConfirmedControlMutation() throws Exception {
+        mockMvc.perform(post("/api/bots/kill-all")
                         .header(HttpHeaders.AUTHORIZATION, bearer(OPERATOR_TOKEN))
                         .header(ControlPlaneProperties.CONFIRMATION_HEADER, CONFIRMATION_TOKEN))
                 .andExpect(status().isOk());
 
-        assertThat(mutationCount).hasValue(1);
+        verify(botApiService).killAll();
         verify(auditService).recordMutationAttempt(
                 ArgumentMatchers.any(),
                 ArgumentMatchers.any(),
@@ -118,23 +124,21 @@ class LiveControlPlaneSecurityTest {
     }
 
     @Test
-    void destructiveDeleteRequiresAdminRole() throws Exception {
-        mockMvc.perform(delete("/api/probe")
+    void deletePolicyRequiresAdminBeforeRouteResolution() throws Exception {
+        mockMvc.perform(delete("/api/bots/1")
                         .header(HttpHeaders.AUTHORIZATION, bearer(OPERATOR_TOKEN))
                         .header(ControlPlaneProperties.CONFIRMATION_HEADER, CONFIRMATION_TOKEN))
                 .andExpect(status().isForbidden());
 
-        mockMvc.perform(delete("/api/probe")
+        mockMvc.perform(delete("/api/bots/1")
                         .header(HttpHeaders.AUTHORIZATION, bearer(ADMIN_TOKEN))
                         .header(ControlPlaneProperties.CONFIRMATION_HEADER, CONFIRMATION_TOKEN))
-                .andExpect(status().isNoContent());
-
-        assertThat(mutationCount).hasValue(1);
+                .andExpect(status().isNotFound());
     }
 
     @Test
     void anonymousReadIsUnauthorizedAndNonApiAdminSurfacesStayDenied() throws Exception {
-        mockMvc.perform(get("/api/probe"))
+        mockMvc.perform(get("/api/bots"))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/h2-console/"))
                 .andExpect(status().is4xxClientError());
@@ -150,37 +154,11 @@ class LiveControlPlaneSecurityTest {
         return "Bearer " + token;
     }
 
-    @RestController
-    @RequestMapping("/api/probe")
-    public static class ProbeController {
-        private final AtomicInteger mutationCount;
-
-        public ProbeController(AtomicInteger mutationCount) {
-            this.mutationCount = mutationCount;
-        }
-
-        @GetMapping
-        public String read() {
-            return "ok";
-        }
-
-        @PostMapping
-        public String mutate() {
-            mutationCount.incrementAndGet();
-            return "mutated";
-        }
-
-        @DeleteMapping
-        public void delete() {
-            mutationCount.incrementAndGet();
-        }
-    }
-
     @TestConfiguration(proxyBeanMethods = false)
-    public static class SecurityTestBeans {
+    static class SecurityTestBeans {
         @Bean
-        AtomicInteger mutationCount() {
-            return new AtomicInteger();
+        BotApiService botApiService() {
+            return mock(BotApiService.class);
         }
 
         @Bean
