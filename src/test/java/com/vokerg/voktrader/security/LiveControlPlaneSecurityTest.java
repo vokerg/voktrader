@@ -31,23 +31,20 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(
+        controllers = LiveControlPlaneSecurityTest.ProbeController.class,
         properties = {
                 "voktrader.control-plane.read-only-token=readonly-token-000000000000000001",
                 "voktrader.control-plane.operator-token=operator-token-000000000000000001",
-                "voktrader.control-plane.admin-token=administrator-token-00000000000001",
+                "voktrader.control-plane.admin-token=administrator-token-00000000000000001",
                 "voktrader.control-plane.confirmation-token=confirmation-token-000000000000001"
         }
 )
 @ActiveProfiles("live")
-@Import({
-        LiveControlPlaneSecurityConfig.class,
-        LiveControlPlaneSecurityTest.ProbeController.class,
-        LiveControlPlaneSecurityTest.SecurityTestBeans.class
-})
+@Import({LiveControlPlaneSecurityConfig.class, LiveControlPlaneSecurityTest.SecurityTestBeans.class})
 class LiveControlPlaneSecurityTest {
     private static final String READ_ONLY_TOKEN = "readonly-token-000000000000000001";
     private static final String OPERATOR_TOKEN = "operator-token-000000000000000001";
-    private static final String ADMIN_TOKEN = "administrator-token-00000000000001";
+    private static final String ADMIN_TOKEN = "administrator-token-00000000000000001";
     private static final String CONFIRMATION_TOKEN = "confirmation-token-000000000000001";
 
     @Autowired
