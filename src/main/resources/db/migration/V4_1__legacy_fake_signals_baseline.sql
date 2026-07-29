@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS fake_signals (
     outcome VARCHAR(255),
     token_id VARCHAR(128),
     entry_price NUMERIC(19, 8),
-    size_usd NUMERIC(19, 8),
+    fake_size_usd NUMERIC(19, 8),
     fake_shares NUMERIC(19, 8),
     rule_name VARCHAR(255),
     reason VARCHAR(1000),
@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS fake_signals (
     status VARCHAR(20) NOT NULL DEFAULT 'OPEN',
     resolved_at TIMESTAMP WITH TIME ZONE,
     winning_outcome VARCHAR(255),
-    pnl_usd NUMERIC(19, 8),
+    fake_pnl NUMERIC(19, 8),
     exit_price NUMERIC(19, 8),
     exit_value_usd NUMERIC(19, 8),
     exit_reason VARCHAR(1000)
