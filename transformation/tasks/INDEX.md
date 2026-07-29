@@ -16,16 +16,15 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 
 ## Current next tasks
 
-The next unclaimed tasks after T050 merges are:
+The next unclaimed tasks after T044 completes are:
 
 1. `T042` - unified fee model. Parallel infrastructure work.
-2. `T044` - control-plane security. Parallel infrastructure work.
-3. `T051` - enforce Flyway schema authority and resolve the clean-database migration blocker.
-4. `T052` - lock dependency and SDK contracts.
-5. `T053` - backfill historical tick provenance. Parallel legacy-data quality work after T041.
-6. `T060` - replay exact recorded depth levels. P0 simulation-honesty work now unblocked by CI.
+2. `T051` - enforce Flyway schema authority and resolve the clean-database migration blocker.
+3. `T052` - lock dependency and SDK contracts.
+4. `T053` - backfill historical tick provenance. Parallel legacy-data quality work after T041.
+5. `T060` - replay exact recorded depth levels. P0 simulation-honesty work now unblocked by CI.
 
-Central risk work `T012` is already claimed by open PR #9. CI task `T050` is complete in draft PR #13.
+Central risk work `T012` is already claimed by open PR #9. CI task `T050` merged through PR #13. Control-plane security task `T044` is complete in draft PR #14.
 
 ## P0 - Transformation foundation
 | Task | Status | Priority | Depends On | Parallelizable | Title |
@@ -69,7 +68,7 @@ Central risk work `T012` is already claimed by open PR #9. CI task `T050` is com
 | [T041](./PHASE-4-protocol-and-control-plane.md#t041) | DONE | P1 | T040 | no | Support dynamic tick metadata |
 | [T042](./PHASE-4-protocol-and-control-plane.md#t042) | READY | P1 | T000 | yes | Replace hard-coded fee assumptions |
 | [T043](./PHASE-4-protocol-and-control-plane.md#t043) | BLOCKED | P1 | T021 | no | Map matching-engine restart modes |
-| [T044](./PHASE-4-protocol-and-control-plane.md#t044) | READY | P1 | T000 | yes | Harden live control plane security |
+| [T044](./PHASE-4-protocol-and-control-plane.md#t044) | DONE | P1 | T000 | yes | Harden live control plane security |
 | [T045](./PHASE-4-protocol-and-control-plane.md#t045) | BLOCKED | P1 | T010, T034, T040, T041, T042, T044 | no | Add live preflight endpoint |
 | [T050](./PHASE-4-protocol-and-control-plane.md#t050) | DONE | P1 | T000 | yes | Add CI pipeline and smoke compose |
 | [T051](./PHASE-4-protocol-and-control-plane.md#t051) | READY | P2 | T050 | no | Enforce Flyway schema authority |
