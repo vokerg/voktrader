@@ -135,14 +135,14 @@ Handle 425, 503, Retry-After, cancel-only, and post-only modes explicitly.
 
 ## T044 - Harden live control-plane security
 
-Status: READY
+Status: DONE
 Priority: P1
 Phase: P4 - Protocol currency and control-plane hardening
-Owner: unclaimed
-Branch:
-PR:
-Started:
-Completed:
+Owner: vokerg
+Branch: `task/T044-live-control-plane-security`
+PR: #14
+Started: 2026-07-29T12:04:56Z
+Completed: 2026-07-29T12:40:23Z
 Depends On: T000
 Parallelizable: yes
 
@@ -158,12 +158,12 @@ Prevent anonymous or unsafe control-plane mutation.
 5. Add CSRF/confirmation for browser mutations and immutable audit events.
 
 ### Acceptance criteria
-- [ ] Anonymous live mutations receive 401/403.
-- [ ] H2 and Swagger routes do not exist in live.
-- [ ] Control actions create audit events.
+- [x] Anonymous live mutations receive 401/403.
+- [x] H2 and Swagger routes do not exist in live.
+- [x] Control actions create audit events.
 
 ### Required report
-`transformation/reports/T044-YYYY-MM-DD-harden-live-control-plane-security.md`
+`transformation/reports/T044-2026-07-29-harden-live-control-plane-security.md`
 
 ---
 
