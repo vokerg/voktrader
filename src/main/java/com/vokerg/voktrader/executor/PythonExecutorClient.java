@@ -94,6 +94,41 @@ public class PythonExecutorClient {
         );
     }
 
+    public ExecutorCapabilitiesResponse capabilities() {
+        if (!properties.isEnabled()) {
+            return ExecutorCapabilitiesResponse.failure("UNSUPPORTED_OPERATION", disabledMessage());
+        }
+
+        try {
+            ExecutorCapabilitiesResponse response = authedClient()
+                    .get()
+                    .uri("/v1/capabilities")
+                    .retrieve()
+                    .bodyToMono(ExecutorCapabilitiesResponse.class)
+                    .timeout(properties.getTimeout())
+                    .block();
+            return response == null
+                    ? ExecutorCapabilitiesResponse.failure("UNKNOWN_RESPONSE", "Python executor returned an empty capability response")
+                    : response;
+        } catch (WebClientResponseException e) {
+            log.warn("Python executor capabilities rejected: status={} body={}", e.getStatusCode(), e.getResponseBodyAsString());
+            return ExecutorCapabilitiesResponse.failure(
+                    "EXCHANGE_REJECTION",
+                    "Python executor HTTP " + e.getStatusCode() + ": " + e.getResponseBodyAsString()
+            );
+        } catch (WebClientRequestException e) {
+            String reason = requestFailureReason(e);
+            log.warn("Python executor unavailable for capabilities at {}: {}", properties.getBaseUrl(), reason);
+            return ExecutorCapabilitiesResponse.failure(
+                    "NETWORK_FAILURE",
+                    "Python executor unavailable at " + properties.getBaseUrl() + ": " + reason
+            );
+        } catch (Exception e) {
+            log.warn("Python executor capability call failed", e);
+            return ExecutorCapabilitiesResponse.failure("UNKNOWN_RESPONSE", "Python executor capabilities failed: " + e.getMessage());
+        }
+    }
+
     public ExecutorCancelOrderResponse cancelOrder(String remoteOrderId) {
         if (!properties.isEnabled()) {
             return ExecutorCancelOrderResponse.failure(remoteOrderId, "UNSUPPORTED_OPERATION", disabledMessage());

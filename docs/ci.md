@@ -6,7 +6,7 @@ Run the same checks locally from the repository root.
 
 ## Java
 
-Requires Java 22.
+Requires Java 22. The Maven wrapper pins Maven 3.9.14 and is the build entry point; do not substitute an unrecorded system Maven version in release evidence.
 
 ```bash
 chmod +x mvnw
@@ -15,19 +15,34 @@ chmod +x mvnw
 
 ## Python executor
 
-Requires Python 3.11 or newer. CI uses Python 3.12.
+Requires Python 3.11 or newer. CI and the committed transitive lock target Python 3.12 on Linux. Runtime, test, build-backend, and installer versions are exact pins.
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e ./executor-python pytest httpx
+python -m pip install pip==26.1.2
+python -m pip install -r executor-python/requirements.lock
+python -m pip install --no-deps -e ./executor-python
+python -m pip check
 python -m pytest -q executor-python/tests
 ```
 
+Regenerate `executor-python/requirements.lock` only in a clean Python 3.12 Linux environment after deliberately updating exact direct pins in `executor-python/pyproject.toml`:
+
+```bash
+python -m venv .venv-lock
+. .venv-lock/bin/activate
+python -m pip install pip==26.1.2
+python -m pip install -e './executor-python[test]'
+python -m pip freeze --exclude-editable | LC_ALL=C sort > executor-python/requirements.lock
+python scripts/ci/check_dependency_locks.py
+```
+
+Review every lock diff. A dependency update must not be accepted solely because a resolver selected it.
+
 ## Angular dashboard
 
-Requires Node.js 22 and npm 11.12.1.
+Requires Node.js 22 and npm 11.12.1. `dashboard/package-lock.json` is authoritative for installs.
 
 ```bash
 npm install --global npm@11.12.1
@@ -37,10 +52,25 @@ npm test -- --watch=false
 npm run build
 ```
 
+When dependencies change, use npm 11.12.1 to update `package.json` and `package-lock.json` together, then prove a clean `npm ci` before committing.
+
+## Dependency authority checks
+
+```bash
+python scripts/ci/check_dependency_locks.py
+```
+
+This fast check enforces exact Python direct pins and their presence in the transitive lock, npm/package-lock agreement with an exact npm package-manager version, and an exact Maven wrapper distribution without floating dependency syntax.
+
+The executor response contract is versioned in `contracts/executor-api-v1.properties`. Python Pydantic response models and Java response records must match its exact field sets. Adding, removing, or renaming a response field therefore fails both adapter contract tests until the contract is explicitly reviewed and versioned.
+
+The authenticated sidecar `/v1/capabilities` response includes the contract version, installed executor version, installed exchange SDK distribution/version, and supported order modes. The JVM validates this through `ExecutorCapabilityService`; `/api/runtime/status` exposes `executor.capabilities.compatible` and all blockers. Missing evidence, an unexpected contract or SDK package, unknown versions, or absent FOK/FAK/GTC/GTD support fails closed.
+
 ## Static and default-token checks
 
 ```bash
 python scripts/ci/check_repository.py
+python scripts/ci/check_dependency_locks.py
 python -m compileall -q executor-python/voktrader_executor
 ```
 
