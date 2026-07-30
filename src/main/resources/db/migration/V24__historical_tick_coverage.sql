@@ -16,15 +16,21 @@ CREATE TABLE IF NOT EXISTS historical_tick_coverage (
     CONSTRAINT chk_historical_tick_coverage_evidence
         CHECK (
             (coverage_status = 'RESOLVED'
+                AND token_id IS NOT NULL
+                AND token_id <> ''
                 AND tick_size IS NOT NULL
                 AND tick_size > 0
                 AND evidence_source <> 'UNRESOLVED'
+                AND source_reference IS NOT NULL
+                AND source_reference <> ''
                 AND blocker_reason IS NULL)
             OR
             (coverage_status = 'BLOCKED'
                 AND tick_size IS NULL
                 AND evidence_source = 'UNRESOLVED'
-                AND blocker_reason IS NOT NULL)
+                AND source_reference IS NULL
+                AND blocker_reason IS NOT NULL
+                AND blocker_reason <> '')
         )
 );
 
