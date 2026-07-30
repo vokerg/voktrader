@@ -6,13 +6,13 @@ This ledger contains the detailed task contracts for this phase. Agents claim an
 
 ## T060 - Replay exact recorded depth levels
 
-Status: READY
+Status: IN_PROGRESS
 Priority: P0
 Phase: P5 - Simulation honesty
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: vokerg
+Branch: `task/T060-replay-exact-depth-levels`
+PR: #18
+Started: 2026-07-30T21:00:25Z
 Completed:
 Depends On: T050
 Parallelizable: no
@@ -31,7 +31,7 @@ Replace synthetic one-level replay books with persisted full-depth levels.
 - [ ] Depth-aware features match the live captured feature vector.
 
 ### Required report
-`transformation/reports/T060-YYYY-MM-DD-replay-exact-recorded-depth-levels.md`
+`transformation/reports/T060-2026-07-30-replay-exact-recorded-depth-levels.md`
 
 ---
 
