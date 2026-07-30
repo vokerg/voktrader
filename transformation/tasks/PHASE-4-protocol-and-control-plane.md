@@ -263,14 +263,14 @@ Stop Hibernate from mutating production schema implicitly.
 
 ## T052 - Lock dependency and SDK contracts
 
-Status: IN_PROGRESS
+Status: DONE
 Priority: P2
 Phase: P4 - Protocol currency and control-plane hardening
 Owner: vokerg
 Branch: `task/T052-lock-dependency-sdk-contracts`
 PR: #16
 Started: 2026-07-29T17:08:08Z
-Completed:
+Completed: 2026-07-30T15:42:00Z
 Depends On: T050
 Parallelizable: no
 
@@ -285,8 +285,8 @@ Make Java/Python/Angular installs reproducible and detect protocol drift.
 4. Report SDK/protocol capability in preflight.
 
 ### Acceptance criteria
-- [ ] Fresh checkout installs reproducibly.
-- [ ] Response-shape drift breaks the adapter contract test.
+- [x] Fresh checkout installs reproducibly.
+- [x] Response-shape drift breaks the adapter contract test.
 
 ### Required report
 `transformation/reports/T052-2026-07-29-lock-dependency-and-sdk-contracts.md`
