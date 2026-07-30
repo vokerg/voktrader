@@ -77,6 +77,7 @@ public class HistoricalTickCoverageEntity {
             String blockerReason,
             Instant recordedAt
     ) {
+        requireDataset(datasetType);
         requireInterval(intervalStartAt, intervalEndAt);
         if (blockerReason == null || blockerReason.isBlank()) {
             throw new IllegalArgumentException("historical tick blocker reason is required");
@@ -105,12 +106,19 @@ public class HistoricalTickCoverageEntity {
             String sourceReference,
             Instant recordedAt
     ) {
+        requireDataset(datasetType);
         requireInterval(intervalStartAt, intervalEndAt);
+        if (tokenId == null || tokenId.isBlank()) {
+            throw new IllegalArgumentException("resolved historical tick tokenId is required");
+        }
         if (tickSize == null || tickSize.signum() <= 0) {
             throw new IllegalArgumentException("resolved historical tick size must be positive");
         }
         if (evidenceSource == null || evidenceSource == HistoricalTickEvidenceSource.UNRESOLVED) {
             throw new IllegalArgumentException("resolved historical tick evidence source is required");
+        }
+        if (sourceReference == null || sourceReference.isBlank()) {
+            throw new IllegalArgumentException("resolved historical tick source reference is required");
         }
         HistoricalTickCoverageEntity entity = new HistoricalTickCoverageEntity();
         entity.datasetType = datasetType;
@@ -124,6 +132,12 @@ public class HistoricalTickCoverageEntity {
         entity.sourceReference = sourceReference;
         entity.recordedAt = recordedAt == null ? Instant.now() : recordedAt;
         return entity;
+    }
+
+    private static void requireDataset(HistoricalTickDatasetType datasetType) {
+        if (datasetType == null) {
+            throw new IllegalArgumentException("historical tick dataset type is required");
+        }
     }
 
     private static void requireInterval(Instant start, Instant end) {
