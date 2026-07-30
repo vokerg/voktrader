@@ -2,6 +2,7 @@ package com.vokerg.voktrader.api.runtime;
 
 import com.vokerg.voktrader.bot.BotConfigEntity;
 import com.vokerg.voktrader.bot.BotConfigRepository;
+import com.vokerg.voktrader.executor.ExecutorCapabilityService;
 import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.strategy.StrategyProperties;
 import com.vokerg.voktrader.strategy.v2.StrategyV2Properties;
@@ -27,6 +28,7 @@ public class RuntimeStatusController {
     private final Environment environment;
     private final TradingProperties tradingProperties;
     private final ExecutorProperties executorProperties;
+    private final ExecutorCapabilityService executorCapabilityService;
     private final LiveArmService liveArmService;
     private final OrderLayerProperties orderLayerProperties;
     private final StrategyProperties strategyProperties;
@@ -37,6 +39,7 @@ public class RuntimeStatusController {
             Environment environment,
             TradingProperties tradingProperties,
             ExecutorProperties executorProperties,
+            ExecutorCapabilityService executorCapabilityService,
             LiveArmService liveArmService,
             OrderLayerProperties orderLayerProperties,
             StrategyProperties strategyProperties,
@@ -46,6 +49,7 @@ public class RuntimeStatusController {
         this.environment = environment;
         this.tradingProperties = tradingProperties;
         this.executorProperties = executorProperties;
+        this.executorCapabilityService = executorCapabilityService;
         this.liveArmService = liveArmService;
         this.orderLayerProperties = orderLayerProperties;
         this.strategyProperties = strategyProperties;
@@ -70,7 +74,8 @@ public class RuntimeStatusController {
                         executorProperties.isEnabled(),
                         executorProperties.isDryRun(),
                         executorProperties.getBaseUrl(),
-                        executorProperties.isRequireImmediateFill()
+                        executorProperties.isRequireImmediateFill(),
+                        executorCapabilityService.report()
                 ),
                 new OrderLayerStatus(
                         orderLayerProperties.isEnabled(),
@@ -114,7 +119,8 @@ public class RuntimeStatusController {
             boolean enabled,
             boolean dryRun,
             String baseUrl,
-            boolean requireImmediateFill
+            boolean requireImmediateFill,
+            ExecutorCapabilityService.ExecutorCapabilityReport capabilities
     ) {
     }
 
