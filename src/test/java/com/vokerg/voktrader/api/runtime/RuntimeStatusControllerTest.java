@@ -3,6 +3,7 @@ package com.vokerg.voktrader.api.runtime;
 import com.vokerg.voktrader.bot.BotConfigEntity;
 import com.vokerg.voktrader.bot.BotConfigRepository;
 import com.vokerg.voktrader.bot.MarketFamily;
+import com.vokerg.voktrader.executor.ExecutorCapabilityService;
 import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.strategy.StrategyProperties;
 import com.vokerg.voktrader.strategy.v2.StrategyV2Properties;
@@ -46,6 +47,17 @@ class RuntimeStatusControllerTest {
         executor.setDryRun(false);
         executor.setApiToken("non-default-token");
         executor.setBaseUrl("http://127.0.0.1:8099");
+        ExecutorCapabilityService capabilityService = mock(ExecutorCapabilityService.class);
+        when(capabilityService.report()).thenReturn(new ExecutorCapabilityService.ExecutorCapabilityReport(
+                true,
+                true,
+                "executor-api-v1",
+                "0.3.0",
+                "py-clob-client-v2",
+                "1.1.0",
+                List.of("FOK", "FAK", "GTC", "GTD"),
+                List.of()
+        ));
         LiveArmService liveArmService = new LiveArmService(trading, executor);
 
         OrderLayerProperties orderLayer = new OrderLayerProperties();
@@ -62,6 +74,7 @@ class RuntimeStatusControllerTest {
                 environment,
                 trading,
                 executor,
+                capabilityService,
                 liveArmService,
                 orderLayer,
                 new StrategyProperties("strategy-v2", null, null, null, null, null, null, null, null),
@@ -86,6 +99,10 @@ class RuntimeStatusControllerTest {
         assertThat(response.allowedStrategyIds()).containsExactly("strategy-v2");
         assertThat(response.executor().enabled()).isTrue();
         assertThat(response.executor().dryRun()).isFalse();
+        assertThat(response.executor().capabilities().compatible()).isTrue();
+        assertThat(response.executor().capabilities().protocolVersion()).isEqualTo("executor-api-v1");
+        assertThat(response.executor().capabilities().sdkVersion()).isEqualTo("1.1.0");
+        assertThat(response.executor().capabilities().blockers()).isEmpty();
         assertThat(response.orderLayer().enabled()).isFalse();
         assertThat(response.currentTopLevelActiveStrategy()).isEqualTo("strategy-v2");
         assertThat(response.strategyV2ActiveInnerStrategyIds()).containsExactly("ANTI_CHOP_FOK_A");
