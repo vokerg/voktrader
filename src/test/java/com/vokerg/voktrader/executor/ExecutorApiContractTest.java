@@ -36,6 +36,8 @@ class ExecutorApiContractTest {
         records.put("FillResponse", ExecutorFillResponse.class);
         records.put("FillsResponse", ExecutorFillsResponse.class);
         records.put("ExecutorError", ExecutorErrorResponse.class);
+        records.put("OrderVariation", ExecutorOrderVariation.class);
+        records.put("ExecutorCapabilities", ExecutorCapabilitiesResponse.class);
 
         records.forEach((contractName, recordType) -> assertEquals(
                 csvSet(contract.getProperty(contractName + ".fields")),
