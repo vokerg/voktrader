@@ -90,7 +90,7 @@ class MarketDepthReplayServiceTest {
         assertThatThrownBy(() -> service.loadExactSnapshot(MARKET_ID, CAPTURED_AT))
                 .isInstanceOf(MarketDepthReplayService.ReplayDepthCorruptionException.class)
                 .hasMessageContaining("non-contiguous BUY levelIndex")
-                .hasMessageContaining("expected=2 actual=4");
+                .hasMessageContaining("expected=2 actual=3");
     }
 
     @Test
