@@ -6,6 +6,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator
 
+from .capability_identity import CAPABILITY_IDENTITY
+
 
 SUPPORTED_TIME_IN_FORCE = ("FOK", "FAK", "GTC", "GTD")
 
@@ -206,12 +208,28 @@ class OrderVariation(BaseModel):
 
 
 class ExecutorCapabilities(BaseModel):
-    success: bool = Field(description="True only when executor and SDK identity evidence is available.")
-    protocolVersion: str = Field(description="Versioned JVM/sidecar response contract.")
-    executorVersion: str = Field(description="Installed voktrader executor package version.")
-    sdkPackage: str = Field(description="Installed exchange SDK distribution name.")
-    sdkVersion: str = Field(description="Installed exchange SDK version.")
+    success: bool = Field(
+        default=CAPABILITY_IDENTITY.available,
+        description="True only when executor and SDK identity evidence is available.",
+    )
+    protocolVersion: str = Field(
+        default=CAPABILITY_IDENTITY.protocol_version,
+        description="Versioned JVM/sidecar response contract.",
+    )
+    executorVersion: str = Field(
+        default=CAPABILITY_IDENTITY.executor_version,
+        description="Installed voktrader executor package version.",
+    )
+    sdkPackage: str = Field(
+        default=CAPABILITY_IDENTITY.sdk_package,
+        description="Installed exchange SDK distribution name.",
+    )
+    sdkVersion: str = Field(
+        default=CAPABILITY_IDENTITY.sdk_version,
+        description="Installed exchange SDK version.",
+    )
     supportedTimeInForce: tuple[str, ...] = Field(
+        default=SUPPORTED_TIME_IN_FORCE,
         description="All time-in-force values accepted by the sidecar request model.",
     )
     supportedVariations: tuple[OrderVariation, ...] = Field(description="Supported timeInForce/postOnly combinations.")
@@ -219,4 +237,14 @@ class ExecutorCapabilities(BaseModel):
     dryRun: bool = Field(description="Current sidecar-level EXECUTOR_DRY_RUN setting.")
     requireFok: bool = Field(description="Current sidecar-level REQUIRE_FOK guardrail setting.")
     maxOrderAmountUsd: Decimal = Field(description="Current sidecar-level MAX_ORDER_AMOUNT_USD guardrail.")
-    error: ExecutorError | None = Field(default=None, description="Evidence failure when package identity cannot be resolved.")
+    error: ExecutorError | None = Field(
+        default=(
+            ExecutorError(
+                type="CAPABILITY_EVIDENCE_UNAVAILABLE",
+                message=CAPABILITY_IDENTITY.error_message,
+            )
+            if CAPABILITY_IDENTITY.error_message is not None
+            else None
+        ),
+        description="Evidence failure when package identity cannot be resolved.",
+    )
