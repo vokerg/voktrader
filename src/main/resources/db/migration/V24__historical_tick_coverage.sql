@@ -28,11 +28,11 @@ CREATE TABLE IF NOT EXISTS historical_tick_coverage (
         )
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_historical_tick_coverage_interval
+CREATE INDEX IF NOT EXISTS idx_historical_tick_coverage_interval
     ON historical_tick_coverage (
         dataset_type,
-        COALESCE(market_id, -1),
-        COALESCE(token_id, ''),
+        market_id,
+        token_id,
         interval_start_at,
         interval_end_at,
         coverage_status
