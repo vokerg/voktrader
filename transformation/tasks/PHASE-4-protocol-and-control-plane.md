@@ -295,14 +295,14 @@ Make Java/Python/Angular installs reproducible and detect protocol drift.
 
 ## T053 - Backfill historical tick provenance
 
-Status: IN_PROGRESS
+Status: DONE
 Priority: P2
 Phase: P4 - Protocol currency and control-plane hardening
 Owner: vokerg
 Branch: `task/T053-historical-tick-provenance`
 PR: #17
 Started: 2026-07-30T15:47:46Z
-Completed:
+Completed: 2026-07-30T20:52:07Z
 Depends On: T041
 Parallelizable: yes
 
@@ -317,8 +317,8 @@ Make pre-T041 replay datasets explicit and trustworthy without inventing histori
 4. Mark unresolved intervals as replay blockers instead of falling back to an assumed tick.
 
 ### Acceptance criteria
-- [ ] Every pre-T041 replay interval either resolves to sourced tick metadata or reports an explicit coverage blocker.
-- [ ] No backfill path introduces an implicit `0.01` fallback.
+- [x] Every pre-T041 replay interval either resolves to sourced tick metadata or reports an explicit coverage blocker.
+- [x] No backfill path introduces an implicit `0.01` fallback.
 
 ### Required report
 `transformation/reports/T053-2026-07-30-backfill-historical-tick-provenance.md`
