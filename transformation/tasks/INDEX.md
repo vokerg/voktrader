@@ -16,13 +16,13 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 
 ## Current next tasks
 
-The next unclaimed tasks after T052 is claimed are:
+The next unclaimed tasks after T052 completes are:
 
 1. `T042` - unified fee model. Parallel infrastructure work.
 2. `T053` - backfill historical tick provenance. Parallel legacy-data quality work after T041.
 3. `T060` - replay exact recorded depth levels. P0 simulation-honesty work now unblocked by CI.
 
-Central risk work `T012` is already claimed by open PR #9. CI task `T050` merged through PR #13. Control-plane security task `T044` merged through PR #14. Flyway schema authority task `T051` merged through PR #15. Dependency and SDK contract task `T052` is claimed by draft PR #16.
+Central risk work `T012` is already claimed by open PR #9. CI task `T050` merged through PR #13. Control-plane security task `T044` merged through PR #14. Flyway schema authority task `T051` merged through PR #15. Dependency and SDK contract task `T052` is complete in PR #16.
 
 ## P0 - Transformation foundation
 | Task | Status | Priority | Depends On | Parallelizable | Title |
@@ -70,7 +70,7 @@ Central risk work `T012` is already claimed by open PR #9. CI task `T050` merged
 | [T045](./PHASE-4-protocol-and-control-plane.md#t045) | BLOCKED | P1 | T010, T034, T040, T041, T042, T044 | no | Add live preflight endpoint |
 | [T050](./PHASE-4-protocol-and-control-plane.md#t050) | DONE | P1 | T000 | yes | Add CI pipeline and smoke compose |
 | [T051](./PHASE-4-protocol-and-control-plane.md#t051) | DONE | P2 | T050 | no | Enforce Flyway schema authority |
-| [T052](./PHASE-4-protocol-and-control-plane.md#t052) | IN_PROGRESS | P2 | T050 | no | Lock dependency and SDK contracts |
+| [T052](./PHASE-4-protocol-and-control-plane.md#t052) | DONE | P2 | T050 | no | Lock dependency and SDK contracts |
 | [T053](./PHASE-4-protocol-and-control-plane.md#t053) | READY | P2 | T041 | yes | Backfill historical tick provenance |
 
 ## P5 - Simulation honesty
