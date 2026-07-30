@@ -7,6 +7,8 @@ import java.time.Instant;
 import java.util.Optional;
 
 public interface TickSizeMetadataRepository extends JpaRepository<TickSizeMetadataEntity, Long> {
+    Optional<TickSizeMetadataEntity> findFirstByTokenIdOrderByEffectiveAtAscIdAsc(String tokenId);
+
     Optional<TickSizeMetadataEntity> findFirstByTokenIdOrderByEffectiveAtDescIdDesc(String tokenId);
 
     Optional<TickSizeMetadataEntity> findFirstByTokenIdAndEffectiveAtLessThanEqualOrderByEffectiveAtDescIdDesc(

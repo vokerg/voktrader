@@ -3,6 +3,7 @@ package com.vokerg.voktrader.marketdata;
 import com.vokerg.voktrader.marketdata.model.TickSizeMetadataEntity;
 import com.vokerg.voktrader.marketdata.persistence.TickSizeMetadataRepository;
 import com.vokerg.voktrader.time.TimeMachine;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,10 +20,20 @@ public class TickSizeService {
     private static final ThreadLocal<Map<String, TickSizeMetadata>> HISTORICAL_OVERRIDE = new ThreadLocal<>();
 
     private final TickSizeMetadataRepository repository;
+    private final HistoricalTickCoverageService historicalCoverageService;
     private final Map<String, TickSizeMetadata> currentByTokenId = new ConcurrentHashMap<>();
 
-    public TickSizeService(TickSizeMetadataRepository repository) {
+    @Autowired
+    public TickSizeService(
+            TickSizeMetadataRepository repository,
+            HistoricalTickCoverageService historicalCoverageService
+    ) {
         this.repository = repository;
+        this.historicalCoverageService = historicalCoverageService;
+    }
+
+    public TickSizeService(TickSizeMetadataRepository repository) {
+        this(repository, null);
     }
 
     @Transactional
@@ -56,8 +67,12 @@ public class TickSizeService {
             return Optional.ofNullable(historical.get(requiredTokenId));
         }
         if (TimeMachine.isOverridden()) {
+            Instant replayAt = TimeMachine.now();
+            if (historicalCoverageService != null) {
+                historicalCoverageService.assertTokenReplayReady(requiredTokenId, replayAt);
+            }
             return repository
-                    .findFirstByTokenIdAndEffectiveAtLessThanEqualOrderByEffectiveAtDescIdDesc(requiredTokenId, TimeMachine.now())
+                    .findFirstByTokenIdAndEffectiveAtLessThanEqualOrderByEffectiveAtDescIdDesc(requiredTokenId, replayAt)
                     .map(TickSizeMetadataEntity::toMetadata);
         }
         TickSizeMetadata cached = currentByTokenId.get(requiredTokenId);
@@ -106,6 +121,16 @@ public class TickSizeService {
     }
 
     public void runWithHistoricalTicks(Collection<String> tokenIds, Instant effectiveAt, Runnable action) {
+        runWithHistoricalTicks(null, null, tokenIds, effectiveAt, action);
+    }
+
+    public void runWithHistoricalTicks(
+            HistoricalTickDatasetType datasetType,
+            Long marketId,
+            Collection<String> tokenIds,
+            Instant effectiveAt,
+            Runnable action
+    ) {
         if (effectiveAt == null) {
             throw new IllegalArgumentException("historical tick effectiveAt is required");
         }
@@ -115,6 +140,13 @@ public class TickSizeService {
         Map<String, TickSizeMetadata> historical = new LinkedHashMap<>();
         for (String tokenId : tokenIds) {
             String requiredTokenId = requireTokenId(tokenId);
+            if (historicalCoverageService != null) {
+                if (datasetType == null) {
+                    historicalCoverageService.assertTokenReplayReady(requiredTokenId, effectiveAt);
+                } else {
+                    historicalCoverageService.assertReplayReady(datasetType, marketId, requiredTokenId, effectiveAt);
+                }
+            }
             TickSizeMetadata metadata = repository
                     .findFirstByTokenIdAndEffectiveAtLessThanEqualOrderByEffectiveAtDescIdDesc(requiredTokenId, effectiveAt)
                     .map(TickSizeMetadataEntity::toMetadata)
@@ -186,7 +218,7 @@ public class TickSizeService {
             String reason
     ) {
         public static TickValidation accepted(BigDecimal tickSize, BigDecimal normalizedPrice) {
-            return new TickValidation(true, tickSize, normalizedPrice, null);
+            return new TickValidation(true, tickSize, TickMath.canonical(normalizedPrice), null);
         }
 
         public static TickValidation rejected(BigDecimal tickSize, String reason) {
