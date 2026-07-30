@@ -206,8 +206,12 @@ class OrderVariation(BaseModel):
 
 
 class ExecutorCapabilities(BaseModel):
+    success: bool = Field(description="True only when executor and SDK identity evidence is available.")
+    protocolVersion: str = Field(description="Versioned JVM/sidecar response contract.")
+    executorVersion: str = Field(description="Installed voktrader executor package version.")
+    sdkPackage: str = Field(description="Installed exchange SDK distribution name.")
+    sdkVersion: str = Field(description="Installed exchange SDK version.")
     supportedTimeInForce: tuple[str, ...] = Field(
-        default=SUPPORTED_TIME_IN_FORCE,
         description="All time-in-force values accepted by the sidecar request model.",
     )
     supportedVariations: tuple[OrderVariation, ...] = Field(description="Supported timeInForce/postOnly combinations.")
@@ -215,3 +219,4 @@ class ExecutorCapabilities(BaseModel):
     dryRun: bool = Field(description="Current sidecar-level EXECUTOR_DRY_RUN setting.")
     requireFok: bool = Field(description="Current sidecar-level REQUIRE_FOK guardrail setting.")
     maxOrderAmountUsd: Decimal = Field(description="Current sidecar-level MAX_ORDER_AMOUNT_USD guardrail.")
+    error: ExecutorError | None = Field(default=None, description="Evidence failure when package identity cannot be resolved.")
