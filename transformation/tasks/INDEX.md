@@ -16,12 +16,11 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 
 ## Current next tasks
 
-The next unclaimed tasks after T053 completes are:
+The next unclaimed task is:
 
 1. `T042` - unified fee model. Parallel infrastructure work.
-2. `T060` - replay exact recorded depth levels. P0 simulation-honesty work now unblocked by CI.
 
-Central risk work `T012` is already claimed by open PR #9. CI task `T050` merged through PR #13. Control-plane security task `T044` merged through PR #14. Flyway schema authority task `T051` merged through PR #15. Dependency and SDK contract task `T052` merged through PR #16. Historical tick provenance task `T053` is complete in PR #17.
+Central risk work `T012` is already claimed by open PR #9. CI task `T050` merged through PR #13. Control-plane security task `T044` merged through PR #14. Flyway schema authority task `T051` merged through PR #15. Dependency and SDK contract task `T052` merged through PR #16. Historical tick provenance task `T053` merged through PR #17. Exact depth replay task `T060` is complete in PR #18.
 
 ## P0 - Transformation foundation
 | Task | Status | Priority | Depends On | Parallelizable | Title |
@@ -75,7 +74,7 @@ Central risk work `T012` is already claimed by open PR #9. CI task `T050` merged
 ## P5 - Simulation honesty
 | Task | Status | Priority | Depends On | Parallelizable | Title |
 | --- | --- | --- | --- | --- | --- |
-| [T060](./PHASE-5-simulation-honesty.md#t060) | READY | P0 | T050 | no | Replay exact recorded depth levels |
+| [T060](./PHASE-5-simulation-honesty.md#t060) | DONE | P0 | T050 | no | Replay exact recorded depth levels |
 | [T061](./PHASE-5-simulation-honesty.md#t061) | BLOCKED | P1 | T040, T030 | no | Persist normalized event log |
 | [T062](./PHASE-5-simulation-honesty.md#t062) | BLOCKED | P1 | T060, T061, T012, T042, T041 | no | Build live/replay parity tests |
 | [T063](./PHASE-5-simulation-honesty.md#t063) | BLOCKED | P1 | T060, T031 | no | Implement calibrated execution simulator |

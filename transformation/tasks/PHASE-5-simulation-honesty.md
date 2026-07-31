@@ -6,14 +6,14 @@ This ledger contains the detailed task contracts for this phase. Agents claim an
 
 ## T060 - Replay exact recorded depth levels
 
-Status: READY
+Status: DONE
 Priority: P0
 Phase: P5 - Simulation honesty
-Owner: unclaimed
-Branch:
-PR:
-Started:
-Completed:
+Owner: vokerg
+Branch: `task/T060-replay-exact-depth-levels`
+PR: #18
+Started: 2026-07-30T21:00:25Z
+Completed: 2026-07-31T05:30:00Z
 Depends On: T050
 Parallelizable: no
 
@@ -27,11 +27,11 @@ Replace synthetic one-level replay books with persisted full-depth levels.
 4. Reject incomplete/corrupt ticks and report coverage.
 
 ### Acceptance criteria
-- [ ] Golden-tick replayed book equals persisted levels.
-- [ ] Depth-aware features match the live captured feature vector.
+- [x] Golden-tick replayed book equals persisted levels.
+- [x] Depth-aware features match the live captured feature vector.
 
 ### Required report
-`transformation/reports/T060-YYYY-MM-DD-replay-exact-recorded-depth-levels.md`
+`transformation/reports/T060-2026-07-30-replay-exact-recorded-depth-levels.md`
 
 ---
 

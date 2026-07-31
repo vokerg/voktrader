@@ -5,11 +5,13 @@ import com.vokerg.voktrader.bot.BotRuntimeContextHolder;
 import com.vokerg.voktrader.market.MarketEntity;
 import com.vokerg.voktrader.market.MarketRepository;
 import com.vokerg.voktrader.market.TrackedMarketState;
+import com.vokerg.voktrader.marketdata.HistoricalTickCoverageService;
 import com.vokerg.voktrader.marketdata.LatestPriceState;
+import com.vokerg.voktrader.marketdata.MarketDepthReplayService;
+import com.vokerg.voktrader.marketdata.OrderBookLevel;
 import com.vokerg.voktrader.marketdata.OrderBookState;
-import com.vokerg.voktrader.marketdata.model.MarketDepthSnapshotEntity;
+import com.vokerg.voktrader.marketdata.OutcomeOrderBook;
 import com.vokerg.voktrader.marketdata.model.PriceSnapshotEntity;
-import com.vokerg.voktrader.marketdata.persistence.MarketDepthSnapshotRepository;
 import com.vokerg.voktrader.marketdata.persistence.PriceSnapshotRepository;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.polymarket.dto.PriceLevelDto;
@@ -20,19 +22,18 @@ import com.vokerg.voktrader.strategy.v2.StrategyV2OverrideContext;
 import com.vokerg.voktrader.strategy.v2.StrategyV2OverrideParser;
 import com.vokerg.voktrader.strategy.v2.StrategyV2Properties;
 import com.vokerg.voktrader.time.TimeMachine;
-import com.vokerg.voktrader.trade.ExecutionOverrideContext;
 import com.vokerg.voktrader.trade.BacktestTradeStateContext;
+import com.vokerg.voktrader.trade.ExecutionOverrideContext;
 import com.vokerg.voktrader.trade.OrderGatewayContext;
 import com.vokerg.voktrader.trade.PolymarketFeeCalculator;
-import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.TradeHistoryScopeContext;
-import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
-import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import com.vokerg.voktrader.trade.TradingProperties;
-import com.vokerg.voktrader.trade.simulation.BookOrderFillSimulator;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeStatus;
-
+import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
+import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
+import com.vokerg.voktrader.trade.persistence.TradeRepository;
+import com.vokerg.voktrader.trade.simulation.BookOrderFillSimulator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -48,7 +49,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -56,7 +56,8 @@ import java.util.stream.Collectors;
 public class BacktestReplayService {
     private final BacktestStrategyResolver strategyResolver;
     private final PriceSnapshotRepository priceSnapshotRepository;
-    private final MarketDepthSnapshotRepository depthSnapshotRepository;
+    private final MarketDepthReplayService marketDepthReplayService;
+    private final HistoricalTickCoverageService historicalTickCoverageService;
     private final MarketRepository marketRepository;
     private final BacktestRunRepository backtestRunRepository;
     private final TradeRepository tradeRepository;
@@ -107,6 +108,11 @@ public class BacktestReplayService {
         long snapshotsSeen = 0;
         Instant replayStartedAt = null;
         Instant replayEndedAt = null;
+
+        long coverageStartedNs = System.nanoTime();
+        HistoricalTickCoverageService.InventoryResult depthCoverage =
+                historicalTickCoverageService.inventoryDepthSnapshotCoverage();
+        long coverageEndedNs = System.nanoTime();
         long priceLoadStartedNs = System.nanoTime();
         List<PriceSnapshotEntity> priceSnapshots =
                 priceSnapshotRepository.findByMarketIdInOrderByMarketIdAscCapturedAtAsc(numericMarketIds);
@@ -114,25 +120,18 @@ public class BacktestReplayService {
         long priceGroupStartedNs = System.nanoTime();
         Map<Long, List<PriceSnapshotEntity>> snapshotsByMarket = groupByMarket(priceSnapshots);
         long priceGroupEndedNs = System.nanoTime();
-        long depthLoadStartedNs = System.nanoTime();
-        List<MarketDepthSnapshotEntity> depthSnapshots =
-                depthSnapshotRepository.findByMarketIdInOrderByMarketIdAscCapturedAtAsc(numericMarketIds);
-        long depthLoadEndedNs = System.nanoTime();
-        long depthGroupStartedNs = System.nanoTime();
-        Map<DepthKey, List<MarketDepthSnapshotEntity>> depthByTick = groupDepthByTick(depthSnapshots);
-        long depthGroupEndedNs = System.nanoTime();
 
         log.info(
-                "TIME MACHINE preload: runId={} strategy={} markets={} priceRows={} depthRows={} loadPricesMs={} groupPricesMs={} loadDepthMs={} groupDepthMs={}",
+                "TIME MACHINE preload: runId={} strategy={} markets={} priceRows={} inventoryDepthMs={} depthBlockersCreated={} depthResolvedCreated={} loadPricesMs={} groupPricesMs={}",
                 runId,
                 strategy.id(),
                 numericMarketIds.size(),
                 priceSnapshots.size(),
-                depthSnapshots.size(),
+                elapsedMs(coverageStartedNs, coverageEndedNs),
+                depthCoverage.blockersCreated(),
+                depthCoverage.resolvedIntervalsCreated(),
                 elapsedMs(priceLoadStartedNs, priceLoadEndedNs),
-                elapsedMs(priceGroupStartedNs, priceGroupEndedNs),
-                elapsedMs(depthLoadStartedNs, depthLoadEndedNs),
-                elapsedMs(depthGroupStartedNs, depthGroupEndedNs)
+                elapsedMs(priceGroupStartedNs, priceGroupEndedNs)
         );
 
         final long resolvedBotId = botId;
@@ -160,18 +159,9 @@ public class BacktestReplayService {
                         marketEntity == null ? null : marketEntity.getEndDate()
                 );
                 long marketSnapshotsSeen = 0;
-                long skippedTicks = 0;
                 long tickLoopStartedNs = System.nanoTime();
                 for (PriceSnapshotEntity snapshot : snapshots) {
-                    List<MarketDepthSnapshotEntity> depthRows = depthByTick.getOrDefault(
-                            new DepthKey(marketId, snapshot.getCapturedAt()),
-                            List.of()
-                    );
-                    ReplayTick tick = tick(marketId, marketEntity, snapshot, depthRows);
-                    if (tick == null) {
-                        skippedTicks++;
-                        continue;
-                    }
+                    ReplayTick tick = tick(marketId, marketEntity, snapshot);
                     replayStartedRef[0] = earlier(replayStartedRef[0], tick.capturedAt());
                     replayEndedRef[0] = later(replayEndedRef[0], tick.capturedAt());
                     snapshotsSeenRef[0]++;
@@ -186,12 +176,11 @@ public class BacktestReplayService {
                 MarketTradeCounts tradeCounts = countMarketTrades(runId, marketId);
                 long countEndedNs = System.nanoTime();
                 log.info(
-                        "TIME MACHINE market finished: runId={} strategy={} marketId={} replayedSnapshots={} skippedTicks={} trades={} closedTrades={} openTrades={} totalReplayedSnapshots={} lookupSnapshotsMs={} loadMarketEntityMs={} tickLoopMs={} resolveOpenMs={} countTradesMs={} totalMarketMs={}",
+                        "TIME MACHINE market finished: runId={} strategy={} marketId={} replayedSnapshots={} trades={} closedTrades={} openTrades={} totalReplayedSnapshots={} lookupSnapshotsMs={} loadMarketEntityMs={} tickLoopMs={} resolveOpenMs={} countTradesMs={} totalMarketMs={}",
                         runId,
                         strategy.id(),
                         marketId,
                         marketSnapshotsSeen,
-                        skippedTicks,
                         tradeCounts.total(),
                         tradeCounts.closed(),
                         tradeCounts.open(),
@@ -301,12 +290,12 @@ public class BacktestReplayService {
             latestPriceState.update(tick.downTokenId(), "Down", tick.snapshot().getDownBid(), tick.snapshot().getDownAsk(), tick.capturedAt());
 
             OrderBookState orderBookState = new OrderBookState();
-            tick.depthRows().forEach(row -> orderBookState.update(
-                    row.getTokenId(),
-                    row.getOutcome(),
-                    levels(row.getBestBid(), row.getBidDepth()),
-                    levels(row.getBestAsk(), row.getAskDepth()),
-                    row.getBookUpdatedAt() == null ? tick.capturedAt() : row.getBookUpdatedAt()
+            tick.depthSnapshot().booksByTokenId().values().forEach(book -> orderBookState.update(
+                    book.tokenId(),
+                    book.outcome(),
+                    levels(book.bids()),
+                    levels(book.asks()),
+                    book.updatedAt() == null ? tick.capturedAt() : book.updatedAt()
             ));
 
             BotRuntimeContext context = new BotRuntimeContext(
@@ -347,14 +336,12 @@ public class BacktestReplayService {
     private ReplayTick tick(
             Long marketId,
             MarketEntity entity,
-            PriceSnapshotEntity snapshot,
-            List<MarketDepthSnapshotEntity> depthRows
+            PriceSnapshotEntity snapshot
     ) {
-        String upTokenId = tokenId(depthRows, "Up");
-        String downTokenId = tokenId(depthRows, "Down");
-        if (upTokenId == null || downTokenId == null) {
-            return null;
-        }
+        MarketDepthReplayService.ReplayDepthSnapshot depthSnapshot =
+                marketDepthReplayService.loadExactSnapshot(marketId, snapshot.getCapturedAt());
+        OutcomeOrderBook upBook = bookByOutcome(depthSnapshot, "Up");
+        OutcomeOrderBook downBook = bookByOutcome(depthSnapshot, "Down");
 
         Instant endDate = snapshot.getRemainingSeconds() == null
                 ? entity == null ? null : entity.getEndDate()
@@ -374,23 +361,39 @@ public class BacktestReplayService {
                 null,
                 null
         );
-        return new ReplayTick(market, marketId, snapshot, depthRows, upTokenId, downTokenId, snapshot.getCapturedAt());
+        return new ReplayTick(
+                market,
+                marketId,
+                snapshot,
+                depthSnapshot,
+                upBook.tokenId(),
+                downBook.tokenId(),
+                snapshot.getCapturedAt()
+        );
     }
 
-    private List<PriceLevelDto> levels(BigDecimal price, BigDecimal size) {
-        if (price == null || size == null || size.compareTo(BigDecimal.ZERO) <= 0) {
-            return List.of();
+    private OutcomeOrderBook bookByOutcome(
+            MarketDepthReplayService.ReplayDepthSnapshot depthSnapshot,
+            String outcome
+    ) {
+        List<OutcomeOrderBook> matches = depthSnapshot.booksByTokenId().values().stream()
+                .filter(book -> outcome.equalsIgnoreCase(book.outcome()))
+                .toList();
+        if (matches.size() != 1) {
+            throw new MarketDepthReplayService.ReplayDepthCorruptionException(
+                    "recorded depth replay requires exactly one " + outcome
+                            + " book for marketId=" + depthSnapshot.marketId()
+                            + " capturedAt=" + depthSnapshot.capturedAt()
+                            + "; found=" + matches.size()
+            );
         }
-        return List.of(new PriceLevelDto(price.toPlainString(), size.toPlainString()));
+        return matches.getFirst();
     }
 
-    private String tokenId(List<MarketDepthSnapshotEntity> rows, String outcome) {
-        return rows.stream()
-                .filter(row -> outcome.equalsIgnoreCase(row.getOutcome()))
-                .map(MarketDepthSnapshotEntity::getTokenId)
-                .filter(tokenId -> tokenId != null && !tokenId.isBlank())
-                .findFirst()
-                .orElse(null);
+    private List<PriceLevelDto> levels(List<OrderBookLevel> levels) {
+        return levels.stream()
+                .map(level -> new PriceLevelDto(level.price().toPlainString(), level.size().toPlainString()))
+                .toList();
     }
 
     private void resolveRemainingOpenTrades(String runId, Long marketId, MarketEntity market) {
@@ -493,15 +496,6 @@ public class BacktestReplayService {
         return grouped;
     }
 
-    private Map<DepthKey, List<MarketDepthSnapshotEntity>> groupDepthByTick(List<MarketDepthSnapshotEntity> depthSnapshots) {
-        return depthSnapshots.stream()
-                .collect(Collectors.groupingBy(
-                        snapshot -> new DepthKey(snapshot.getMarketId(), snapshot.getCapturedAt()),
-                        LinkedHashMap::new,
-                        Collectors.toList()
-                ));
-    }
-
     private String replaySpan(List<PriceSnapshotEntity> snapshots) {
         if (snapshots == null || snapshots.size() < 2) {
             return "PT0S";
@@ -539,14 +533,11 @@ public class BacktestReplayService {
             GammaMarketDto market,
             Long numericMarketId,
             PriceSnapshotEntity snapshot,
-            List<MarketDepthSnapshotEntity> depthRows,
+            MarketDepthReplayService.ReplayDepthSnapshot depthSnapshot,
             String upTokenId,
             String downTokenId,
             Instant capturedAt
     ) {
-    }
-
-    private record DepthKey(Long marketId, Instant capturedAt) {
     }
 
     private record MarketTradeCounts(long total, long closed, long open) {
