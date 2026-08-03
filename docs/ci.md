@@ -25,7 +25,7 @@ python scripts/ci/check_java_failure_baseline.py \
 
 ### Temporary exact failure baseline
 
-During checkpoint remediation, `.github/ci/java-failure-baseline.json` names every temporarily accepted Java failure by full test identity, result kind (`failure` or `error`), and the failure type reported in Surefire XML. This is normally an exception class; some frameworks emit a stable diagnostic type instead. The baseline is not a generic failure budget: the current set may shrink, but a new test failure, a failure/error kind change, or a reported-type change fails CI.
+During checkpoint remediation, `.github/ci/java-failure-baseline.json` names every temporarily accepted Java failure by full test identity, result kind (`failure` or `error`), exact `reported_type` from Surefire XML, and `assertion_class`. The comparator uses the reported type because that is machine-verifiable; the assertion class remains explicit even when a framework such as Mockito emits a diagnostic type instead of its class name. The baseline is not a generic failure budget: the current set may shrink, but a new test failure, a failure/error kind change, or a reported-type change fails CI.
 
 The Java workflow always runs the complete Maven suite and parses Surefire XML. Maven's non-zero test exit is accepted only when every parsed failure identity is an exact member of the temporary baseline. Compilation, test discovery, JVM, plugin, or other build failures remain hard failures because they do not produce an approved test identity. No Java step uses `continue-on-error` or an equivalent workflow suppression.
 
