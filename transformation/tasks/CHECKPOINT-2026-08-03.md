@@ -100,13 +100,13 @@ Prove a retained production-like database can cross the corrected Flyway history
 ## T055 - Enforce transformation CI no-regression policy
 
 Issue: #22
-Status: READY
+Status: IN_PROGRESS
 Priority: P0
 Phase: Checkpoint remediation
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: vokerg-gpt-5.6-thinking-20260803
+Branch: task/T055-ci-no-regression
+PR: pending
+Started: 2026-08-03T17:37:00Z
 Completed:
 Depends On: T050
 Parallelizable: yes
