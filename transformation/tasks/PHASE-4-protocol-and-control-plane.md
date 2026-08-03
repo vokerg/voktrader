@@ -2,6 +2,8 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
+The 2026-08-03 checkpoint promotes T042 to P0, pauses it behind integrated execution checkpoint T016, and adds T054-T056 in `CHECKPOINT-2026-08-03.md`. T054 and T056 are mandatory prerequisites for T045.
+
 ---
 
 ## T040 - Add market WebSocket heartbeat and gap supervision
@@ -70,30 +72,39 @@ Fetch and react to tick-size changes for order rounding and validation.
 
 ## T042 - Replace hard-coded fee assumptions
 
-Status: READY
-Priority: P1
+Status: BLOCKED
+Priority: P0
 Phase: P4 - Protocol currency and control-plane hardening
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: vokerg
+Branch: task/T042-unified-fee-model
+PR: #12
+Started: 2026-07-28T08:46:10Z
 Completed:
-Depends On: T000
-Parallelizable: yes
+Depends On: T016
+Parallelizable: no
 
 ### Objective
 
 Use one fee model across live, paper, replay, and Strategy V2.
 
+### Checkpoint constraint
+
+PR #12 remains the claim lock but is paused until T016 is DONE. It is materially stale and non-mergeable against the current transformation head. Its V19 migration claim must be reconciled with the authoritative Flyway chain, and repository-wide call-site wiring must be proven before review readiness.
+
 ### Implementation steps
 1. Persist per-market fee rate, exponent, and taker-only metadata.
-2. Remove stale hard-coded fallback formulas.
-3. Version the fee model in run manifests.
+2. Remove stale hard-coded fallback formulas from live, paper, replay, Strategy V2, and executor fallback paths.
+3. Version the fee model and provenance in run manifests.
 4. Add official-example and cross-mode parity tests.
+5. Rebase or reconstruct on the post-T016 transformation head.
+6. Run complete CI and record exact before/after Java failure identities and counts.
 
 ### Acceptance criteria
-- [ ] Identical metadata, side, role, price, and shares produce the same fee in all modes.
+- [ ] Identical as-of metadata, side, role, price, and shares produce the same fee in all modes.
 - [ ] Strategy V2 has no separate fee fallback.
+- [ ] No live/executor fallback uses a hard-coded default rate when authoritative metadata is absent.
+- [ ] Run manifests record fee model version and metadata provenance.
+- [ ] Clean and retained-database migration checks pass with the reconciled migration version.
 
 ### Required report
 `transformation/reports/T042-YYYY-MM-DD-replace-hard-coded-fee-assumptions.md`
@@ -177,7 +188,7 @@ Branch:
 PR:
 Started:
 Completed:
-Depends On: T010, T034, T040, T041, T042, T044
+Depends On: T010, T034, T040, T041, T042, T044, T054, T056
 Parallelizable: no
 
 ### Objective
@@ -185,11 +196,12 @@ Parallelizable: no
 Expose one fail-closed, operator-readable live-readiness result.
 
 ### Implementation steps
-Aggregate profile, arm state, kill switch, account/executor identity, WS health, reconciliation, fee/tick metadata, balances, and unresolved orders into machine-readable blocking reasons.
+Aggregate profile, arm state, kill switch, account/executor identity, WS health, reconciliation, fee/tick metadata, retained-schema readiness, control-plane authentication assurance, balances, and unresolved orders into machine-readable blocking reasons.
 
 ### Acceptance criteria
 - [ ] One endpoint identifies every active blocker.
 - [ ] Missing or stale inputs fail closed.
+- [ ] Retained-database upgrade evidence and live authentication assurance are represented as prerequisites.
 
 ### Required report
 `transformation/reports/T045-YYYY-MM-DD-add-live-preflight-endpoint.md`
@@ -289,7 +301,7 @@ Make Java/Python/Angular installs reproducible and detect protocol drift.
 - [x] Response-shape drift breaks the adapter contract test.
 
 ### Required report
-`transformation/reports/T052-2026-07-29-lock-dependency-and-sdk-contracts.md`
+`transformation/reports/T052-2026-07-29-lock-dependency-sdk-contracts.md`
 
 ---
 
@@ -322,6 +334,12 @@ Make pre-T041 replay datasets explicit and trustworthy without inventing histori
 
 ### Required report
 `transformation/reports/T053-2026-07-30-backfill-historical-tick-provenance.md`
+
+---
+
+## Checkpoint assurance tasks
+
+Detailed contracts for T054 retained-database upgrade rehearsal, T055 CI no-regression enforcement, and T056 live default-auth assurance are in `CHECKPOINT-2026-08-03.md`.
 
 ## Phase-wide safety rule
 
