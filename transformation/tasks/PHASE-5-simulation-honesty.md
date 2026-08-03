@@ -2,6 +2,8 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
+The 2026-08-03 checkpoint requires integrated risk evidence from T016 and the completed unified fee model T042 before live/replay parity can establish new comparable performance baselines.
+
 ---
 
 ## T060 - Replay exact recorded depth levels
@@ -66,7 +68,7 @@ Create a deterministic event dataset across market, user, and underlying feeds.
 
 ---
 
-## T062 - Build live/replay parity tests
+## T062 - Build live/replay parity tests and reset comparable baselines
 
 Status: BLOCKED
 Priority: P1
@@ -76,21 +78,26 @@ Branch:
 PR:
 Started:
 Completed:
-Depends On: T060, T061, T012, T042, T041
+Depends On: T060, T061, T016, T042, T041
 Parallelizable: no
 
 ### Objective
-Prove identical event input creates identical features, risk decisions, fees, tick rounding, and intents.
+Prove identical event input creates identical features, risk decisions, fees, tick rounding, and intents, then establish the first comparable post-T060/T042 performance baseline.
 
 ### Implementation steps
 1. Create a stable golden-market fixture.
 2. Run live-style and replay paths over the same input.
-3. Compare normalized outputs and reasons.
-4. Add regression snapshots with explicit versioning.
+3. Compare normalized features, risk decisions, fee results, tick rounding, intents, and reasons.
+4. Add regression snapshots with explicit feature, risk, tick, fee, and simulator versioning.
+5. Archive pre-T060 and pre-T042 PnL as non-comparable.
+6. Regenerate strategy baselines only from datasets that pass depth, tick, fee, and event-coverage gates.
 
 ### Acceptance criteria
 - [ ] Test fails on feature, risk, fee, tick, or intent divergence.
 - [ ] Fixture provenance and expected outputs are documented.
+- [ ] Pre-T060 and pre-T042 performance artifacts are visibly marked non-comparable.
+- [ ] New baseline manifests record dataset hash and feature, risk, tick, fee, and simulator versions.
+- [ ] No promotion decision uses a legacy synthetic-depth or hard-coded-fee baseline.
 
 ### Required report
 `transformation/reports/T062-YYYY-MM-DD-build-live-replay-parity-tests.md`
