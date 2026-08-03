@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Temporary exact Java failure baseline for Voktrader 2.0 checkpoint remediation. Subsets are allowed; new tests, changed failure kinds, or changed exception classes fail CI.",
+  "description": "Temporary exact Java failure baseline for Voktrader 2.0 checkpoint remediation. Subsets are allowed; new tests, changed failure kinds, or changed Surefire-reported failure types fail CI.",
   "source": {
     "workflow_run_id": 30786409032,
     "job_id": 91600666660,
@@ -50,7 +50,7 @@
     {
       "test": "com.vokerg.voktrader.strategy.v2.StrategyV2RuntimeStateAwarenessTest.partiallyOpenExposesPartialStateWithoutNormalEntry",
       "kind": "failure",
-      "exception": "org.mockito.exceptions.verification.WantedButNotInvoked"
+      "exception": "Wanted but not invoked"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.exitFromPartiallyOpenFullClose",
