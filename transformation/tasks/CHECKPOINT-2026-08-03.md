@@ -105,7 +105,7 @@ Priority: P0
 Phase: Checkpoint remediation
 Owner: vokerg-gpt-5.6-thinking-20260803
 Branch: task/T055-ci-no-regression
-PR: pending
+PR: #25
 Started: 2026-08-03T17:37:00Z
 Completed:
 Depends On: T050
