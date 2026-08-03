@@ -2,6 +2,8 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
+The 2026-08-03 checkpoint adds mandatory integration gate T016 after T012. See `CHECKPOINT-2026-08-03.md`. Until T016 is DONE, T013, T014, T015, and T020 remain blocked even if a stale task branch claims otherwise.
+
 ---
 
 ## T010 - Make live profile capability-only
@@ -91,13 +93,13 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 
 ## T012 - Centralize entry risk policy
 
-Status: READY
+Status: IN_PROGRESS
 Priority: P0
 Phase: P1 - Stop the bleeding
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: vokerg
+Branch: task/T012-centralize-entry-risk-policy
+PR: #9
+Started: 2026-07-25T06:36:53Z
 Completed:
 Depends On: T011
 Parallelizable: no
@@ -106,22 +108,31 @@ Parallelizable: no
 
 Move RiskCheckService semantics behind the sole entry boundary and make all new-position entries use it.
 
+## Checkpoint constraint
+
+PR #9 is materially stale and non-mergeable against the current transformation head. Branch-local completion does not count as integrated completion. Rebase or reconstruct the work, reconcile the current migration chain, run complete CI, and unblock only T016.
+
 ## Implementation steps
 
 1. Refactor RiskCheckService into `assessEntry` with typed inputs.
 2. Persist risk checks before an accepted intent enters the outbox.
 3. Add a risk result object distinguishing blocking, warning, and informational checks.
 4. Ensure paper, replay, shadow, and live all call the same policy.
+5. Restore the T011 typed strategy architecture on the integrated head.
+6. Record exact before/after Java failure identities and counts.
 
 ## Acceptance criteria
 
 - [ ] Every BUY/new-position path calls central risk policy exactly once.
 - [ ] Risk checks are saved with intent/order correlation IDs.
 - [ ] Mutation removing the risk call fails tests.
+- [ ] SELL and cancel remain available outside new-exposure gating.
+- [ ] Complete CI runs on the current integrated head without adding a new failure.
+- [ ] T016 is the only downstream task unblocked directly by T012.
 
 ## Required tests
 
-Add exhaustive route tests and mutation-equivalent negative coverage. Record results in `transformation/reports/T012-YYYY-MM-DD-centralize-entry-risk-policy.md`.
+Add exhaustive route tests, mutation-equivalent negative coverage, architecture coverage, and full-CI evidence. Record results in `transformation/reports/T012-YYYY-MM-DD-centralize-entry-risk-policy.md`.
 
 ## Completion update protocol
 
@@ -139,7 +150,7 @@ Branch:
 PR:
 Started:
 Completed:
-Depends On: T012
+Depends On: T016
 Parallelizable: no
 
 ## Objective
@@ -179,7 +190,7 @@ Branch:
 PR:
 Started:
 Completed:
-Depends On: T012, T013
+Depends On: T016, T013
 Parallelizable: no
 
 ## Objective
@@ -218,7 +229,7 @@ Branch:
 PR:
 Started:
 Completed:
-Depends On: T012
+Depends On: T016
 Parallelizable: no
 
 ## Objective
