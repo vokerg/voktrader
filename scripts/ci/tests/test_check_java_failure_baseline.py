@@ -16,8 +16,9 @@ class JavaFailureBaselineTest(unittest.TestCase):
         self,
         root: Path,
         *,
-        exception: str = "org.opentest4j.AssertionFailedError",
-        baseline_exception: str = "org.opentest4j.AssertionFailedError",
+        reported_type: str = "org.opentest4j.AssertionFailedError",
+        baseline_reported_type: str = "org.opentest4j.AssertionFailedError",
+        assertion_class: str = "org.opentest4j.AssertionFailedError",
         status: str = "BLOCKED",
     ) -> tuple[Path, Path, Path]:
         reports = root / "reports"
@@ -25,7 +26,7 @@ class JavaFailureBaselineTest(unittest.TestCase):
         (reports / "TEST-example.xml").write_text(
             '<testsuite tests="1" failures="1">'
             '<testcase classname="example.DemoTest" name="fails">'
-            f'<failure type="{exception}">boom</failure>'
+            f'<failure type="{reported_type}">boom</failure>'
             "</testcase></testsuite>",
             encoding="utf-8",
         )
@@ -39,7 +40,8 @@ class JavaFailureBaselineTest(unittest.TestCase):
                         {
                             "test": "example.DemoTest.fails",
                             "kind": "failure",
-                            "exception": baseline_exception,
+                            "reported_type": baseline_reported_type,
+                            "assertion_class": assertion_class,
                         }
                     ],
                 }
@@ -69,8 +71,9 @@ class JavaFailureBaselineTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             reports, baseline, ledger = self.write_fixture(
                 Path(temp),
-                exception="Wanted but not invoked",
-                baseline_exception="Wanted but not invoked",
+                reported_type="Wanted but not invoked",
+                baseline_reported_type="Wanted but not invoked",
+                assertion_class="org.mockito.exceptions.verification.WantedButNotInvoked",
             )
             result, summary = baseline_check.evaluate(
                 report_dir=reports,
@@ -81,11 +84,11 @@ class JavaFailureBaselineTest(unittest.TestCase):
             self.assertEqual(0, result)
             self.assertIn("[Wanted but not invoked]", summary)
 
-    def test_changed_exception_fails(self) -> None:
+    def test_changed_reported_type_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             reports, baseline, ledger = self.write_fixture(
                 Path(temp),
-                exception="java.lang.AssertionError",
+                reported_type="java.lang.AssertionError",
             )
             result, summary = baseline_check.evaluate(
                 report_dir=reports,
@@ -95,6 +98,21 @@ class JavaFailureBaselineTest(unittest.TestCase):
             )
             self.assertEqual(1, result)
             self.assertIn("outside the baseline", summary)
+
+    def test_missing_assertion_class_fails_baseline_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            reports, baseline, ledger = self.write_fixture(
+                Path(temp),
+                assertion_class="",
+            )
+            result, summary = baseline_check.evaluate(
+                report_dir=reports,
+                baseline_path=baseline,
+                ledger_path=ledger,
+                maven_exit_code=1,
+            )
+            self.assertEqual(1, result)
+            self.assertIn("assertion_class", summary)
 
     def test_resolved_failure_passes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
