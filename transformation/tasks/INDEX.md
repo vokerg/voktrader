@@ -4,23 +4,29 @@ This index is the ordered source of truth for transformation tasks. Task PRs tar
 
 ## Selection rule
 
-Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the task is marked `Parallelizable: yes` and no lower task blocks its specific workstream.
+Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the task is marked `Parallelizable: yes` and no lower task blocks its specific workstream. During the 2026-08-03 checkpoint recovery, the explicit sequence below overrides stale branch-local task claims.
 
 ## Status vocabulary
 
 - `READY` - eligible when dependencies are complete.
 - `BLOCKED` - waiting for dependencies or explicit operator decision.
-- `IN_PROGRESS` - claimed by an open task PR.
+- `IN_PROGRESS` - claimed by an open task PR and actively eligible to proceed.
 - `DONE` - acceptance criteria met and report committed.
 - `PARTIAL` - useful progress merged but follow-up is required.
 
-## Current next tasks
+## Current checkpoint sequence
 
-The next unclaimed task is:
+1. `T012` - centralize entry risk policy. **IN_PROGRESS** in PR #9; must be rebased or reconstructed on the current transformation head.
+2. `T055` - enforce CI no-regression policy. **READY** and may proceed in parallel with T012.
+3. `T016` - integrated execution-boundary checkpoint. Blocked by T012.
+4. `T042` - unified fee model. Claimed by draft PR #12, promoted to P0, but paused and **BLOCKED** by T016 to avoid Strategy V2/execution rework.
+5. `T013`, `T015`, and `T020` become eligible only after T016. `T014` follows T013.
+6. `T020` through `T025` execute as the durable lifecycle chain, followed by mandatory phase-exit gate `T026`.
+7. `T030` and all exchange-truth work remain blocked until T026.
+8. After T055, `T054` retained-database rehearsal and `T056` control-plane default-auth proof may proceed in parallel.
+9. `T045` live preflight additionally requires T054 and T056.
 
-1. `T042` - unified fee model. Parallel infrastructure work.
-
-Central risk work `T012` is already claimed by open PR #9. CI task `T050` merged through PR #13. Control-plane security task `T044` merged through PR #14. Flyway schema authority task `T051` merged through PR #15. Dependency and SDK contract task `T052` merged through PR #16. Historical tick provenance task `T053` merged through PR #17. Exact depth replay task `T060` is complete in PR #18.
+Unrelated feature work is frozen while the integrated Java failure baseline is unchanged or worsening. See [`CHECKPOINT-2026-08-03.md`](./CHECKPOINT-2026-08-03.md).
 
 ## P0 - Transformation foundation
 | Task | Status | Priority | Depends On | Parallelizable | Title |
@@ -32,25 +38,27 @@ Central risk work `T012` is already claimed by open PR #9. CI task `T050` merged
 | --- | --- | --- | --- | --- | --- |
 | [T010](./PHASE-1-stop-the-bleeding.md#t010) | DONE | P0 | T000 | no | Make live profile capability-only |
 | [T011](./PHASE-1-stop-the-bleeding.md#t011) | DONE | P0 | T010 | no | Introduce typed entry and exit intent boundary |
-| [T012](./PHASE-1-stop-the-bleeding.md#t012) | READY | P0 | T011 | no | Centralize entry risk policy |
-| [T013](./PHASE-1-stop-the-bleeding.md#t013) | BLOCKED | P0 | T012 | no | Define portfolio exposure invariants |
-| [T014](./PHASE-1-stop-the-bleeding.md#t014) | BLOCKED | P0 | T012, T013 | no | Prove kill switch covers every live entry route |
-| [T015](./PHASE-1-stop-the-bleeding.md#t015) | BLOCKED | P0 | T012 | no | Expose effective risk gate chain |
+| [T012](./PHASE-1-stop-the-bleeding.md#t012) | IN_PROGRESS | P0 | T011 | no | Centralize entry risk policy |
+| [T016](./CHECKPOINT-2026-08-03.md#t016---stabilize-integrated-execution-boundary-after-central-risk-merge) | BLOCKED | P0 | T012 | no | Stabilize integrated execution boundary after central-risk merge |
+| [T013](./PHASE-1-stop-the-bleeding.md#t013) | BLOCKED | P0 | T016 | no | Define portfolio exposure invariants |
+| [T014](./PHASE-1-stop-the-bleeding.md#t014) | BLOCKED | P0 | T016, T013 | no | Prove kill switch covers every live entry route |
+| [T015](./PHASE-1-stop-the-bleeding.md#t015) | BLOCKED | P0 | T016 | no | Expose effective risk gate chain |
 
 ## P2 - Durable order lifecycle
 | Task | Status | Priority | Depends On | Parallelizable | Title |
 | --- | --- | --- | --- | --- | --- |
-| [T020](./PHASE-2-durable-order-lifecycle.md#t020) | BLOCKED | P0 | T012 | no | Create transactional order outbox schema |
+| [T020](./PHASE-2-durable-order-lifecycle.md#t020) | BLOCKED | P0 | T016 | no | Create transactional order outbox schema |
 | [T021](./PHASE-2-durable-order-lifecycle.md#t021) | BLOCKED | P0 | T020 | no | Implement outbox worker and claim lease |
 | [T022](./PHASE-2-durable-order-lifecycle.md#t022) | BLOCKED | P0 | T021 | no | Make executor idempotency durable |
 | [T023](./PHASE-2-durable-order-lifecycle.md#t023) | BLOCKED | P0 | T021, T022 | no | Handle unknown submission outcomes |
 | [T024](./PHASE-2-durable-order-lifecycle.md#t024) | BLOCKED | P0 | T021 | no | Remove executor calls from DB transactions |
 | [T025](./PHASE-2-durable-order-lifecycle.md#t025) | BLOCKED | P1 | T021, T024 | no | Rebuild cancellation lifecycle |
+| [T026](./CHECKPOINT-2026-08-03.md#t026---close-durable-order-lifecycle-integration-failures) | BLOCKED | P0 | T020, T021, T022, T023, T024, T025 | no | Close durable order-lifecycle integration failures |
 
 ## P3 - Exchange truth and settlement ledger
 | Task | Status | Priority | Depends On | Parallelizable | Title |
 | --- | --- | --- | --- | --- | --- |
-| [T030](./PHASE-3-exchange-truth.md#t030) | BLOCKED | P0 | T021 | no | Add authenticated user WebSocket consumer |
+| [T030](./PHASE-3-exchange-truth.md#t030) | BLOCKED | P0 | T026 | no | Add authenticated user WebSocket consumer |
 | [T031](./PHASE-3-exchange-truth.md#t031) | BLOCKED | P0 | T030 | no | Implement provisional settlement state machine |
 | [T032](./PHASE-3-exchange-truth.md#t032) | BLOCKED | P0 | T031 | no | Split settled and provisional ledger queries |
 | [T033](./PHASE-3-exchange-truth.md#t033) | BLOCKED | P1 | T030, T031 | no | Remove ambiguous fill association |
@@ -62,21 +70,24 @@ Central risk work `T012` is already claimed by open PR #9. CI task `T050` merged
 | --- | --- | --- | --- | --- | --- |
 | [T040](./PHASE-4-protocol-and-control-plane.md#t040) | DONE | P1 | T000 | yes | Add market WebSocket heartbeat and gap supervision |
 | [T041](./PHASE-4-protocol-and-control-plane.md#t041) | DONE | P1 | T040 | no | Support dynamic tick metadata |
-| [T042](./PHASE-4-protocol-and-control-plane.md#t042) | READY | P1 | T000 | yes | Replace hard-coded fee assumptions |
+| [T042](./PHASE-4-protocol-and-control-plane.md#t042) | BLOCKED | P0 | T016 | no | Replace hard-coded fee assumptions |
 | [T043](./PHASE-4-protocol-and-control-plane.md#t043) | BLOCKED | P1 | T021 | no | Map matching-engine restart modes |
 | [T044](./PHASE-4-protocol-and-control-plane.md#t044) | DONE | P1 | T000 | yes | Harden live control plane security |
-| [T045](./PHASE-4-protocol-and-control-plane.md#t045) | BLOCKED | P1 | T010, T034, T040, T041, T042, T044 | no | Add live preflight endpoint |
+| [T045](./PHASE-4-protocol-and-control-plane.md#t045) | BLOCKED | P1 | T010, T034, T040, T041, T042, T044, T054, T056 | no | Add live preflight endpoint |
 | [T050](./PHASE-4-protocol-and-control-plane.md#t050) | DONE | P1 | T000 | yes | Add CI pipeline and smoke compose |
 | [T051](./PHASE-4-protocol-and-control-plane.md#t051) | DONE | P2 | T050 | no | Enforce Flyway schema authority |
 | [T052](./PHASE-4-protocol-and-control-plane.md#t052) | DONE | P2 | T050 | no | Lock dependency and SDK contracts |
 | [T053](./PHASE-4-protocol-and-control-plane.md#t053) | DONE | P2 | T041 | yes | Backfill historical tick provenance |
+| [T054](./CHECKPOINT-2026-08-03.md#t054---rehearse-retained-database-flyway-upgrade) | BLOCKED | P0 | T051, T055 | yes | Rehearse retained-database Flyway upgrade |
+| [T055](./CHECKPOINT-2026-08-03.md#t055---enforce-transformation-ci-no-regression-policy) | READY | P0 | T050 | yes | Enforce transformation CI no-regression policy |
+| [T056](./CHECKPOINT-2026-08-03.md#t056---prove-generated-spring-credentials-cannot-access-live-control-plane) | BLOCKED | P1 | T044, T055 | yes | Prove generated Spring credentials cannot access live control plane |
 
 ## P5 - Simulation honesty
 | Task | Status | Priority | Depends On | Parallelizable | Title |
 | --- | --- | --- | --- | --- | --- |
 | [T060](./PHASE-5-simulation-honesty.md#t060) | DONE | P0 | T050 | no | Replay exact recorded depth levels |
 | [T061](./PHASE-5-simulation-honesty.md#t061) | BLOCKED | P1 | T040, T030 | no | Persist normalized event log |
-| [T062](./PHASE-5-simulation-honesty.md#t062) | BLOCKED | P1 | T060, T061, T012, T042, T041 | no | Build live/replay parity tests |
+| [T062](./PHASE-5-simulation-honesty.md#t062) | BLOCKED | P1 | T060, T061, T016, T042, T041 | no | Build live/replay parity tests and reset comparable baselines |
 | [T063](./PHASE-5-simulation-honesty.md#t063) | BLOCKED | P1 | T060, T031 | no | Implement calibrated execution simulator |
 | [T064](./PHASE-5-simulation-honesty.md#t064) | BLOCKED | P2 | T051, T061 | no | Separate operational and analytical stores |
 
@@ -113,5 +124,5 @@ A task PR may reorder tasks only if its implementation report explains why. When
 
 1. Update this index.
 2. Update affected task `Depends On` fields.
-3. Add new task sections to the correct phase ledger for newly discovered prerequisites.
+3. Add new task sections to the correct phase ledger or checkpoint ledger for newly discovered prerequisites.
 4. Do not silently skip P0 safety tasks.
