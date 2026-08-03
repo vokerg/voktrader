@@ -17,6 +17,7 @@ class JavaFailureBaselineTest(unittest.TestCase):
         root: Path,
         *,
         exception: str = "org.opentest4j.AssertionFailedError",
+        baseline_exception: str = "org.opentest4j.AssertionFailedError",
         status: str = "BLOCKED",
     ) -> tuple[Path, Path, Path]:
         reports = root / "reports"
@@ -38,7 +39,7 @@ class JavaFailureBaselineTest(unittest.TestCase):
                         {
                             "test": "example.DemoTest.fails",
                             "kind": "failure",
-                            "exception": "org.opentest4j.AssertionFailedError",
+                            "exception": baseline_exception,
                         }
                     ],
                 }
@@ -63,6 +64,22 @@ class JavaFailureBaselineTest(unittest.TestCase):
             )
             self.assertEqual(0, result)
             self.assertIn("Unexpected or changed identities: `0`", summary)
+
+    def test_non_class_surefire_type_is_compared_exactly(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            reports, baseline, ledger = self.write_fixture(
+                Path(temp),
+                exception="Wanted but not invoked",
+                baseline_exception="Wanted but not invoked",
+            )
+            result, summary = baseline_check.evaluate(
+                report_dir=reports,
+                baseline_path=baseline,
+                ledger_path=ledger,
+                maven_exit_code=1,
+            )
+            self.assertEqual(0, result)
+            self.assertIn("[Wanted but not invoked]", summary)
 
     def test_changed_exception_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
