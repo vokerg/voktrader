@@ -17,13 +17,13 @@ from typing import Iterable
 class FailureIdentity:
     test: str
     kind: str
-    exception: str
+    reported_type: str
 
     @classmethod
     def from_json(cls, value: object) -> "FailureIdentity":
         if not isinstance(value, dict):
             raise ValueError("failure entries must be JSON objects")
-        required = ("test", "kind", "exception")
+        required = ("test", "kind", "reported_type", "assertion_class")
         missing = [
             key
             for key in required
@@ -39,18 +39,18 @@ class FailureIdentity:
         return cls(
             test=value["test"],
             kind=kind,
-            exception=value["exception"],
+            reported_type=value["reported_type"],
         )
 
     def display(self) -> str:
-        return f"{self.kind}: {self.test} [{self.exception}]"
+        return f"{self.kind}: {self.test} [{self.reported_type}]"
 
 
 def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-def _exception_from_node(node: ET.Element) -> str:
+def _reported_type_from_node(node: ET.Element) -> str:
     declared = (node.get("type") or "").strip()
     if declared:
         return declared
@@ -96,7 +96,7 @@ def parse_surefire_reports(
                     FailureIdentity(
                         test=test_id,
                         kind=kind,
-                        exception=_exception_from_node(child),
+                        reported_type=_reported_type_from_node(child),
                     )
                 )
     return failures, tests_seen, parse_errors
