@@ -17,13 +17,13 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 ## Current checkpoint sequence
 
 1. `T012` - centralize entry risk policy. **IN_PROGRESS** in PR #9; must be rebased or reconstructed on the current transformation head.
-2. `T055` - enforce CI no-regression policy. **READY** and may proceed in parallel with T012.
+2. `T055` - enforce CI no-regression policy. **PARTIAL** in draft PR #25; repository-controlled enforcement is implemented, but required branch rules still need administrator application and verification.
 3. `T016` - integrated execution-boundary checkpoint. Blocked by T012.
 4. `T042` - unified fee model. Claimed by draft PR #12, promoted to P0, but paused and **BLOCKED** by T016 to avoid Strategy V2/execution rework.
 5. `T013`, `T015`, and `T020` become eligible only after T016. `T014` follows T013.
 6. `T020` through `T025` execute as the durable lifecycle chain, followed by mandatory phase-exit gate `T026`.
 7. `T030` and all exchange-truth work remain blocked until T026.
-8. After T055, `T054` retained-database rehearsal and `T056` control-plane default-auth proof may proceed in parallel.
+8. After T055 is DONE, `T054` retained-database rehearsal and `T056` control-plane default-auth proof may proceed in parallel.
 9. `T045` live preflight additionally requires T054 and T056.
 
 Unrelated feature work is frozen while the integrated Java failure baseline is unchanged or worsening. See [`CHECKPOINT-2026-08-03.md`](./CHECKPOINT-2026-08-03.md).
@@ -79,7 +79,7 @@ Unrelated feature work is frozen while the integrated Java failure baseline is u
 | [T052](./PHASE-4-protocol-and-control-plane.md#t052) | DONE | P2 | T050 | no | Lock dependency and SDK contracts |
 | [T053](./PHASE-4-protocol-and-control-plane.md#t053) | DONE | P2 | T041 | yes | Backfill historical tick provenance |
 | [T054](./CHECKPOINT-2026-08-03.md#t054---rehearse-retained-database-flyway-upgrade) | BLOCKED | P0 | T051, T055 | yes | Rehearse retained-database Flyway upgrade |
-| [T055](./CHECKPOINT-2026-08-03.md#t055---enforce-transformation-ci-no-regression-policy) | READY | P0 | T050 | yes | Enforce transformation CI no-regression policy |
+| [T055](./CHECKPOINT-2026-08-03.md#t055---enforce-transformation-ci-no-regression-policy) | PARTIAL | P0 | T050 | yes | Enforce transformation CI no-regression policy |
 | [T056](./CHECKPOINT-2026-08-03.md#t056---prove-generated-spring-credentials-cannot-access-live-control-plane) | BLOCKED | P1 | T044, T055 | yes | Prove generated Spring credentials cannot access live control plane |
 
 ## P5 - Simulation honesty
