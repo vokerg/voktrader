@@ -20,127 +20,152 @@
     {
       "test": "com.vokerg.voktrader.architecture.StrategyExecutionBoundaryArchitectureTest.strategySourcesCannotSelectExecutionPlumbing",
       "kind": "failure",
-      "exception": "java.lang.AssertionError"
+      "reported_type": "java.lang.AssertionError",
+      "assertion_class": "java.lang.AssertionError"
     },
     {
       "test": "com.vokerg.voktrader.strategy.v2.StrategyV2OrderLifecycleIntegrationTest.partialDonePositionDoesNotExitWhenPartialExitDisabled",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.strategy.v2.StrategyV2OrderLifecycleIntegrationTest.partialDonePositionRoutesExitThroughStrategyV2Engine",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.strategy.v2.StrategyV2OrderLifecycleIntegrationTest.partiallyClosedPositionDoesNotCreateDuplicateBuy",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.strategy.v2.StrategyV2OrderLifecycleIntegrationTest.partiallyClosedPositionRoutesRemainingExitThroughStrategyV2Engine",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.strategy.v2.StrategyV2OrderLifecycleIntegrationTest.partiallyOpenWithActiveEntryOrderDoesNotExitUntilRemainderDoneUnlessConfigured",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.strategy.v2.StrategyV2RuntimeStateAwarenessTest.partiallyOpenExposesPartialStateWithoutNormalEntry",
       "kind": "failure",
-      "exception": "Wanted but not invoked"
+      "reported_type": "Wanted but not invoked",
+      "assertion_class": "org.mockito.exceptions.verification.WantedButNotInvoked"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.exitFromPartiallyOpenFullClose",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.exitFromPartiallyOpenPartialClose",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.exitRejectionPreservesPosition",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.fakEntryPartialFillIsPartialDoneImmediately",
       "kind": "failure",
-      "exception": "org.opentest4j.AssertionFailedError"
+      "reported_type": "org.opentest4j.AssertionFailedError",
+      "assertion_class": "org.opentest4j.AssertionFailedError"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.fakEntryZeroFillRejectedLeavesNoPosition",
       "kind": "failure",
-      "exception": "org.opentest4j.AssertionFailedError"
+      "reported_type": "org.opentest4j.AssertionFailedError",
+      "assertion_class": "org.opentest4j.AssertionFailedError"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.fokEntryFullFillThenFakExitFullFill",
       "kind": "failure",
-      "exception": "org.opentest4j.AssertionFailedError"
+      "reported_type": "org.opentest4j.AssertionFailedError",
+      "assertion_class": "org.opentest4j.AssertionFailedError"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.fokEntryRejectedNoFill",
       "kind": "error",
-      "exception": "org.springframework.dao.InvalidDataAccessApiUsageException"
+      "reported_type": "org.springframework.dao.InvalidDataAccessApiUsageException",
+      "assertion_class": "org.springframework.dao.InvalidDataAccessApiUsageException"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.gtcEntryPartialFillStillLive",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.gtcEntryRestsThenFullFillViaReconciliation",
       "kind": "error",
-      "exception": "org.springframework.dao.InvalidDataAccessApiUsageException"
+      "reported_type": "org.springframework.dao.InvalidDataAccessApiUsageException",
+      "assertion_class": "org.springframework.dao.InvalidDataAccessApiUsageException"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.gtcExitFromPartiallyOpenRestsAsExitPending",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.gtdPartialFillThenCancelledRemainder",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.gtdZeroFillExpiry",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.overSellClampsToHeldShares",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.restingExitLaterPartialFillViaReconciliation",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.restingExitRemainderCancelledAfterPartialFill",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderLifecycleIntegrationTest.secondExitFromPartiallyClosedClosesRemaining",
       "kind": "error",
-      "exception": "java.util.NoSuchElementException"
+      "reported_type": "java.util.NoSuchElementException",
+      "assertion_class": "java.util.NoSuchElementException"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderManagerTest.filledOrderDelegatesImmediateFillApplication",
       "kind": "failure",
-      "exception": "org.opentest4j.AssertionFailedError"
+      "reported_type": "org.opentest4j.AssertionFailedError",
+      "assertion_class": "org.opentest4j.AssertionFailedError"
     },
     {
       "test": "com.vokerg.voktrader.trade.OrderManagerTest.orderManagerSellDoesNotCreateNewTradeAndRemainsAvailableWhileUnarmed",
       "kind": "failure",
-      "exception": "org.opentest4j.AssertionFailedError"
+      "reported_type": "org.opentest4j.AssertionFailedError",
+      "assertion_class": "org.opentest4j.AssertionFailedError"
     }
   ]
 }
