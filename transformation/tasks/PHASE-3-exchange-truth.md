@@ -2,6 +2,8 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
+The 2026-08-03 checkpoint requires durable lifecycle phase-exit gate T026 before authenticated exchange-truth work begins. See `CHECKPOINT-2026-08-03.md`.
+
 ---
 
 ## T030 - Add authenticated user WebSocket consumer
@@ -14,7 +16,7 @@ Branch:
 PR:
 Started:
 Completed:
-Depends On: T021
+Depends On: T026
 Parallelizable: no
 
 ### Objective

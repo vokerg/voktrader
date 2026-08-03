@@ -2,6 +2,8 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
+The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
+
 ---
 
 ## T020 - Create transactional order outbox schema
@@ -14,7 +16,7 @@ Branch:
 PR:
 Started:
 Completed:
-Depends On: T012
+Depends On: T016
 Parallelizable: no
 
 ### Objective
@@ -192,6 +194,12 @@ Make cancellation evented, recoverable, and always available for open orders.
 
 ### Required report
 `transformation/reports/T025-YYYY-MM-DD-rebuild-cancellation-lifecycle.md`
+
+---
+
+## Phase-exit gate
+
+T026 in `CHECKPOINT-2026-08-03.md` validates the integrated output of T020-T025. T030 remains blocked until T026 is DONE.
 
 ## Phase-wide safety rule
 
