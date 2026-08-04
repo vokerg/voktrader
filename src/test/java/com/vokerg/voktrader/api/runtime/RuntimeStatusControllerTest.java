@@ -38,7 +38,11 @@ class RuntimeStatusControllerTest {
         trading.setExpectedAccountId("0xexpected");
         trading.setLiveArmTtl(Duration.ofMinutes(15));
         trading.setMaxOrderUsd(new BigDecimal("1.00"));
-        trading.setMaxTradesPerMarket(1);
+        trading.setOnePositionPerBotMarket(true);
+        trading.setOnePositionPerToken(true);
+        trading.setMaxActivePositionsPerMarket(1);
+        trading.setMaxActivePositionsPerPortfolio(2);
+        trading.setLiveRetryCooldownSeconds(45);
         trading.setMaxOpenLiveTrades(1);
         trading.setAllowedStrategyIds(Set.of("strategy-v2"));
 
@@ -96,6 +100,14 @@ class RuntimeStatusControllerTest {
         assertThat(response.liveArm().entryAllowed()).isFalse();
         assertThat(response.liveArm().entryBlockers()).containsExactly("live arm is not active");
         assertThat(response.maxOrderUsd()).isEqualByComparingTo("1.00");
+        assertThat(response.maxTradesPerMarket()).isEqualTo(1);
+        assertThat(response.portfolioExposurePolicy()).satisfies(policy -> {
+            assertThat(policy.onePositionPerBotMarket()).isTrue();
+            assertThat(policy.onePositionPerToken()).isTrue();
+            assertThat(policy.maxActivePositionsPerMarket()).isEqualTo(1);
+            assertThat(policy.maxActivePositionsPerPortfolio()).isEqualTo(2);
+            assertThat(policy.liveEntryAttemptCooldownSeconds()).isEqualTo(45);
+        });
         assertThat(response.allowedStrategyIds()).containsExactly("strategy-v2");
         assertThat(response.executor().enabled()).isTrue();
         assertThat(response.executor().dryRun()).isFalse();
