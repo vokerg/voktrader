@@ -2,7 +2,7 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
-The 2026-08-03 checkpoint adds mandatory integration gate T016 after T012. See `CHECKPOINT-2026-08-03.md`. Until T016 is DONE, T013, T014, T015, and T020 remain blocked even if a stale task branch claims otherwise.
+The 2026-08-03 checkpoint added mandatory integration gate T016 after T012. T016 is now DONE; T013 and T015 are READY, while T014 remains blocked on T013. See `CHECKPOINT-2026-08-03.md`.
 
 ---
 
@@ -144,7 +144,7 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 
 ## T013 - Define portfolio exposure invariants
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P1 - Stop the bleeding
 Owner: unclaimed
@@ -223,7 +223,7 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 
 ## T015 - Expose effective risk gate chain
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P1 - Stop the bleeding
 Owner: unclaimed
