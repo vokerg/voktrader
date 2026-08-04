@@ -2,7 +2,7 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
-The 2026-08-03 checkpoint added mandatory integration gate T016 after T012. T016 and T013 are now DONE; T014 is IN_PROGRESS and T015 is READY. See `CHECKPOINT-2026-08-03.md`.
+The 2026-08-03 checkpoint added mandatory integration gate T016 after T012. T016, T013, and T014 are now DONE; T015 is READY. See `CHECKPOINT-2026-08-03.md`.
 
 ---
 
@@ -186,14 +186,14 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 
 ## T014 - Prove kill switch covers every live entry route
 
-Status: IN_PROGRESS
+Status: DONE
 Priority: P0
 Phase: P1 - Stop the bleeding
 Owner: vokerg-gpt-5.6-thinking-20260804
 Branch: task/T014-kill-switch-route-proof
 PR: #29
 Started: 2026-08-04T18:52:14Z
-Completed:
+Completed: 2026-08-04T19:15:00Z
 Depends On: T016, T013
 Parallelizable: no
 
@@ -210,8 +210,10 @@ Build an exhaustive test harness that proves kill switch prevents executor submi
 
 ## Acceptance criteria
 
-- [ ] Kill switch test fails if any route bypasses central risk.
-- [ ] Exit and cancel tests prove risk-reducing actions remain allowed.
+- [x] Kill switch test fails if any route bypasses central risk.
+- [x] Exit and cancel tests prove risk-reducing actions remain allowed.
+
+Implementation report: `transformation/reports/T014-2026-08-04-prove-kill-switch-covers-every-live-entry-route.md`
 
 ## Required tests
 
