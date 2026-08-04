@@ -16,7 +16,7 @@ This ledger records the corrective work discovered by the 2026-08-03 program che
 ## T016 - Stabilize integrated execution boundary after central-risk merge
 
 Issue: #19
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: Checkpoint remediation
 Owner: unclaimed
