@@ -10,7 +10,37 @@ Requires Java 22. The Maven wrapper pins Maven 3.9.14 and is the build entry poi
 
 ```bash
 chmod +x mvnw
-./mvnw -B -ntp test
+rm -rf target/surefire-reports
+set +e
+./mvnw -B -ntp test 2>&1 | tee java-test.log
+maven_status=${PIPESTATUS[0]}
+set -e
+python scripts/ci/check_java_failure_baseline.py \
+  --reports target/surefire-reports \
+  --baseline .github/ci/java-failure-baseline.json \
+  --ledger transformation/tasks/CHECKPOINT-2026-08-03.md \
+  --maven-log java-test.log \
+  --maven-exit-code "$maven_status" \
+  --summary java-failure-summary.md
+```
+
+### Temporary exact failure baseline
+
+During checkpoint remediation, `.github/ci/java-failure-baseline.json` names every temporarily accepted Java failure by full test identity, result kind (`failure` or `error`), exact `reported_type` from Surefire XML, and `assertion_class`. The comparator uses the reported type because that is machine-verifiable; the assertion class remains explicit even when a framework such as Mockito emits a diagnostic type instead of its class name. The baseline is not a generic failure budget: the current set may shrink, but a new test failure, a failure/error kind change, or a reported-type change fails CI.
+
+The Java workflow always runs the complete Maven suite and parses Surefire XML. While the temporary baseline exists, the XML must represent at least the baseline's recorded test count. Maven's non-zero result is accepted only when the terminal build failure is the ordinary Surefire `There are test failures.` result and every parsed failure identity belongs to the baseline. Compilation, incomplete discovery, forked-JVM termination, plugin, and other build failures remain hard failures even when earlier XML contains known failures. No Java step uses `continue-on-error` or an equivalent workflow suppression.
+
+`java-failure-summary.md` is uploaded with the raw Maven log and Surefire XML. It lists current, unexpected, and resolved identities. Remediation PRs for T012, T016, and T020 through T026 must include the before/after identity counts and link or reproduce that summary in their implementation report and PR body.
+
+The gate reads T026's status from `transformation/tasks/CHECKPOINT-2026-08-03.md`. When T026 becomes `DONE`, it switches to hard-green mode automatically. The T026 PR must delete `.github/ci/java-failure-baseline.json`; CI fails if the file remains or if any Java failure is present.
+
+Test the policy script itself with:
+
+```bash
+python -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v
+python -m py_compile \
+  scripts/ci/check_java_failure_baseline.py \
+  scripts/ci/tests/test_check_java_failure_baseline.py
 ```
 
 ## Python executor
@@ -71,7 +101,8 @@ The authenticated sidecar `/v1/capabilities` response includes the contract vers
 ```bash
 python scripts/ci/check_repository.py
 python scripts/ci/check_dependency_locks.py
-python -m compileall -q executor-python/voktrader_executor
+python -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v
+python -m compileall -q executor-python/voktrader_executor scripts/ci
 ```
 
 The repository check rejects unresolved merge markers, high-confidence secret formats, and unapproved default-token literals in live-capable configuration, workflow, compose, Docker, and executor source files. Gitleaks runs separately in GitHub Actions.
@@ -130,3 +161,17 @@ docker compose -f compose.smoke.yml up --build
 ```
 
 The executor is exposed on `127.0.0.1:18099` and the Java app on `127.0.0.1:18080`.
+
+## Required branch checks
+
+Branch protection is repository administration state and cannot be encoded solely in this repository. For both `main` and `transformation/2.0`, configure a ruleset or branch protection rule that requires pull requests and these exact successful check names before merge:
+
+- `Java failure baseline`
+- `Python tests`
+- `Angular tests and build`
+- `Clean PostgreSQL migration`
+- `Static repository checks`
+- `Secret scan`
+- `Java and executor compose smoke`
+
+Also require the branch to be current with its base before merge when repository policy supports it. Do not configure a bypass for ordinary task authors, and do not replace a required check with a workflow-level failure allowance. After changing the rules, verify the settings with a deliberately failing test PR and record the repository-admin verification outside source control or in the relevant task report.

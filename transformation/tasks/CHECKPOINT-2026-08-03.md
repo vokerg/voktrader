@@ -72,7 +72,7 @@ Prove the integrated order/trade lifecycle is coherent before authenticated exch
 ## T054 - Rehearse retained-database Flyway upgrade
 
 Issue: #21
-Status: READY
+Status: BLOCKED
 Priority: P0
 Phase: Checkpoint remediation
 Owner: unclaimed
@@ -80,7 +80,7 @@ Branch:
 PR:
 Started:
 Completed:
-Depends On: T051
+Depends On: T051, T055
 Parallelizable: yes
 
 ### Objective
@@ -100,14 +100,14 @@ Prove a retained production-like database can cross the corrected Flyway history
 ## T055 - Enforce transformation CI no-regression policy
 
 Issue: #22
-Status: READY
+Status: PARTIAL
 Priority: P0
 Phase: Checkpoint remediation
-Owner: unclaimed
-Branch:
-PR:
-Started:
-Completed:
+Owner: vokerg-gpt-5.6-thinking-20260803
+Branch: task/T055-ci-no-regression
+PR: #25
+Started: 2026-08-03T17:37:00Z
+Completed: 2026-08-03T17:58:12Z
 Depends On: T050
 Parallelizable: yes
 
@@ -117,19 +117,21 @@ Prevent unrelated PRs from changing or increasing the known Java failure set and
 
 ### Acceptance criteria
 
-- [ ] A machine-readable baseline names every temporarily allowed Java failure.
-- [ ] New or changed failures fail CI.
-- [ ] Passing Python, Angular, static/dependency, secret, migration, and smoke jobs are required checks where supported.
-- [ ] Remediation PRs publish exact before/after failure identities and counts.
-- [ ] T026 completion removes the temporary baseline and makes Java hard-green required.
-- [ ] No safety-critical job uses failure suppression.
+- [x] A machine-readable baseline names every temporarily allowed Java failure.
+- [x] New or changed failures fail CI.
+- [ ] Passing Python, Angular, static/dependency, secret, migration, and smoke jobs are required checks where supported. Exact repository-admin steps are documented, but branch rules could not be applied or verified through the available GitHub interface.
+- [x] Remediation PRs publish exact before/after failure identities and counts.
+- [x] T026 completion removes the temporary baseline and makes Java hard-green required.
+- [x] No safety-critical job uses failure suppression.
+
+Implementation report: `transformation/reports/T055-2026-08-03-enforce-ci-no-regression-policy.md`
 
 ---
 
 ## T056 - Prove generated Spring credentials cannot access live control plane
 
 Issue: #23
-Status: READY
+Status: BLOCKED
 Priority: P1
 Phase: Checkpoint remediation
 Owner: unclaimed
@@ -137,7 +139,7 @@ Branch:
 PR:
 Started:
 Completed:
-Depends On: T044
+Depends On: T044, T055
 Parallelizable: yes
 
 ### Objective
