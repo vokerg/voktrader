@@ -2,7 +2,7 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
-The 2026-08-03 checkpoint added mandatory integration gate T016 after T012. T016 is now DONE; T013 is IN_PROGRESS, T015 is READY, and T014 remains blocked on T013. See `CHECKPOINT-2026-08-03.md`.
+The 2026-08-03 checkpoint added mandatory integration gate T016 after T012. T016 and T013 are now DONE; T014 and T015 are READY. See `CHECKPOINT-2026-08-03.md`.
 
 ---
 
@@ -144,14 +144,14 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 
 ## T013 - Define portfolio exposure invariants
 
-Status: IN_PROGRESS
+Status: DONE
 Priority: P0
 Phase: P1 - Stop the bleeding
 Owner: vokerg-gpt-5.6-thinking-20260804
 Branch: task/T013-portfolio-exposure-invariants
 PR: #28
 Started: 2026-08-04T18:27:56Z
-Completed:
+Completed: 2026-08-04T18:47:00Z
 Depends On: T016
 Parallelizable: no
 
@@ -168,9 +168,11 @@ Separate Strategy V2 inner-strategy ownership from portfolio exposure limits.
 
 ## Acceptance criteria
 
-- [ ] With one open/provisional position in a market, other inner strategies are blocked according to configured portfolio mode.
-- [ ] Closed trades do not incorrectly count as active exposure.
-- [ ] Cumulative attempt caps and active caps are separately named.
+- [x] With one open/provisional position in a market, other inner strategies are blocked according to configured portfolio mode.
+- [x] Closed trades do not incorrectly count as active exposure.
+- [x] Cumulative attempt caps and active caps are separately named.
+
+Implementation report: `transformation/reports/T013-2026-08-04-define-portfolio-exposure-invariants.md`
 
 ## Required tests
 
@@ -184,7 +186,7 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 
 ## T014 - Prove kill switch covers every live entry route
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P1 - Stop the bleeding
 Owner: unclaimed
