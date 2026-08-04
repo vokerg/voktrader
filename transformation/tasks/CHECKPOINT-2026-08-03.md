@@ -16,13 +16,13 @@ This ledger records the corrective work discovered by the 2026-08-03 program che
 ## T016 - Stabilize integrated execution boundary after central-risk merge
 
 Issue: #19
-Status: READY
+Status: IN_PROGRESS
 Priority: P0
 Phase: Checkpoint remediation
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: vokerg-gpt-5.6-thinking-20260804
+Branch: task/T016-integrated-execution-checkpoint
+PR: #27
+Started: 2026-08-04T18:17:44Z
 Completed:
 Depends On: T012
 Parallelizable: no
