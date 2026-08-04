@@ -4,6 +4,7 @@ import com.vokerg.voktrader.marketdata.OutcomePrice;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.RiskSeverity;
+import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeStatus;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
@@ -22,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,20 +38,21 @@ class RiskCheckServiceTest {
 
     @BeforeEach
     void setUp() {
-        properties.setAllowedStrategyIds(Set.of("cost-aware-momentum"));
+        properties.setAllowedStrategyIds(Set.of("cost-aware-momentum", "sibling-strategy"));
         properties.setMaxOrderUsd(new BigDecimal("5.00"));
         properties.setMaxSpread(new BigDecimal("0.03"));
         properties.setMaxPriceAgeMs(1500);
         properties.setMinSecondsToExpiry(30);
-        properties.setMaxTradesPerMarket(5);
+        properties.setOnePositionPerBotMarket(true);
+        properties.setOnePositionPerToken(true);
+        properties.setMaxActivePositionsPerMarket(5);
+        properties.setMaxActivePositionsPerPortfolio(0);
         properties.setMaxOpenLiveTrades(3);
         properties.setKillSwitchEnabled(false);
         properties.setLiveEnabled(true);
         when(liveArmService.status()).thenReturn(armedStatus());
-        when(tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(
-                any(), any(), any(), anyCollection())).thenReturn(0L);
-        when(tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(
-                any(), any(), anyCollection())).thenReturn(0L);
+        when(tradeRepository.findPortfolioExposure(isNull(), any(ExecutionMode.class), anyCollection()))
+                .thenReturn(List.of());
         when(tradeOrderRepository.findByClientOrderId(any())).thenReturn(Optional.empty());
         when(tradeRepository.countLiveCapacityTrades(
                 eq(List.of(ExecutionMode.LIVE)), anyCollection(), any(Instant.class))).thenReturn(0L);
@@ -87,18 +90,50 @@ class RiskCheckServiceTest {
     }
 
     @Test
-    void duplicateActiveTradeBlocksBeforeExecutionCreatesAnotherTrade() {
-        when(tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(
-                eq("market-id"), eq("up"), eq("cost-aware-momentum"), anyCollection())).thenReturn(1L);
+    void activeTradeOwnedBySiblingInnerStrategyBlocksPortfolioEntry() {
+        when(tradeRepository.findPortfolioExposure(isNull(), eq(ExecutionMode.PAPER), anyCollection()))
+                .thenReturn(List.of(trade("sibling-strategy", "market-id", "up", TradeStatus.OPEN)));
 
         RiskAssessment assessment = service.assessEntry(
                 EntryRiskRequest.of(entryIntent(market(900)), ExecutionMode.PAPER));
 
         assertThat(assessment.passed()).isFalse();
-        assertThat(assessment.firstBlockMessage()).contains("active trade");
         assertThat(assessment.blockingChecks())
                 .extracting(check -> check.getCheckName())
-                .contains("DUPLICATE_OPEN_TRADE");
+                .contains("ONE_POSITION_PER_BOT_MARKET", "ONE_POSITION_PER_TOKEN")
+                .doesNotContain("DUPLICATE_OPEN_TRADE");
+    }
+
+    @Test
+    void closedTradeDoesNotConsumeActivePortfolioCapacity() {
+        when(tradeRepository.findPortfolioExposure(isNull(), eq(ExecutionMode.PAPER), anyCollection()))
+                .thenReturn(List.of(trade("sibling-strategy", "market-id", "up", TradeStatus.CLOSED)));
+
+        RiskAssessment assessment = service.assessEntry(
+                EntryRiskRequest.of(entryIntent(market(900)), ExecutionMode.PAPER));
+
+        assertThat(assessment.passed()).isTrue();
+        assertThat(assessment.checks())
+                .filteredOn(check -> check.getCheckName().startsWith("MAX_ACTIVE_")
+                        || check.getCheckName().startsWith("ONE_POSITION_"))
+                .allMatch(check -> check.isPassed());
+    }
+
+    @Test
+    void portfolioCapIsIndependentFromInnerStrategyAndMarket() {
+        properties.setOnePositionPerBotMarket(false);
+        properties.setOnePositionPerToken(false);
+        properties.setMaxActivePositionsPerMarket(0);
+        properties.setMaxActivePositionsPerPortfolio(1);
+        when(tradeRepository.findPortfolioExposure(isNull(), eq(ExecutionMode.PAPER), anyCollection()))
+                .thenReturn(List.of(trade("sibling-strategy", "other-market", "other-token", TradeStatus.ENTRY_PENDING)));
+
+        RiskAssessment assessment = service.assessEntry(
+                EntryRiskRequest.of(entryIntent(market(900)), ExecutionMode.PAPER));
+
+        assertThat(assessment.blockingChecks())
+                .extracting(check -> check.getCheckName())
+                .containsExactly("MAX_ACTIVE_POSITIONS_PER_PORTFOLIO");
     }
 
     @Test
@@ -134,6 +169,15 @@ class RiskCheckServiceTest {
                     assertThat(check.getCheckName()).isEqualTo("ENTRY_RISK_BOUNDARY_REQUIRED");
                     assertThat(check.getCorrelationId()).isEqualTo("legacy-key");
                 });
+    }
+
+    private TradeEntity trade(String strategyId, String marketId, String tokenId, TradeStatus status) {
+        TradeEntity trade = mock(TradeEntity.class);
+        when(trade.getStrategyId()).thenReturn(strategyId);
+        when(trade.getMarketId()).thenReturn(marketId);
+        when(trade.getTokenId()).thenReturn(tokenId);
+        when(trade.getStatus()).thenReturn(status);
+        return trade;
     }
 
     private EntryIntent entryIntent(GammaMarketDto market) {
