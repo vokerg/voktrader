@@ -68,6 +68,13 @@ public class RuntimeStatusController {
                 liveArmService.status(),
                 tradingProperties.getMaxOrderUsd(),
                 tradingProperties.getMaxTradesPerMarket(),
+                new PortfolioExposurePolicyStatus(
+                        tradingProperties.isOnePositionPerBotMarket(),
+                        tradingProperties.isOnePositionPerToken(),
+                        tradingProperties.getMaxActivePositionsPerMarket(),
+                        tradingProperties.getMaxActivePositionsPerPortfolio(),
+                        tradingProperties.getLiveRetryCooldownSeconds()
+                ),
                 tradingProperties.getMaxOpenLiveTrades(),
                 tradingProperties.getAllowedStrategyIds(),
                 new ExecutorStatus(
@@ -105,6 +112,7 @@ public class RuntimeStatusController {
             LiveArmService.LiveArmStatus liveArm,
             BigDecimal maxOrderUsd,
             int maxTradesPerMarket,
+            PortfolioExposurePolicyStatus portfolioExposurePolicy,
             int maxOpenLiveTrades,
             Set<String> allowedStrategyIds,
             ExecutorStatus executor,
@@ -112,6 +120,15 @@ public class RuntimeStatusController {
             String currentTopLevelActiveStrategy,
             List<String> strategyV2ActiveInnerStrategyIds,
             List<EnabledBotStatus> enabledBots
+    ) {
+    }
+
+    public record PortfolioExposurePolicyStatus(
+            boolean onePositionPerBotMarket,
+            boolean onePositionPerToken,
+            int maxActivePositionsPerMarket,
+            int maxActivePositionsPerPortfolio,
+            long liveEntryAttemptCooldownSeconds
     ) {
     }
 
