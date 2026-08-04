@@ -2,9 +2,9 @@
 
 ## Summary
 
-Reconstructed T012 on the current `transformation/2.0` head after closing stale, conflicted PR #9. The typed strategy boundary is now the sole evaluator and persistence point for new-position entry risk. Raw BUY calls through compatibility and order-layer gateways fail closed without correlated approval, while SELL and cancellation remain available through typed risk-reducing boundaries.
+Reconstructed T012 on the current `transformation/2.0` head after closing stale, conflicted PR #9. The typed strategy boundary is now the sole evaluator and persistence point for new-position entry risk. Raw BUY calls through compatibility and primary order-layer gateways fail closed in PAPER and LIVE modes without correlated approval, while SELL and cancellation remain available through typed risk-reducing boundaries.
 
-The integrated Java suite improved from the checkpoint baseline of 25 failure identities to 24. `StrategyExecutionBoundaryArchitectureTest` is now green, and no new or changed failure identity was introduced.
+The integrated Java suite improved from the checkpoint baseline of 25 failure identities to 24. `StrategyExecutionBoundaryArchitectureTest` is green, and the machine-readable baseline is ratcheted to 24 so the resolved architecture regression cannot return.
 
 ## Task
 
@@ -18,25 +18,27 @@ The integrated Java suite improved from the checkpoint baseline of 25 failure id
 
 - Added typed entry-risk request, assessment, and approved-decision context contracts.
 - Centralized risk evaluation and persistence in `StrategyIntentBoundary`.
-- Made raw BUY routing fail closed in `ExecutionRouter` and `LiveOrderGateway`.
+- Made raw BUY routing fail closed in `ExecutionRouter`, `RoutingOrderGateway`, and `LiveOrderGateway`.
 - Added a cancellation-only strategy boundary so Strategy V2 does not depend on generic order submission plumbing.
 - Added `correlation_id` to persisted risk checks through Flyway migration `V25__add_entry_risk_correlation.sql`.
 - Added architecture, route, policy, persistence-order, and mutation-equivalent negative tests.
+- Ratcheted `.github/ci/java-failure-baseline.json` from 25 to 24 exact identities.
 - Updated the phase ledger, checkpoint ledger, and task index.
 
 ## Design decisions
 
 1. `StrategyIntentBoundary.accept` creates one `EntryRiskRequest`, invokes `RiskCheckService.assessEntry` exactly once, persists all resulting checks, and only then exposes a package-private approved context to an execution adapter.
-2. `ExecutionRouter` and `LiveOrderGateway` reject BUY calls without the exact approved request and assessment context. This prevents compatibility, replay override, or order-layer code from silently bypassing the central policy.
-3. SELL uses the typed exit boundary without entry exposure checks. Strategy cancellation uses `CancellationSubmissionService`, which exposes only `cancelOrder` and does not allow a strategy to select or invoke generic order submission plumbing.
-4. The stale PR's `V17` migration number was not reused. The current migration chain already reaches V24, so the reconstruction uses V25 and passes migration-version uniqueness and clean PostgreSQL migration checks.
-5. The temporary Java baseline was not edited. CI records the resolved identity automatically, preserving an auditable before/after comparison until T026 removes the baseline.
+2. `ExecutionRouter`, the primary `RoutingOrderGateway`, and `LiveOrderGateway` reject BUY calls without the exact approved request and assessment context. This prevents compatibility, PAPER, LIVE, replay-override, or order-layer code from silently bypassing the central policy.
+3. Production paper submission remains behind the guarded primary router. Architecture coverage permits concrete paper-adapter references for read-state and advancement work but rejects alternate production submission wiring.
+4. SELL uses the typed exit boundary without entry exposure checks. Strategy cancellation uses `CancellationSubmissionService`, which exposes only `cancelOrder` and does not allow a strategy to select or invoke generic order submission plumbing.
+5. The stale PR's `V17` migration number was not reused. The current migration chain already reaches V24, so the reconstruction uses V25 and passes migration-version uniqueness and clean PostgreSQL migration checks.
+6. Once the architecture failure was resolved, the temporary baseline was reduced immediately from 25 to 24. A resolved identity is therefore not allowed to reappear while T026 remains incomplete.
 
 ## Tests run
 
-### Full CI
+### Final full CI
 
-GitHub Actions run #200, run ID `30935934251`:
+GitHub Actions run #213, run ID `30937523155`:
 
 ```text
 Angular tests and build: success
@@ -47,8 +49,6 @@ Java and executor compose smoke: success
 Static repository checks: success
 Secret scan: success
 ```
-
-Duplicate verification run #201, run ID `30936076450`, completed with the same seven successful jobs.
 
 ### Java suite and baseline evidence
 
@@ -65,37 +65,43 @@ python scripts/ci/check_java_failure_baseline.py \
   --summary java-failure-summary.md
 ```
 
-Result from run #200:
+Result from run #213:
 
 ```text
-Tests represented in Surefire XML: 311
-Minimum expected tests: 301
+Tests represented in Surefire XML: 314
+Minimum expected tests: 311
 Raw Maven result: 6 failures, 18 errors, 2 skipped
 Current failure identities: 24
-Temporarily allowed identities: 25
+Temporarily allowed identities: 24
 Unexpected or changed identities: 0
-Resolved baseline identities: 1
-Resolved: StrategyExecutionBoundaryArchitectureTest.strategySourcesCannotSelectExecutionPlumbing
-Java evidence artifact: 8903107536
+Resolved baseline identities: 0
+Java evidence artifact: 8903760153
 ```
 
 Focused T012 results inside the full suite:
 
 ```text
-CentralEntryRiskArchitectureTest: 4 passed
+CentralEntryRiskArchitectureTest: 5 passed
 StrategyExecutionBoundaryArchitectureTest: 1 passed
 StrategyIntentBoundaryTest: 4 passed
 LiveOrderGatewayRiskBoundaryTest: 3 passed
 ExecutionRouterRiskBoundaryTest: 2 passed
+RoutingOrderGatewayTest: 4 passed
 RiskCheckServiceTest: 5 passed
 MigrationVersionUniquenessTest: 1 passed
 ```
 
-The first reconstruction run exposed one test-fixture regression: Mockito restubbing invoked an existing dynamic answer with a null argument. The test was changed to `doReturn(...).when(...)`; the two subsequent complete CI runs passed.
+Earlier complete runs #200 (`30935934251`) and #201 (`30936076450`) first demonstrated the reduction from 25 to 24 identities. Self-review then found and corrected three issues before the final run:
+
+1. Mockito restubbing invoked an existing dynamic answer with a null request; the test now uses `doReturn(...).when(...)`.
+2. Leaving the resolved architecture identity in the baseline would have allowed its reintroduction; the baseline was ratcheted to 24.
+3. The primary order gateway did not enforce approval before selecting its PAPER delegate; the guard and all-mode route tests were added.
+
+Two subsequent CI failures were caused by overbroad or incorrectly matched architecture-test specifications around legitimate paper adapter references. The tests were narrowed to submission wiring without changing production behavior or expanding the baseline. Run #213 is the final exact-head evidence.
 
 ## Safety impact
 
-Every accepted new-position BUY now crosses one central risk policy invocation with correlated checks persisted before execution routing. Removing the risk invocation, routing a raw BUY, or calling the live gateway without the approved context fails tests and fails closed at runtime. SELL and cancellation remain outside new-exposure gating, preserving risk reduction while preventing strategies from accessing generic submission plumbing.
+Every accepted new-position BUY now crosses one central risk policy invocation with correlated checks persisted before execution routing. Removing the risk invocation, routing a raw BUY, calling the primary order gateway in PAPER or LIVE mode, or calling the live gateway without the approved context fails tests and fails closed at runtime. SELL and cancellation remain outside new-exposure gating, preserving risk reduction while preventing strategies from accessing generic submission plumbing.
 
 ## Backward compatibility
 
