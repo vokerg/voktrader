@@ -91,8 +91,9 @@ class RiskCheckServiceTest {
 
     @Test
     void activeTradeOwnedBySiblingInnerStrategyBlocksPortfolioEntry() {
+        TradeEntity siblingExposure = trade("sibling-strategy", "market-id", "up", TradeStatus.OPEN);
         when(tradeRepository.findPortfolioExposure(isNull(), eq(ExecutionMode.PAPER), anyCollection()))
-                .thenReturn(List.of(trade("sibling-strategy", "market-id", "up", TradeStatus.OPEN)));
+                .thenReturn(List.of(siblingExposure));
 
         RiskAssessment assessment = service.assessEntry(
                 EntryRiskRequest.of(entryIntent(market(900)), ExecutionMode.PAPER));
@@ -106,8 +107,9 @@ class RiskCheckServiceTest {
 
     @Test
     void closedTradeDoesNotConsumeActivePortfolioCapacity() {
+        TradeEntity closedExposure = trade("sibling-strategy", "market-id", "up", TradeStatus.CLOSED);
         when(tradeRepository.findPortfolioExposure(isNull(), eq(ExecutionMode.PAPER), anyCollection()))
-                .thenReturn(List.of(trade("sibling-strategy", "market-id", "up", TradeStatus.CLOSED)));
+                .thenReturn(List.of(closedExposure));
 
         RiskAssessment assessment = service.assessEntry(
                 EntryRiskRequest.of(entryIntent(market(900)), ExecutionMode.PAPER));
@@ -125,8 +127,10 @@ class RiskCheckServiceTest {
         properties.setOnePositionPerToken(false);
         properties.setMaxActivePositionsPerMarket(0);
         properties.setMaxActivePositionsPerPortfolio(1);
+        TradeEntity otherMarketExposure = trade(
+                "sibling-strategy", "other-market", "other-token", TradeStatus.ENTRY_PENDING);
         when(tradeRepository.findPortfolioExposure(isNull(), eq(ExecutionMode.PAPER), anyCollection()))
-                .thenReturn(List.of(trade("sibling-strategy", "other-market", "other-token", TradeStatus.ENTRY_PENDING)));
+                .thenReturn(List.of(otherMarketExposure));
 
         RiskAssessment assessment = service.assessEntry(
                 EntryRiskRequest.of(entryIntent(market(900)), ExecutionMode.PAPER));
