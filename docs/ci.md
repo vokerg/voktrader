@@ -12,13 +12,14 @@ Requires Java 22. The Maven wrapper pins Maven 3.9.14 and is the build entry poi
 chmod +x mvnw
 rm -rf target/surefire-reports
 set +e
-./mvnw -B -ntp test
-maven_status=$?
+./mvnw -B -ntp test 2>&1 | tee java-test.log
+maven_status=${PIPESTATUS[0]}
 set -e
 python scripts/ci/check_java_failure_baseline.py \
   --reports target/surefire-reports \
   --baseline .github/ci/java-failure-baseline.json \
   --ledger transformation/tasks/CHECKPOINT-2026-08-03.md \
+  --maven-log java-test.log \
   --maven-exit-code "$maven_status" \
   --summary java-failure-summary.md
 ```
@@ -27,11 +28,11 @@ python scripts/ci/check_java_failure_baseline.py \
 
 During checkpoint remediation, `.github/ci/java-failure-baseline.json` names every temporarily accepted Java failure by full test identity, result kind (`failure` or `error`), exact `reported_type` from Surefire XML, and `assertion_class`. The comparator uses the reported type because that is machine-verifiable; the assertion class remains explicit even when a framework such as Mockito emits a diagnostic type instead of its class name. The baseline is not a generic failure budget: the current set may shrink, but a new test failure, a failure/error kind change, or a reported-type change fails CI.
 
-The Java workflow always runs the complete Maven suite and parses Surefire XML. Maven's non-zero test exit is accepted only when every parsed failure identity is an exact member of the temporary baseline. Compilation, test discovery, JVM, plugin, or other build failures remain hard failures because they do not produce an approved test identity. No Java step uses `continue-on-error` or an equivalent workflow suppression.
+The Java workflow always runs the complete Maven suite and parses Surefire XML. While the temporary baseline exists, the XML must represent at least the baseline's recorded test count. Maven's non-zero result is accepted only when the terminal build failure is the ordinary Surefire `There are test failures.` result and every parsed failure identity belongs to the baseline. Compilation, incomplete discovery, forked-JVM termination, plugin, and other build failures remain hard failures even when earlier XML contains known failures. No Java step uses `continue-on-error` or an equivalent workflow suppression.
 
 `java-failure-summary.md` is uploaded with the raw Maven log and Surefire XML. It lists current, unexpected, and resolved identities. Remediation PRs for T012, T016, and T020 through T026 must include the before/after identity counts and link or reproduce that summary in their implementation report and PR body.
 
-The gate reads T026's status from `transformation/tasks/CHECKPOINT-2026-08-03.md`. When T026 becomes `DONE`, it switches to hard-green mode automatically. The T026 PR must delete `.github/ci/java-failure-baseline.json`; CI fails if the file remains populated or if any Java failure is present.
+The gate reads T026's status from `transformation/tasks/CHECKPOINT-2026-08-03.md`. When T026 becomes `DONE`, it switches to hard-green mode automatically. The T026 PR must delete `.github/ci/java-failure-baseline.json`; CI fails if the file remains or if any Java failure is present.
 
 Test the policy script itself with:
 
