@@ -20,6 +20,7 @@ import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -98,7 +99,7 @@ class StrategyIntentBoundaryTest {
         blocked.add(TradeRiskCheckEntity.of(
                 null, null, blocked.correlationId(), ExecutionMode.PAPER, "KILL_SWITCH", false,
                 RiskSeverity.BLOCK, true, false, "kill switch is enabled"));
-        when(riskCheckService.assessEntry(any())).thenReturn(blocked);
+        doReturn(blocked).when(riskCheckService).assessEntry(any());
 
         TradeExecutionResult result = boundary.accept(entryIntent());
 
