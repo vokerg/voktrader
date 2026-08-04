@@ -58,12 +58,20 @@ class CentralEntryRiskArchitectureTest {
     }
 
     @Test
-    void concretePaperSubmissionIsOnlyInvokedByThePrimaryRouter() throws IOException {
-        assertOnlyCaller(
-                "paperOrderGateway.submitOrder(",
-                "RoutingOrderGateway.java",
-                "production submission must use the primary guarded OrderGateway; read-state and advancement wiring may use the concrete paper adapter"
-        );
+    void concretePaperSubmissionIsOnlyAvailableThroughThePrimaryRouter() throws IOException {
+        try (var paths = Files.walk(MAIN_SOURCE_ROOT)) {
+            List<String> files = paths
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .filter(path -> contains(path, "PaperOrderGateway"))
+                    .filter(path -> contains(path, "submitOrder("))
+                    .map(path -> path.getFileName().toString())
+                    .sorted()
+                    .toList();
+
+            assertThat(files)
+                    .as("only the paper adapter implementation and guarded primary router may expose paper submission; read-state and advancement wiring may reference the adapter without submission")
+                    .containsExactly("PaperOrderGateway.java", "RoutingOrderGateway.java");
+        }
     }
 
     private void assertApprovalGuard(String source) {
