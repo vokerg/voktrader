@@ -2,7 +2,7 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
-The 2026-08-03 checkpoint added mandatory integration gate T016 after T012. T016 and T013 are now DONE; T014 and T015 are READY. See `CHECKPOINT-2026-08-03.md`.
+The 2026-08-03 checkpoint added mandatory integration gate T016 after T012. T016 and T013 are now DONE; T014 is IN_PROGRESS and T015 is READY. See `CHECKPOINT-2026-08-03.md`.
 
 ---
 
@@ -186,13 +186,13 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 
 ## T014 - Prove kill switch covers every live entry route
 
-Status: READY
+Status: IN_PROGRESS
 Priority: P0
 Phase: P1 - Stop the bleeding
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: vokerg-gpt-5.6-thinking-20260804
+Branch: task/T014-kill-switch-route-proof
+PR: #29
+Started: 2026-08-04T18:52:14Z
 Completed:
 Depends On: T016, T013
 Parallelizable: no
