@@ -3,6 +3,7 @@ package com.vokerg.voktrader.trade;
 import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.RiskSeverity;
+import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderPhase;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeRiskCheckEntity;
@@ -17,6 +18,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -84,17 +86,34 @@ public class RiskCheckService {
                     expiryOk ? "market not too close to expiry" : "market too close to expiry"));
         }
 
-        long activeTradeCount = countActiveForToken(intent);
-        boolean duplicateIntent = activeTradeCount > 0;
-        assessment.add(check(correlationId, mode, "DUPLICATE_OPEN_TRADE", !duplicateIntent,
-                activeTradeCount, "0 active trades before execution", RiskSeverity.BLOCK,
-                duplicateIntent ? "another active trade already exists for this market/token/strategy" : "no active duplicate trade"));
+        PortfolioSnapshot portfolio = portfolioSnapshot(intent, mode);
+        boolean onePerMarketOk = !properties.isOnePositionPerBotMarket()
+                || portfolio.activePositionsInMarket() == 0;
+        assessment.add(check(correlationId, mode, "ONE_POSITION_PER_BOT_MARKET", onePerMarketOk,
+                portfolio.activePositionsInMarket(), properties.isOnePositionPerBotMarket(), RiskSeverity.BLOCK,
+                onePerMarketOk
+                        ? "bot has no conflicting active market exposure"
+                        : "another inner strategy already reserves or holds exposure for this bot and market"));
 
-        long activeTradesForMarket = countActiveForMarket(intent);
-        boolean maxTradesOk = activeTradesForMarket < properties.getMaxTradesPerMarket();
-        assessment.add(check(correlationId, mode, "MAX_TRADES_PER_MARKET", maxTradesOk,
-                activeTradesForMarket, properties.getMaxTradesPerMarket(), RiskSeverity.BLOCK,
-                maxTradesOk ? "market trade count accepted" : "maxTradesPerMarket reached"));
+        boolean onePerTokenOk = !properties.isOnePositionPerToken()
+                || portfolio.activePositionsForToken() == 0;
+        assessment.add(check(correlationId, mode, "ONE_POSITION_PER_TOKEN", onePerTokenOk,
+                portfolio.activePositionsForToken(), properties.isOnePositionPerToken(), RiskSeverity.BLOCK,
+                onePerTokenOk
+                        ? "bot has no conflicting active token exposure"
+                        : "active exposure already exists for this bot, market, and token"));
+
+        int maxPerMarket = properties.getMaxActivePositionsPerMarket();
+        boolean marketCapOk = maxPerMarket <= 0 || portfolio.activePositionsInMarket() < maxPerMarket;
+        assessment.add(check(correlationId, mode, "MAX_ACTIVE_POSITIONS_PER_MARKET", marketCapOk,
+                portfolio.activePositionsInMarket(), maxPerMarket, RiskSeverity.BLOCK,
+                marketCapOk ? "active market exposure accepted" : "maxActivePositionsPerMarket reached"));
+
+        int maxPerPortfolio = properties.getMaxActivePositionsPerPortfolio();
+        boolean portfolioCapOk = maxPerPortfolio <= 0 || portfolio.activePositionsInPortfolio() < maxPerPortfolio;
+        assessment.add(check(correlationId, mode, "MAX_ACTIVE_POSITIONS_PER_PORTFOLIO", portfolioCapOk,
+                portfolio.activePositionsInPortfolio(), maxPerPortfolio, RiskSeverity.BLOCK,
+                portfolioCapOk ? "active portfolio exposure accepted" : "maxActivePositionsPerPortfolio reached"));
 
         boolean correlationOk = tradeOrderRepository.findByClientOrderId(correlationId).isEmpty();
         assessment.add(check(correlationId, mode, "ENTRY_CORRELATION", correlationOk,
@@ -116,10 +135,10 @@ public class RiskCheckService {
                         COOLDOWN_STATUSES,
                         cooldownSince
                 );
-                assessment.add(check(correlationId, mode, "LIVE_RETRY_COOLDOWN", !hasRecentRejectedEntry,
-                        hasRecentRejectedEntry ? "recent rejected entry" : "no recent rejected entry",
+                assessment.add(check(correlationId, mode, "LIVE_ENTRY_ATTEMPT_COOLDOWN", !hasRecentRejectedEntry,
+                        hasRecentRejectedEntry ? "recent rejected entry attempt" : "no recent rejected entry attempt",
                         cooldownSeconds + "s", RiskSeverity.BLOCK,
-                        hasRecentRejectedEntry ? "recent live entry attempt was rejected" : "live retry cooldown accepted"));
+                        hasRecentRejectedEntry ? "recent live entry attempt was rejected" : "live entry attempt cooldown accepted"));
             }
 
             boolean killSwitchOk = !properties.isKillSwitchEnabled();
@@ -172,22 +191,27 @@ public class RiskCheckService {
         return assessment;
     }
 
-    private long countActiveForToken(TradeIntent intent) {
-        if (intent.botId() != null) {
-            return tradeRepository.countByBotIdAndMarketIdAndTokenIdAndStrategyIdAndStatusIn(
-                    intent.botId(), intent.marketId(), intent.tokenId(), intent.strategyId(), ACTIVE_STATUSES);
-        }
-        return tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(
-                intent.marketId(), intent.tokenId(), intent.strategyId(), ACTIVE_STATUSES);
+    private PortfolioSnapshot portfolioSnapshot(TradeIntent intent, ExecutionMode mode) {
+        List<TradeEntity> exposure = tradeRepository.findPortfolioExposure(intent.botId(), mode, ACTIVE_STATUSES);
+        PortfolioSnapshot.PortfolioKey key = new PortfolioSnapshot.PortfolioKey(
+                intent.botId(),
+                accountNamespace(mode),
+                intent.marketId(),
+                intent.tokenId(),
+                intent.outcome(),
+                mode
+        );
+        return PortfolioSnapshot.from(key, exposure);
     }
 
-    private long countActiveForMarket(TradeIntent intent) {
-        if (intent.botId() != null) {
-            return tradeRepository.countByBotIdAndMarketIdAndStrategyIdAndStatusIn(
-                    intent.botId(), intent.marketId(), intent.strategyId(), ACTIVE_STATUSES);
+    private String accountNamespace(ExecutionMode mode) {
+        if (mode == ExecutionMode.LIVE) {
+            String expectedAccountId = properties.getExpectedAccountId();
+            return expectedAccountId == null || expectedAccountId.isBlank()
+                    ? "live-account-unconfigured"
+                    : expectedAccountId.trim();
         }
-        return tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(
-                intent.marketId(), intent.strategyId(), ACTIVE_STATUSES);
+        return mode.name().toLowerCase(Locale.ROOT) + "-account";
     }
 
     private TradeRiskCheckEntity check(
