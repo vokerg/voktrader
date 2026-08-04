@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "description": "Temporary exact Java failure baseline for Voktrader 2.0 checkpoint remediation. Subsets are allowed; new tests, changed failure kinds, or changed Surefire-reported failure types fail CI.",
+  "description": "Temporary exact Java failure baseline for Voktrader 2.0 checkpoint remediation. Subsets are allowed; new tests, changed failure kinds, changed Surefire-reported failure types, or reintroduced resolved failures fail CI.",
   "source": {
-    "workflow_run_id": 30786409032,
-    "job_id": 91600666660,
-    "merge_sha": "742ad2428adb5dc53ea21e5750c06f36bb21a4ef",
-    "recorded_at": "2026-08-03T05:11:37Z",
-    "tests": 301,
-    "failures": 7,
+    "workflow_run_id": 30935934251,
+    "job_id": 92081959246,
+    "merge_sha": "12041aec507c7096b5fb984b1fbe97d4fef78d03",
+    "recorded_at": "2026-08-04T17:53:12Z",
+    "tests": 311,
+    "failures": 6,
     "errors": 18,
     "skipped": 2
   },
@@ -17,12 +17,6 @@
     "ledger": "transformation/tasks/CHECKPOINT-2026-08-03.md"
   },
   "allowed_failures": [
-    {
-      "test": "com.vokerg.voktrader.architecture.StrategyExecutionBoundaryArchitectureTest.strategySourcesCannotSelectExecutionPlumbing",
-      "kind": "failure",
-      "reported_type": "java.lang.AssertionError",
-      "assertion_class": "java.lang.AssertionError"
-    },
     {
       "test": "com.vokerg.voktrader.strategy.v2.StrategyV2OrderLifecycleIntegrationTest.partialDonePositionDoesNotExitWhenPartialExitDisabled",
       "kind": "error",
