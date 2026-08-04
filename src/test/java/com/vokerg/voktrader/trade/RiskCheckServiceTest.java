@@ -1,11 +1,12 @@
 package com.vokerg.voktrader.trade;
 
+import com.vokerg.voktrader.marketdata.OutcomePrice;
+import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.RiskSeverity;
 import com.vokerg.voktrader.trade.model.TradeStatus;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
-import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
-import com.vokerg.voktrader.marketdata.OutcomePrice;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -16,7 +17,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,289 +27,134 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class RiskCheckServiceTest {
-
     private final TradingProperties properties = new TradingProperties();
     private final TradeRepository tradeRepository = mock(TradeRepository.class);
     private final TradeOrderRepository tradeOrderRepository = mock(TradeOrderRepository.class);
     private final LiveArmService liveArmService = mock(LiveArmService.class);
-    private final RiskCheckService service = new RiskCheckService(properties, tradeRepository, tradeOrderRepository, liveArmService);
+    private final RiskCheckService service = new RiskCheckService(
+            properties, tradeRepository, tradeOrderRepository, liveArmService);
 
     @BeforeEach
     void setUp() {
-        when(liveArmService.status()).thenReturn(armedStatus());
-    }
-
-    @Test
-    void maxTradesPerMarketIgnoresRejectedTrades() {
-        properties.setAllowedStrategyIds(java.util.Set.of("cost-aware-momentum"));
-        properties.setMaxOrderUsd(new BigDecimal("1.00"));
+        properties.setAllowedStrategyIds(Set.of("cost-aware-momentum"));
+        properties.setMaxOrderUsd(new BigDecimal("5.00"));
         properties.setMaxSpread(new BigDecimal("0.03"));
         properties.setMaxPriceAgeMs(1500);
         properties.setMinSecondsToExpiry(30);
-        properties.setMaxTradesPerMarket(1);
-
-        TradeIntent intent = TradeIntent.buy(
-                market(),
-                price(),
-                new BigDecimal("1.00"),
-                "cost-aware-momentum",
-                "cost-aware-momentum",
-                "entry"
-        );
-
+        properties.setMaxTradesPerMarket(5);
+        properties.setMaxOpenLiveTrades(3);
+        properties.setKillSwitchEnabled(false);
+        properties.setLiveEnabled(true);
+        when(liveArmService.status()).thenReturn(armedStatus());
         when(tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(
-                eq("market-id"),
-                eq("up"),
-                eq("cost-aware-momentum"),
-                anyCollection()
-        )).thenReturn(0L);
+                any(), any(), any(), anyCollection())).thenReturn(0L);
         when(tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(
-                eq("market-id"),
-                eq("cost-aware-momentum"),
-                anyCollection()
-        )).thenReturn(0L);
-        when(tradeOrderRepository.findByClientOrderId("key")).thenReturn(Optional.empty());
+                any(), any(), anyCollection())).thenReturn(0L);
+        when(tradeOrderRepository.findByClientOrderId(any())).thenReturn(Optional.empty());
+        when(tradeRepository.countLiveCapacityTrades(
+                eq(List.of(ExecutionMode.LIVE)), anyCollection(), any(Instant.class))).thenReturn(0L);
+    }
 
-        RiskAssessment assessment = service.assess(intent, ExecutionMode.PAPER, 10L, 20L, "key");
+    @Test
+    void typedAssessmentCarriesCorrelationOnEveryCheckAndSeparatesInfo() {
+        EntryRiskRequest request = EntryRiskRequest.of(entryIntent(market(900)), ExecutionMode.PAPER);
+
+        RiskAssessment assessment = service.assessEntry(request);
 
         assertThat(assessment.passed()).isTrue();
-        assertThat(assessment.checks())
-                .filteredOn(check -> "MAX_TRADES_PER_MARKET".equals(check.getCheckName()))
-                .singleElement()
-                .satisfies(check -> {
-                    assertThat(check.isPassed()).isTrue();
-                    assertThat(check.getObservedValue()).isEqualTo("0");
-                });
-
-        ArgumentCaptor<Collection<TradeStatus>> statusCaptor = ArgumentCaptor.forClass(Collection.class);
-        verify(tradeRepository).countByMarketIdAndStrategyIdAndStatusIn(
-                eq("market-id"),
-                eq("cost-aware-momentum"),
-                statusCaptor.capture()
-        );
-        Set<String> countedStatuses = statusCaptor.getValue()
-                .stream()
-                .map(Enum::name)
-                .collect(Collectors.toSet());
-        assertThat(countedStatuses).containsExactlyInAnyOrder(
-                "CREATED",
-                "ENTRY_PENDING",
-                "PARTIALLY_OPEN",
-                "OPEN",
-                "EXIT_PENDING",
-                "PARTIALLY_CLOSED"
-        );
-        assertThat(countedStatuses).doesNotContain(
-                "RISK_REJECTED",
-                "VALIDATION_REJECTED",
-                "FAILED",
-                "CANCELLED",
-                "CANCELLED_BEFORE_FILL"
-        );
+        assertThat(assessment.correlationId()).isEqualTo(request.correlationId());
+        assertThat(assessment.checks()).isNotEmpty().allSatisfy(check ->
+                assertThat(check.getCorrelationId()).isEqualTo(request.correlationId()));
+        assertThat(assessment.informationalChecks()).isNotEmpty();
+        assertThat(assessment.blockingChecks()).isEmpty();
+        assertThat(assessment.warningChecks()).isEmpty();
     }
 
     @Test
-    void activeTradeBlocksMaxTradesPerMarketBeforeExecutionCreatesANewTrade() {
-        properties.setAllowedStrategyIds(java.util.Set.of("cost-aware-momentum"));
-        properties.setMaxOrderUsd(new BigDecimal("1.00"));
-        properties.setMaxSpread(new BigDecimal("0.03"));
-        properties.setMaxPriceAgeMs(1500);
-        properties.setMinSecondsToExpiry(30);
-        properties.setMaxTradesPerMarket(1);
+    void unknownExpiryProducesWarningWithoutAcceptingAHiddenBlock() {
+        EntryRiskRequest request = EntryRiskRequest.of(entryIntent(market(null)), ExecutionMode.PAPER);
 
-        TradeIntent intent = TradeIntent.buy(
-                market(),
-                price(),
-                new BigDecimal("1.00"),
-                "cost-aware-momentum",
-                "cost-aware-momentum",
-                "entry"
-        );
+        RiskAssessment assessment = service.assessEntry(request);
 
-        when(tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(
-                eq("market-id"),
-                eq("up"),
-                eq("cost-aware-momentum"),
-                anyCollection()
-        )).thenReturn(1L);
-        when(tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(
-                eq("market-id"),
-                eq("cost-aware-momentum"),
-                anyCollection()
-        )).thenReturn(1L);
-        when(tradeOrderRepository.findByClientOrderId("key")).thenReturn(Optional.empty());
-
-        RiskAssessment assessment = service.assess(intent, ExecutionMode.PAPER, null, null, "key");
-
-        assertThat(assessment.passed()).isFalse();
-        assertThat(assessment.checks())
-                .filteredOn(check -> "MAX_TRADES_PER_MARKET".equals(check.getCheckName()))
+        assertThat(assessment.passed()).isTrue();
+        assertThat(assessment.warningChecks())
                 .singleElement()
                 .satisfies(check -> {
+                    assertThat(check.getCheckName()).isEqualTo("EXPIRY_GUARD");
+                    assertThat(check.getSeverity()).isEqualTo(RiskSeverity.WARN);
                     assertThat(check.isPassed()).isFalse();
-                    assertThat(check.getObservedValue()).isEqualTo("1");
                 });
     }
 
     @Test
-    void unarmedLiveEntryAddsBlockingPersistableRiskCheck() {
-        properties.setAllowedStrategyIds(Set.of("cost-aware-momentum"));
-        properties.setMaxOrderUsd(new BigDecimal("1.00"));
-        properties.setMaxSpread(new BigDecimal("0.03"));
-        properties.setMaxPriceAgeMs(1500);
-        properties.setMinSecondsToExpiry(30);
-        properties.setMaxTradesPerMarket(5);
-        properties.setMaxOpenLiveTrades(3);
-        properties.setKillSwitchEnabled(false);
-        properties.setLiveEnabled(true);
-        when(liveArmService.status()).thenReturn(unarmedStatus());
-        when(tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(any(), any(), any(), anyCollection())).thenReturn(0L);
-        when(tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(any(), any(), anyCollection())).thenReturn(0L);
-        when(tradeOrderRepository.findByClientOrderId("key")).thenReturn(Optional.empty());
-        when(tradeRepository.countLiveCapacityTrades(eq(List.of(ExecutionMode.LIVE)), anyCollection(), any(Instant.class)))
-                .thenReturn(0L);
+    void duplicateActiveTradeBlocksBeforeExecutionCreatesAnotherTrade() {
+        when(tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(
+                eq("market-id"), eq("up"), eq("cost-aware-momentum"), anyCollection())).thenReturn(1L);
 
-        RiskAssessment assessment = service.assess(TradeIntent.buy(
-                market(),
-                price(),
-                new BigDecimal("1.00"),
-                "cost-aware-momentum",
-                "cost-aware-momentum",
-                "entry"
-        ), ExecutionMode.LIVE, null, null, "key");
+        RiskAssessment assessment = service.assessEntry(
+                EntryRiskRequest.of(entryIntent(market(900)), ExecutionMode.PAPER));
 
         assertThat(assessment.passed()).isFalse();
-        assertThat(assessment.checks())
+        assertThat(assessment.firstBlockMessage()).contains("active trade");
+        assertThat(assessment.blockingChecks())
+                .extracting(check -> check.getCheckName())
+                .contains("DUPLICATE_OPEN_TRADE");
+    }
+
+    @Test
+    void liveAssessmentIncludesUnarmedBlockAndCountsPartialExposureStatuses() {
+        when(liveArmService.status()).thenReturn(unarmedStatus());
+
+        RiskAssessment assessment = service.assessEntry(
+                EntryRiskRequest.of(entryIntent(market(900)), ExecutionMode.LIVE));
+
+        assertThat(assessment.passed()).isFalse();
+        assertThat(assessment.blockingChecks())
                 .filteredOn(check -> "LIVE_ARM".equals(check.getCheckName()))
                 .singleElement()
-                .satisfies(check -> {
-                    assertThat(check.isPassed()).isFalse();
-                    assertThat(check.getObservedValue()).isEqualTo("false");
-                    assertThat(check.getLimitValue()).isEqualTo("true");
-                    assertThat(check.getMessage()).contains("live arm is not active");
-                });
+                .satisfies(check -> assertThat(check.getMessage()).contains("live arm is not active"));
+
+        ArgumentCaptor<Collection<TradeStatus>> statuses = ArgumentCaptor.forClass(Collection.class);
+        verify(tradeRepository).countLiveCapacityTrades(
+                eq(List.of(ExecutionMode.LIVE)), statuses.capture(), any(Instant.class));
+        assertThat(statuses.getValue()).contains(TradeStatus.PARTIALLY_OPEN, TradeStatus.PARTIALLY_CLOSED);
     }
 
     @Test
-    void liveOpenTradeLimitCountsActiveLiveTradesBeforeCreatingCurrentTrade() {
-        properties.setAllowedStrategyIds(Set.of("cost-aware-momentum"));
-        properties.setMaxOrderUsd(new BigDecimal("1.00"));
-        properties.setMaxSpread(new BigDecimal("0.03"));
-        properties.setMaxPriceAgeMs(1500);
-        properties.setMinSecondsToExpiry(30);
-        properties.setMaxTradesPerMarket(5);
-        properties.setMaxOpenLiveTrades(3);
-        properties.setKillSwitchEnabled(false);
-        properties.setLiveEnabled(true);
+    void directCompatibilityBuyWithoutBoundaryContextFailsClosed() {
+        TradeIntent rawBuy = entryIntent(market(900)).tradeIntent();
 
-        TradeIntent intent = TradeIntent.buy(
-                market(),
-                price(),
-                new BigDecimal("1.00"),
-                "cost-aware-momentum",
-                "cost-aware-momentum",
-                "entry"
-        );
-
-        when(tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(
-                eq("market-id"),
-                eq("up"),
-                eq("cost-aware-momentum"),
-                anyCollection()
-        )).thenReturn(0L);
-        when(tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(
-                eq("market-id"),
-                eq("cost-aware-momentum"),
-                anyCollection()
-        )).thenReturn(0L);
-        when(tradeOrderRepository.findByClientOrderId("key")).thenReturn(Optional.empty());
-        when(tradeRepository.countLiveCapacityTrades(eq(List.of(ExecutionMode.LIVE)), anyCollection(), any(Instant.class)))
-                .thenReturn(3L);
-
-        RiskAssessment assessment = service.assess(intent, ExecutionMode.LIVE, null, null, "key");
+        RiskAssessment assessment = service.assess(
+                rawBuy, ExecutionMode.PAPER, null, null, "legacy-key");
 
         assertThat(assessment.passed()).isFalse();
-        assertThat(assessment.checks())
-                .filteredOn(check -> "MAX_OPEN_LIVE_TRADES".equals(check.getCheckName()))
+        assertThat(assessment.blockingChecks())
                 .singleElement()
                 .satisfies(check -> {
-                    assertThat(check.isPassed()).isFalse();
-                    assertThat(check.getObservedValue()).isEqualTo("3");
-                    assertThat(check.getLimitValue()).isEqualTo("3");
+                    assertThat(check.getCheckName()).isEqualTo("ENTRY_RISK_BOUNDARY_REQUIRED");
+                    assertThat(check.getCorrelationId()).isEqualTo("legacy-key");
                 });
     }
 
-    @Test
-    void liveOpenTradeLimitIncludesPartialPositionStatuses() {
-        properties.setAllowedStrategyIds(Set.of("cost-aware-momentum"));
-        properties.setMaxOrderUsd(new BigDecimal("1.00"));
-        properties.setMaxSpread(new BigDecimal("0.03"));
-        properties.setMaxPriceAgeMs(1500);
-        properties.setMinSecondsToExpiry(30);
-        properties.setMaxTradesPerMarket(5);
-        properties.setMaxOpenLiveTrades(10);
-        properties.setKillSwitchEnabled(false);
-        properties.setLiveEnabled(true);
-
-        TradeIntent intent = TradeIntent.buy(
-                market(),
-                price(),
+    private EntryIntent entryIntent(GammaMarketDto market) {
+        return EntryIntent.buy(
+                market,
+                new OutcomePrice("up", "Up", new BigDecimal("0.59"), new BigDecimal("0.61"),
+                        new BigDecimal("0.02"), Instant.now().minusMillis(100)),
                 new BigDecimal("1.00"),
                 "cost-aware-momentum",
                 "cost-aware-momentum",
                 "entry"
         );
-
-        when(tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(any(), any(), any(), anyCollection())).thenReturn(0L);
-        when(tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(any(), any(), anyCollection())).thenReturn(0L);
-        when(tradeOrderRepository.findByClientOrderId("key")).thenReturn(Optional.empty());
-        when(tradeRepository.countLiveCapacityTrades(eq(List.of(ExecutionMode.LIVE)), anyCollection(), any(Instant.class))).thenReturn(1L);
-
-        service.assess(intent, ExecutionMode.LIVE, null, null, "key");
-
-        ArgumentCaptor<Collection<TradeStatus>> statusCaptor = ArgumentCaptor.forClass(Collection.class);
-        verify(tradeRepository).countLiveCapacityTrades(eq(List.of(ExecutionMode.LIVE)), statusCaptor.capture(), any(Instant.class));
-        assertThat(statusCaptor.getValue())
-                .contains(TradeStatus.PARTIALLY_OPEN, TradeStatus.PARTIALLY_CLOSED);
     }
 
-    private LiveArmService.LiveArmStatus armedStatus() {
-        return new LiveArmService.LiveArmStatus(
-                true,
-                Instant.parse("2026-07-24T06:00:00Z"),
-                Instant.parse("2026-07-24T06:15:00Z"),
-                "0xexpected",
-                true,
-                true,
-                true,
-                true,
-                List.of(),
-                List.of()
-        );
-    }
-
-    private LiveArmService.LiveArmStatus unarmedStatus() {
-        return new LiveArmService.LiveArmStatus(
-                false,
-                null,
-                null,
-                null,
-                true,
-                true,
-                true,
-                false,
-                List.of(),
-                List.of("live arm is not active")
-        );
-    }
-
-    private GammaMarketDto market() {
+    private GammaMarketDto market(Integer secondsToExpiry) {
         return new GammaMarketDto(
                 "market-id",
                 "BTC Up or Down?",
                 "condition-id",
                 "btc-updown",
-                Instant.now().plusSeconds(60),
+                secondsToExpiry == null ? null : Instant.now().plusSeconds(secondsToExpiry),
                 true,
                 false,
                 true,
@@ -321,14 +166,15 @@ class RiskCheckServiceTest {
         );
     }
 
-    private OutcomePrice price() {
-        return new OutcomePrice(
-                "up",
-                "Up",
-                new BigDecimal("0.59"),
-                new BigDecimal("0.61"),
-                new BigDecimal("0.02"),
-                Instant.now().minusMillis(100)
-        );
+    private LiveArmService.LiveArmStatus armedStatus() {
+        return new LiveArmService.LiveArmStatus(
+                true, Instant.now(), Instant.now().plusSeconds(900), "0xexpected",
+                true, true, true, true, List.of(), List.of());
+    }
+
+    private LiveArmService.LiveArmStatus unarmedStatus() {
+        return new LiveArmService.LiveArmStatus(
+                false, null, null, null,
+                true, true, true, false, List.of(), List.of("live arm is not active"));
     }
 }

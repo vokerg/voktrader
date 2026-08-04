@@ -8,7 +8,8 @@ import java.time.Instant;
 @Table(name = "trade_risk_checks", indexes = {
         @Index(name = "idx_trade_risk_checks_trade", columnList = "trade_id"),
         @Index(name = "idx_trade_risk_checks_order", columnList = "trade_order_id"),
-        @Index(name = "idx_trade_risk_checks_name", columnList = "check_name")
+        @Index(name = "idx_trade_risk_checks_name", columnList = "check_name"),
+        @Index(name = "idx_trade_risk_checks_correlation", columnList = "correlation_id")
 })
 public class TradeRiskCheckEntity {
     @Id
@@ -20,6 +21,9 @@ public class TradeRiskCheckEntity {
 
     @Column(name = "trade_order_id")
     private Long tradeOrderId;
+
+    @Column(name = "correlation_id", length = 255)
+    private String correlationId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "mode", nullable = false, length = 32)
@@ -51,9 +55,14 @@ public class TradeRiskCheckEntity {
     }
 
     public static TradeRiskCheckEntity of(Long tradeId, Long orderId, ExecutionMode mode, String checkName, boolean passed, RiskSeverity severity, Object observedValue, Object limitValue, String message) {
+        return of(tradeId, orderId, null, mode, checkName, passed, severity, observedValue, limitValue, message);
+    }
+
+    public static TradeRiskCheckEntity of(Long tradeId, Long orderId, String correlationId, ExecutionMode mode, String checkName, boolean passed, RiskSeverity severity, Object observedValue, Object limitValue, String message) {
         TradeRiskCheckEntity entity = new TradeRiskCheckEntity();
         entity.tradeId = tradeId;
         entity.tradeOrderId = orderId;
+        entity.correlationId = correlationId;
         entity.mode = mode;
         entity.checkName = checkName;
         entity.passed = passed;
@@ -68,6 +77,7 @@ public class TradeRiskCheckEntity {
     public Long getId() { return id; }
     public Long getTradeId() { return tradeId; }
     public Long getTradeOrderId() { return tradeOrderId; }
+    public String getCorrelationId() { return correlationId; }
     public ExecutionMode getMode() { return mode; }
     public String getCheckName() { return checkName; }
     public boolean isPassed() { return passed; }
