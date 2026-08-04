@@ -96,10 +96,10 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 Status: IN_PROGRESS
 Priority: P0
 Phase: P1 - Stop the bleeding
-Owner: vokerg
-Branch: task/T012-centralize-entry-risk-policy
-PR: #9
-Started: 2026-07-25T06:36:53Z
+Owner: vokerg-gpt-5.6-thinking-20260804
+Branch: task/T012-central-risk-reconstruction
+PR: #26
+Started: 2026-08-04T17:41:49Z
 Completed:
 Depends On: T011
 Parallelizable: no
@@ -110,7 +110,7 @@ Move RiskCheckService semantics behind the sole entry boundary and make all new-
 
 ## Checkpoint constraint
 
-PR #9 is materially stale and non-mergeable against the current transformation head. Branch-local completion does not count as integrated completion. Rebase or reconstruct the work, reconcile the current migration chain, run complete CI, and unblock only T016.
+PR #26 reconstructs the useful parts of closed stale PR #9 on the current transformation head. The reconstruction must reconcile the current migration chain, run complete CI, restore the T011 architecture contract, publish exact Java failure changes, and unblock only T016.
 
 ## Implementation steps
 
