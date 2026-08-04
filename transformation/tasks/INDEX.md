@@ -18,14 +18,15 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 
 1. `T012` - centralize entry risk policy. **DONE** in merged PR #26; the integrated exact Java failure baseline shrank from 25 to 24 identities.
 2. `T055` - enforce CI no-regression policy. **PARTIAL** in merged PR #25; repository-controlled enforcement is implemented, but required branch rules still need administrator application and verification.
-3. `T016` - integrated execution-boundary checkpoint. **DONE** in PR #27; all 24 remaining failure identities are assigned to T020-T025.
-4. `T013` - portfolio exposure invariants. **READY** and the next sequential task under the lowest-ID rule.
-5. `T015` and `T020` are also **READY**, but wait behind lower-numbered T013 unless the index explicitly authorizes parallel work. `T014` follows T013.
-6. `T042` - unified fee model. Claimed by draft PR #12 and promoted to P0, but remains paused pending current-head reconciliation; do not absorb it into another task.
-7. `T020` through `T025` execute as the durable lifecycle chain, followed by mandatory phase-exit gate `T026`.
-8. `T030` and all exchange-truth work remain blocked until T026.
-9. After T055 is DONE, `T054` retained-database rehearsal and `T056` control-plane default-auth proof may proceed in parallel.
-10. `T045` live preflight additionally requires T054 and T056.
+3. `T016` - integrated execution-boundary checkpoint. **DONE** in merged PR #27; all 24 remaining failure identities are assigned to T020-T025.
+4. `T013` - portfolio exposure invariants. **DONE** in PR #28; active exposure is enforced across sibling inner strategies.
+5. `T014` - exhaustive live-entry kill-switch proof. **READY** and the next sequential task under the lowest-ID rule.
+6. `T015` and `T020` are also **READY**, but wait behind lower-numbered T014 unless the index explicitly authorizes parallel work.
+7. `T042` - unified fee model. Claimed by draft PR #12 and promoted to P0, but remains paused pending current-head reconciliation; do not absorb it into another task.
+8. `T020` through `T025` execute as the durable lifecycle chain, followed by mandatory phase-exit gate `T026`.
+9. `T030` and all exchange-truth work remain blocked until T026.
+10. After T055 is DONE, `T054` retained-database rehearsal and `T056` control-plane default-auth proof may proceed in parallel.
+11. `T045` live preflight additionally requires T054 and T056.
 
 Unrelated feature work is frozen while the integrated Java failure baseline is unchanged or worsening. See [`CHECKPOINT-2026-08-03.md`](./CHECKPOINT-2026-08-03.md).
 
@@ -41,8 +42,8 @@ Unrelated feature work is frozen while the integrated Java failure baseline is u
 | [T011](./PHASE-1-stop-the-bleeding.md#t011) | DONE | P0 | T010 | no | Introduce typed entry and exit intent boundary |
 | [T012](./PHASE-1-stop-the-bleeding.md#t012) | DONE | P0 | T011 | no | Centralize entry risk policy |
 | [T016](./CHECKPOINT-2026-08-03.md#t016---stabilize-integrated-execution-boundary-after-central-risk-merge) | DONE | P0 | T012 | no | Stabilize integrated execution boundary after central-risk merge |
-| [T013](./PHASE-1-stop-the-bleeding.md#t013) | READY | P0 | T016 | no | Define portfolio exposure invariants |
-| [T014](./PHASE-1-stop-the-bleeding.md#t014) | BLOCKED | P0 | T016, T013 | no | Prove kill switch covers every live entry route |
+| [T013](./PHASE-1-stop-the-bleeding.md#t013) | DONE | P0 | T016 | no | Define portfolio exposure invariants |
+| [T014](./PHASE-1-stop-the-bleeding.md#t014) | READY | P0 | T016, T013 | no | Prove kill switch covers every live entry route |
 | [T015](./PHASE-1-stop-the-bleeding.md#t015) | READY | P0 | T016 | no | Expose effective risk gate chain |
 
 ## P2 - Durable order lifecycle
