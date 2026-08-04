@@ -39,7 +39,20 @@ public class TradingProperties {
     private BigDecimal maxSpread = new BigDecimal("0.03");
     private long maxPriceAgeMs = 1500;
     private int maxOpenLiveTrades = 1;
-    private int maxTradesPerMarket = 1;
+
+    /** Block another inner strategy while any entry or position is active for the same bot and market. */
+    private boolean onePositionPerBotMarket = true;
+
+    /** Block another entry while any entry or position is active for the same bot, market, and token. */
+    private boolean onePositionPerToken = true;
+
+    /** Active exposure cap for one bot/account/mode and market. Values <= 0 disable this cap. */
+    private int maxActivePositionsPerMarket = 1;
+
+    /** Active exposure cap for one bot/account/mode across markets. Values <= 0 disable this cap. */
+    private int maxActivePositionsPerPortfolio = 0;
+
+    /** Attempt throttle; unlike active-position caps, this considers recent failed/rejected live entry orders. */
     private long liveRetryCooldownSeconds = 0;
     private int minSecondsToExpiry = 30;
     private BigDecimal paperFeeRate = new BigDecimal("0.072");
@@ -131,12 +144,50 @@ public class TradingProperties {
         this.maxOpenLiveTrades = maxOpenLiveTrades;
     }
 
-    public int getMaxTradesPerMarket() {
-        return maxTradesPerMarket;
+    public boolean isOnePositionPerBotMarket() {
+        return onePositionPerBotMarket;
     }
 
+    public void setOnePositionPerBotMarket(boolean onePositionPerBotMarket) {
+        this.onePositionPerBotMarket = onePositionPerBotMarket;
+    }
+
+    public boolean isOnePositionPerToken() {
+        return onePositionPerToken;
+    }
+
+    public void setOnePositionPerToken(boolean onePositionPerToken) {
+        this.onePositionPerToken = onePositionPerToken;
+    }
+
+    public int getMaxActivePositionsPerMarket() {
+        return maxActivePositionsPerMarket;
+    }
+
+    public void setMaxActivePositionsPerMarket(int maxActivePositionsPerMarket) {
+        this.maxActivePositionsPerMarket = maxActivePositionsPerMarket;
+    }
+
+    public int getMaxActivePositionsPerPortfolio() {
+        return maxActivePositionsPerPortfolio;
+    }
+
+    public void setMaxActivePositionsPerPortfolio(int maxActivePositionsPerPortfolio) {
+        this.maxActivePositionsPerPortfolio = maxActivePositionsPerPortfolio;
+    }
+
+    /**
+     * Compatibility alias for the old ambiguous name. This is an active-position cap, not a cumulative attempt cap.
+     */
+    @Deprecated
+    public int getMaxTradesPerMarket() {
+        return maxActivePositionsPerMarket;
+    }
+
+    /** Compatibility binder for existing `max-trades-per-market` configuration. */
+    @Deprecated
     public void setMaxTradesPerMarket(int maxTradesPerMarket) {
-        this.maxTradesPerMarket = maxTradesPerMarket;
+        this.maxActivePositionsPerMarket = maxTradesPerMarket;
     }
 
     public long getLiveRetryCooldownSeconds() {
