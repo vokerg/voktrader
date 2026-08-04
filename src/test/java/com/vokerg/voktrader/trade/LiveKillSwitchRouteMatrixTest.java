@@ -1,6 +1,5 @@
 package com.vokerg.voktrader.trade;
 
-import com.vokerg.voktrader.economy.PolymarketFeeCalculator;
 import com.vokerg.voktrader.executor.ExecutorOrderCommand;
 import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.executor.PythonExecutorClient;
