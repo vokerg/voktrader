@@ -93,14 +93,14 @@ Change status, fill ownership/branch/PR/timestamps, update the index, add the re
 
 ## T012 - Centralize entry risk policy
 
-Status: IN_PROGRESS
+Status: DONE
 Priority: P0
 Phase: P1 - Stop the bleeding
 Owner: vokerg-gpt-5.6-thinking-20260804
 Branch: task/T012-central-risk-reconstruction
 PR: #26
 Started: 2026-08-04T17:41:49Z
-Completed:
+Completed: 2026-08-04T17:56:00Z
 Depends On: T011
 Parallelizable: no
 
@@ -110,7 +110,7 @@ Move RiskCheckService semantics behind the sole entry boundary and make all new-
 
 ## Checkpoint constraint
 
-PR #26 reconstructs the useful parts of closed stale PR #9 on the current transformation head. The reconstruction must reconcile the current migration chain, run complete CI, restore the T011 architecture contract, publish exact Java failure changes, and unblock only T016.
+PR #26 reconstructs the useful parts of closed stale PR #9 on the current transformation head. The reconstruction reconciles the current migration chain, restores the T011 architecture contract, publishes exact Java failure changes, and unblocks only T016.
 
 ## Implementation steps
 
@@ -123,12 +123,14 @@ PR #26 reconstructs the useful parts of closed stale PR #9 on the current transf
 
 ## Acceptance criteria
 
-- [ ] Every BUY/new-position path calls central risk policy exactly once.
-- [ ] Risk checks are saved with intent/order correlation IDs.
-- [ ] Mutation removing the risk call fails tests.
-- [ ] SELL and cancel remain available outside new-exposure gating.
-- [ ] Complete CI runs on the current integrated head without adding a new failure.
-- [ ] T016 is the only downstream task unblocked directly by T012.
+- [x] Every BUY/new-position path calls central risk policy exactly once.
+- [x] Risk checks are saved with intent/order correlation IDs.
+- [x] Mutation removing the risk call fails tests.
+- [x] SELL and cancel remain available outside new-exposure gating.
+- [x] Complete CI runs on the current integrated head without adding a new failure.
+- [x] T016 is the only downstream task unblocked directly by T012.
+
+Implementation report: `transformation/reports/T012-2026-08-04-centralize-entry-risk-policy.md`
 
 ## Required tests
 
