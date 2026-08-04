@@ -2,13 +2,13 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
-The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
+The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T016 is DONE, so T020 is READY. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
 
 ---
 
 ## T020 - Create transactional order outbox schema
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P2 - Durable order lifecycle
 Owner: unclaimed

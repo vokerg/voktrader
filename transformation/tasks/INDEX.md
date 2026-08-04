@@ -16,15 +16,16 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 
 ## Current checkpoint sequence
 
-1. `T012` - centralize entry risk policy. **DONE** in PR #26 on the current transformation head; the integrated failure baseline shrank by one identity.
+1. `T012` - centralize entry risk policy. **DONE** in merged PR #26; the integrated exact Java failure baseline shrank from 25 to 24 identities.
 2. `T055` - enforce CI no-regression policy. **PARTIAL** in merged PR #25; repository-controlled enforcement is implemented, but required branch rules still need administrator application and verification.
-3. `T016` - integrated execution-boundary checkpoint. **READY** and the next sequential implementation task.
-4. `T042` - unified fee model. Claimed by draft PR #12, promoted to P0, but paused and **BLOCKED** by T016 to avoid Strategy V2/execution rework.
-5. `T013`, `T015`, and `T020` become eligible only after T016. `T014` follows T013.
-6. `T020` through `T025` execute as the durable lifecycle chain, followed by mandatory phase-exit gate `T026`.
-7. `T030` and all exchange-truth work remain blocked until T026.
-8. After T055 is DONE, `T054` retained-database rehearsal and `T056` control-plane default-auth proof may proceed in parallel.
-9. `T045` live preflight additionally requires T054 and T056.
+3. `T016` - integrated execution-boundary checkpoint. **DONE** in PR #27; all 24 remaining failure identities are assigned to T020-T025.
+4. `T013` - portfolio exposure invariants. **READY** and the next sequential task under the lowest-ID rule.
+5. `T015` and `T020` are also **READY**, but wait behind lower-numbered T013 unless the index explicitly authorizes parallel work. `T014` follows T013.
+6. `T042` - unified fee model. Claimed by draft PR #12 and promoted to P0, but remains paused pending current-head reconciliation; do not absorb it into another task.
+7. `T020` through `T025` execute as the durable lifecycle chain, followed by mandatory phase-exit gate `T026`.
+8. `T030` and all exchange-truth work remain blocked until T026.
+9. After T055 is DONE, `T054` retained-database rehearsal and `T056` control-plane default-auth proof may proceed in parallel.
+10. `T045` live preflight additionally requires T054 and T056.
 
 Unrelated feature work is frozen while the integrated Java failure baseline is unchanged or worsening. See [`CHECKPOINT-2026-08-03.md`](./CHECKPOINT-2026-08-03.md).
 
@@ -39,15 +40,15 @@ Unrelated feature work is frozen while the integrated Java failure baseline is u
 | [T010](./PHASE-1-stop-the-bleeding.md#t010) | DONE | P0 | T000 | no | Make live profile capability-only |
 | [T011](./PHASE-1-stop-the-bleeding.md#t011) | DONE | P0 | T010 | no | Introduce typed entry and exit intent boundary |
 | [T012](./PHASE-1-stop-the-bleeding.md#t012) | DONE | P0 | T011 | no | Centralize entry risk policy |
-| [T016](./CHECKPOINT-2026-08-03.md#t016---stabilize-integrated-execution-boundary-after-central-risk-merge) | READY | P0 | T012 | no | Stabilize integrated execution boundary after central-risk merge |
-| [T013](./PHASE-1-stop-the-bleeding.md#t013) | BLOCKED | P0 | T016 | no | Define portfolio exposure invariants |
+| [T016](./CHECKPOINT-2026-08-03.md#t016---stabilize-integrated-execution-boundary-after-central-risk-merge) | DONE | P0 | T012 | no | Stabilize integrated execution boundary after central-risk merge |
+| [T013](./PHASE-1-stop-the-bleeding.md#t013) | READY | P0 | T016 | no | Define portfolio exposure invariants |
 | [T014](./PHASE-1-stop-the-bleeding.md#t014) | BLOCKED | P0 | T016, T013 | no | Prove kill switch covers every live entry route |
-| [T015](./PHASE-1-stop-the-bleeding.md#t015) | BLOCKED | P0 | T016 | no | Expose effective risk gate chain |
+| [T015](./PHASE-1-stop-the-bleeding.md#t015) | READY | P0 | T016 | no | Expose effective risk gate chain |
 
 ## P2 - Durable order lifecycle
 | Task | Status | Priority | Depends On | Parallelizable | Title |
 | --- | --- | --- | --- | --- | --- |
-| [T020](./PHASE-2-durable-order-lifecycle.md#t020) | BLOCKED | P0 | T016 | no | Create transactional order outbox schema |
+| [T020](./PHASE-2-durable-order-lifecycle.md#t020) | READY | P0 | T016 | no | Create transactional order outbox schema |
 | [T021](./PHASE-2-durable-order-lifecycle.md#t021) | BLOCKED | P0 | T020 | no | Implement outbox worker and claim lease |
 | [T022](./PHASE-2-durable-order-lifecycle.md#t022) | BLOCKED | P0 | T021 | no | Make executor idempotency durable |
 | [T023](./PHASE-2-durable-order-lifecycle.md#t023) | BLOCKED | P0 | T021, T022 | no | Handle unknown submission outcomes |

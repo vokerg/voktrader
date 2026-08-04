@@ -16,14 +16,14 @@ This ledger records the corrective work discovered by the 2026-08-03 program che
 ## T016 - Stabilize integrated execution boundary after central-risk merge
 
 Issue: #19
-Status: READY
+Status: DONE
 Priority: P0
 Phase: Checkpoint remediation
-Owner: unclaimed
-Branch:
-PR:
-Started:
-Completed:
+Owner: vokerg-gpt-5.6-thinking-20260804
+Branch: task/T016-integrated-execution-checkpoint
+PR: #27
+Started: 2026-08-04T18:17:44Z
+Completed: 2026-08-04T18:25:00Z
 Depends On: T012
 Parallelizable: no
 
@@ -33,11 +33,13 @@ Validate central risk on the current integrated head, restore the T011 typed str
 
 ### Acceptance criteria
 
-- [ ] `StrategyExecutionBoundaryArchitectureTest` passes.
-- [ ] Every new-position path crosses central risk exactly once with correlated persisted evidence.
-- [ ] SELL and cancel remain available outside new-exposure gating.
-- [ ] Full CI runs with fewer failures than the 301-test baseline of 7 failures and 18 errors.
-- [ ] Every remaining failure is explicitly owned by T020-T025 or a newly justified task.
+- [x] `StrategyExecutionBoundaryArchitectureTest` passes.
+- [x] Every new-position path crosses central risk exactly once with correlated persisted evidence.
+- [x] SELL and cancel remain available outside new-exposure gating.
+- [x] Full CI runs with fewer failures than the 301-test baseline of 7 failures and 18 errors.
+- [x] Every remaining failure is explicitly owned by T020-T025 or a newly justified task.
+
+Implementation report: `transformation/reports/T016-2026-08-04-stabilize-integrated-execution-boundary.md`
 
 ---
 
