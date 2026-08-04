@@ -44,6 +44,7 @@ jobs:
             --reports target/surefire-reports \
             --baseline .github/ci/java-failure-baseline.json \
             --ledger transformation/tasks/CHECKPOINT-2026-08-03.md \
+            --maven-log java-test.log \
             --maven-exit-code "$maven_status" \
             --summary java-failure-summary.md
           policy_status=$?
