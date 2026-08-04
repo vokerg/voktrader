@@ -20,6 +20,20 @@ public interface TradeRepository extends JpaRepository<TradeEntity, Long>, JpaSp
     long countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(String marketId, String tokenId, String strategyId, Collection<TradeStatus> statuses);
     long countByMarketIdAndStrategyIdAndStatusIn(String marketId, String strategyId, Collection<TradeStatus> statuses);
     long countByModeInAndStatusIn(Collection<ExecutionMode> modes, Collection<TradeStatus> statuses);
+
+    @Query("""
+            select t
+            from TradeEntity t
+            where ((:botId is null and t.botId is null) or t.botId = :botId)
+              and t.mode = :mode
+              and t.status in :statuses
+            """)
+    List<TradeEntity> findPortfolioExposure(
+            @Param("botId") Long botId,
+            @Param("mode") ExecutionMode mode,
+            @Param("statuses") Collection<TradeStatus> statuses
+    );
+
     @Query("""
             select count(t)
             from TradeEntity t
