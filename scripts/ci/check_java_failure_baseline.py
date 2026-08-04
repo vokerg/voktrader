@@ -46,6 +46,13 @@ class FailureIdentity:
         return f"{self.kind}: {self.test} [{self.reported_type}]"
 
 
+@dataclass(frozen=True)
+class Baseline:
+    allowed: set[FailureIdentity]
+    expiry_task: str
+    minimum_tests: int
+
+
 def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
@@ -121,10 +128,16 @@ def read_task_status(ledger_path: Path, task_id: str) -> str:
     return status_match.group(1)
 
 
-def load_baseline(path: Path) -> tuple[set[FailureIdentity], str]:
+def load_baseline(path: Path) -> Baseline:
     data = json.loads(path.read_text(encoding="utf-8"))
     if data.get("schema_version") != 1:
         raise ValueError("unsupported Java failure baseline schema_version")
+
+    source = data.get("source")
+    minimum_tests = source.get("tests") if isinstance(source, dict) else None
+    if not isinstance(minimum_tests, int) or minimum_tests <= 0:
+        raise ValueError("baseline source.tests must be a positive integer")
+
     expiry = data.get("expires_when")
     if not isinstance(expiry, dict) or not isinstance(expiry.get("task_id"), str):
         raise ValueError("baseline expires_when.task_id is required")
@@ -134,7 +147,32 @@ def load_baseline(path: Path) -> tuple[set[FailureIdentity], str]:
     parsed = [FailureIdentity.from_json(entry) for entry in entries]
     if len(set(parsed)) != len(parsed):
         raise ValueError("baseline contains duplicate failure identities")
-    return set(parsed), expiry["task_id"]
+    return Baseline(
+        allowed=set(parsed),
+        expiry_task=expiry["task_id"],
+        minimum_tests=minimum_tests,
+    )
+
+
+def _strip_ansi(text: str) -> str:
+    return re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+
+
+def is_surefire_test_failure_exit(maven_log_path: Path) -> bool:
+    text = _strip_ansi(maven_log_path.read_text(encoding="utf-8", errors="replace"))
+    failed_goal_lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip().startswith("[ERROR] Failed to execute goal ")
+    ]
+    if len(failed_goal_lines) != 1:
+        return False
+    failed_goal = failed_goal_lines[0]
+    return (
+        "maven-surefire-plugin" in failed_goal
+        and ":test " in failed_goal
+        and "There are test failures." in failed_goal
+    )
 
 
 def _render_identities(
@@ -154,6 +192,7 @@ def build_summary(
     *,
     mode: str,
     tests_seen: int,
+    minimum_tests: int | None,
     actual: set[FailureIdentity],
     allowed: set[FailureIdentity],
     unexpected: set[FailureIdentity],
@@ -165,6 +204,7 @@ def build_summary(
         "",
         f"- Mode: `{mode}`",
         f"- Tests represented in Surefire XML: `{tests_seen}`",
+        f"- Minimum expected tests: `{minimum_tests if minimum_tests is not None else 'n/a'}`",
         f"- Current failure identities: `{len(actual)}`",
         f"- Temporarily allowed identities: `{len(allowed)}`",
         f"- Unexpected or changed identities: `{len(unexpected)}`",
@@ -191,6 +231,7 @@ def evaluate(
     report_dir: Path,
     baseline_path: Path,
     ledger_path: Path,
+    maven_log_path: Path,
     maven_exit_code: int,
 ) -> tuple[int, str]:
     actual, tests_seen, parse_errors = parse_surefire_reports(report_dir)
@@ -198,10 +239,14 @@ def evaluate(
 
     allowed: set[FailureIdentity] = set()
     expiry_task = "T026"
+    minimum_tests: int | None = None
     baseline_exists = baseline_path.exists()
     if baseline_exists:
         try:
-            allowed, expiry_task = load_baseline(baseline_path)
+            baseline = load_baseline(baseline_path)
+            allowed = baseline.allowed
+            expiry_task = baseline.expiry_task
+            minimum_tests = baseline.minimum_tests
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             problems.append(f"invalid baseline: {exc}")
 
@@ -217,7 +262,7 @@ def evaluate(
     if hard_green:
         unexpected = set(actual)
         resolved = set(allowed) - actual
-        if baseline_exists and allowed:
+        if baseline_exists:
             problems.append(
                 f"{expiry_task} is DONE; delete the temporary baseline file and require zero Java failures"
             )
@@ -230,6 +275,10 @@ def evaluate(
             problems.append(
                 f"temporary baseline is required until {expiry_task} is DONE"
             )
+        if minimum_tests is not None and tests_seen < minimum_tests:
+            problems.append(
+                f"Surefire XML represents only {tests_seen} tests; expected at least {minimum_tests} for a complete suite"
+            )
         unexpected = actual - allowed
         resolved = allowed - actual
         if unexpected:
@@ -237,10 +286,21 @@ def evaluate(
                 f"Java introduced or changed {len(unexpected)} failure identities outside the baseline"
             )
 
-    if maven_exit_code != 0 and not actual:
-        problems.append(
-            f"Maven exited {maven_exit_code} without a parsed test failure; treat this as a build/infrastructure failure"
-        )
+    if maven_exit_code != 0:
+        if not actual:
+            problems.append(
+                f"Maven exited {maven_exit_code} without a parsed test failure; treat this as a build/infrastructure failure"
+            )
+        else:
+            try:
+                approved_test_exit = is_surefire_test_failure_exit(maven_log_path)
+            except OSError as exc:
+                problems.append(f"cannot read Maven log {maven_log_path}: {exc}")
+            else:
+                if not approved_test_exit:
+                    problems.append(
+                        f"Maven exited {maven_exit_code}, but the terminal failure was not an ordinary Surefire test-failure exit"
+                    )
     if maven_exit_code == 0 and actual:
         problems.append(
             "Maven exited successfully while Surefire XML contains failures or errors"
@@ -249,6 +309,7 @@ def evaluate(
     summary = build_summary(
         mode=mode,
         tests_seen=tests_seen,
+        minimum_tests=minimum_tests,
         actual=actual,
         allowed=allowed,
         unexpected=unexpected,
@@ -263,6 +324,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--reports", type=Path, required=True)
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--ledger", type=Path, required=True)
+    parser.add_argument("--maven-log", type=Path, required=True)
     parser.add_argument("--maven-exit-code", type=int, required=True)
     parser.add_argument("--summary", type=Path)
     return parser.parse_args(argv)
@@ -274,6 +336,7 @@ def main(argv: list[str] | None = None) -> int:
         report_dir=args.reports,
         baseline_path=args.baseline,
         ledger_path=args.ledger,
+        maven_log_path=args.maven_log,
         maven_exit_code=args.maven_exit_code,
     )
     print(summary)
