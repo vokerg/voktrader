@@ -1,8 +1,8 @@
 package com.vokerg.voktrader.trade;
 
-import org.springframework.stereotype.Service;
-
 import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeSide;
+import org.springframework.stereotype.Service;
 
 @Service
 public class LiveOrderGateway implements OrderGateway {
@@ -14,6 +14,10 @@ public class LiveOrderGateway implements OrderGateway {
 
     @Override
     public OrderLifecycleResult submitOrder(TradeIntent intent, StrategyInstanceKey owner, ExecutionMode mode) {
+        if (intent.side() == TradeSide.BUY && !EntryRiskDecisionContext.approves(intent, mode)) {
+            String message = "BUY rejected: approved central entry risk decision is required";
+            return new OrderLifecycleResult(false, null, null, null, null, null, null, message, message);
+        }
         return orderManager.submitOrder(intent, mode);
     }
 

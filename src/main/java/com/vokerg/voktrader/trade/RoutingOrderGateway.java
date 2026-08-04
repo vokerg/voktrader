@@ -1,8 +1,9 @@
 package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.strategy.v2.StrategyV2ExecutionProperties;
-import com.vokerg.voktrader.trade.paper.PaperOrderGateway;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeSide;
+import com.vokerg.voktrader.trade.paper.PaperOrderGateway;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
@@ -28,6 +29,10 @@ public class RoutingOrderGateway implements OrderGateway {
 
     @Override
     public OrderLifecycleResult submitOrder(TradeIntent intent, StrategyInstanceKey owner, ExecutionMode mode) {
+        if (intent.side() == TradeSide.BUY && !EntryRiskDecisionContext.approves(intent, mode)) {
+            String message = "BUY rejected: approved central entry risk decision is required";
+            return new OrderLifecycleResult(false, null, null, null, null, null, null, message, message);
+        }
         return gateway(mode).submitOrder(intent, owner, mode);
     }
 

@@ -16,9 +16,9 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 
 ## Current checkpoint sequence
 
-1. `T012` - centralize entry risk policy. **IN_PROGRESS** in PR #9; must be rebased or reconstructed on the current transformation head.
-2. `T055` - enforce CI no-regression policy. **PARTIAL** in draft PR #25; repository-controlled enforcement is implemented, but required branch rules still need administrator application and verification.
-3. `T016` - integrated execution-boundary checkpoint. Blocked by T012.
+1. `T012` - centralize entry risk policy. **DONE** in PR #26 on the current transformation head; the integrated failure baseline shrank by one identity.
+2. `T055` - enforce CI no-regression policy. **PARTIAL** in merged PR #25; repository-controlled enforcement is implemented, but required branch rules still need administrator application and verification.
+3. `T016` - integrated execution-boundary checkpoint. **READY** and the next sequential implementation task.
 4. `T042` - unified fee model. Claimed by draft PR #12, promoted to P0, but paused and **BLOCKED** by T016 to avoid Strategy V2/execution rework.
 5. `T013`, `T015`, and `T020` become eligible only after T016. `T014` follows T013.
 6. `T020` through `T025` execute as the durable lifecycle chain, followed by mandatory phase-exit gate `T026`.
@@ -38,8 +38,8 @@ Unrelated feature work is frozen while the integrated Java failure baseline is u
 | --- | --- | --- | --- | --- | --- |
 | [T010](./PHASE-1-stop-the-bleeding.md#t010) | DONE | P0 | T000 | no | Make live profile capability-only |
 | [T011](./PHASE-1-stop-the-bleeding.md#t011) | DONE | P0 | T010 | no | Introduce typed entry and exit intent boundary |
-| [T012](./PHASE-1-stop-the-bleeding.md#t012) | IN_PROGRESS | P0 | T011 | no | Centralize entry risk policy |
-| [T016](./CHECKPOINT-2026-08-03.md#t016---stabilize-integrated-execution-boundary-after-central-risk-merge) | BLOCKED | P0 | T012 | no | Stabilize integrated execution boundary after central-risk merge |
+| [T012](./PHASE-1-stop-the-bleeding.md#t012) | DONE | P0 | T011 | no | Centralize entry risk policy |
+| [T016](./CHECKPOINT-2026-08-03.md#t016---stabilize-integrated-execution-boundary-after-central-risk-merge) | READY | P0 | T012 | no | Stabilize integrated execution boundary after central-risk merge |
 | [T013](./PHASE-1-stop-the-bleeding.md#t013) | BLOCKED | P0 | T016 | no | Define portfolio exposure invariants |
 | [T014](./PHASE-1-stop-the-bleeding.md#t014) | BLOCKED | P0 | T016, T013 | no | Prove kill switch covers every live entry route |
 | [T015](./PHASE-1-stop-the-bleeding.md#t015) | BLOCKED | P0 | T016 | no | Expose effective risk gate chain |

@@ -1,5 +1,6 @@
 package com.vokerg.voktrader.trade;
 
+import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.RiskSeverity;
 import com.vokerg.voktrader.trade.model.TradeOrderPhase;
@@ -9,7 +10,6 @@ import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeStatus;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
-import com.vokerg.voktrader.time.TimeMachine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -42,119 +42,172 @@ public class RiskCheckService {
     private final TradeOrderRepository tradeOrderRepository;
     private final LiveArmService liveArmService;
 
-    public RiskAssessment assess(TradeIntent intent, ExecutionMode mode, Long tradeId, Long orderId, String idempotencyKey) {
-        RiskAssessment assessment = new RiskAssessment();
+    /** Sole policy evaluation method for a new-position entry. */
+    public RiskAssessment assessEntry(EntryRiskRequest request) {
+        TradeIntent intent = request.tradeIntent();
+        ExecutionMode mode = request.mode();
+        String correlationId = request.correlationId();
+        RiskAssessment assessment = new RiskAssessment(correlationId);
 
         boolean strategyAllowed = properties.getAllowedStrategyIds().isEmpty()
                 || properties.getAllowedStrategyIds().contains(intent.strategyId());
-        assessment.add(check(tradeId, orderId, mode, "STRATEGY_WHITELIST", strategyAllowed,
-                intent.strategyId(), properties.getAllowedStrategyIds(),
+        assessment.add(check(correlationId, mode, "STRATEGY_WHITELIST", strategyAllowed,
+                intent.strategyId(), properties.getAllowedStrategyIds(), RiskSeverity.BLOCK,
                 strategyAllowed ? "strategy allowed" : "strategy is not whitelisted"));
 
         boolean amountOk = intent.amountUsd() != null
                 && intent.amountUsd().compareTo(BigDecimal.ZERO) > 0
                 && intent.amountUsd().compareTo(properties.getMaxOrderUsd()) <= 0;
-        assessment.add(check(tradeId, orderId, mode, "MAX_ORDER_USD", amountOk,
-                intent.amountUsd(), properties.getMaxOrderUsd(),
+        assessment.add(check(correlationId, mode, "MAX_ORDER_USD", amountOk,
+                intent.amountUsd(), properties.getMaxOrderUsd(), RiskSeverity.BLOCK,
                 amountOk ? "order size accepted" : "order size is missing, non-positive, or above maxOrderUsd"));
 
         boolean spreadOk = intent.observedSpread() != null
                 && intent.observedSpread().compareTo(properties.getMaxSpread()) <= 0;
-        assessment.add(check(tradeId, orderId, mode, "MAX_SPREAD", spreadOk,
-                intent.observedSpread(), properties.getMaxSpread(),
+        assessment.add(check(correlationId, mode, "MAX_SPREAD", spreadOk,
+                intent.observedSpread(), properties.getMaxSpread(), RiskSeverity.BLOCK,
                 spreadOk ? "spread accepted" : "spread is missing or too wide"));
 
         boolean priceFresh = intent.priceAgeMs() != null && intent.priceAgeMs() <= properties.getMaxPriceAgeMs();
-        assessment.add(check(tradeId, orderId, mode, "PRICE_FRESHNESS", priceFresh,
-                intent.priceAgeMs(), properties.getMaxPriceAgeMs(),
+        assessment.add(check(correlationId, mode, "PRICE_FRESHNESS", priceFresh,
+                intent.priceAgeMs(), properties.getMaxPriceAgeMs(), RiskSeverity.BLOCK,
                 priceFresh ? "price is fresh" : "price is stale or timestamp is missing"));
 
-        boolean expiryOk = intent.secondsToExpiryAtDecision() == null
-                || intent.secondsToExpiryAtDecision() >= properties.getMinSecondsToExpiry();
-        assessment.add(check(tradeId, orderId, mode, "EXPIRY_GUARD", expiryOk,
-                intent.secondsToExpiryAtDecision(), properties.getMinSecondsToExpiry(),
-                expiryOk ? "market not too close to expiry" : "market too close to expiry"));
+        if (intent.secondsToExpiryAtDecision() == null) {
+            assessment.add(check(correlationId, mode, "EXPIRY_GUARD", false,
+                    null, properties.getMinSecondsToExpiry(), RiskSeverity.WARN,
+                    "market expiry is unavailable; expiry guard could not be evaluated"));
+        } else {
+            boolean expiryOk = intent.secondsToExpiryAtDecision() >= properties.getMinSecondsToExpiry();
+            assessment.add(check(correlationId, mode, "EXPIRY_GUARD", expiryOk,
+                    intent.secondsToExpiryAtDecision(), properties.getMinSecondsToExpiry(), RiskSeverity.BLOCK,
+                    expiryOk ? "market not too close to expiry" : "market too close to expiry"));
+        }
 
         long activeTradeCount = countActiveForToken(intent);
         boolean duplicateIntent = activeTradeCount > 0;
-        assessment.add(check(tradeId, orderId, mode, "DUPLICATE_OPEN_TRADE", !duplicateIntent,
-                activeTradeCount, "0 active trades before execution",
+        assessment.add(check(correlationId, mode, "DUPLICATE_OPEN_TRADE", !duplicateIntent,
+                activeTradeCount, "0 active trades before execution", RiskSeverity.BLOCK,
                 duplicateIntent ? "another active trade already exists for this market/token/strategy" : "no active duplicate trade"));
 
-        long activeTradesForMarketIncludingCurrent = countActiveForMarket(intent);
-        boolean maxTradesOk = activeTradesForMarketIncludingCurrent < properties.getMaxTradesPerMarket();
-        assessment.add(check(tradeId, orderId, mode, "MAX_TRADES_PER_MARKET", maxTradesOk,
-                activeTradesForMarketIncludingCurrent, properties.getMaxTradesPerMarket(),
+        long activeTradesForMarket = countActiveForMarket(intent);
+        boolean maxTradesOk = activeTradesForMarket < properties.getMaxTradesPerMarket();
+        assessment.add(check(correlationId, mode, "MAX_TRADES_PER_MARKET", maxTradesOk,
+                activeTradesForMarket, properties.getMaxTradesPerMarket(), RiskSeverity.BLOCK,
                 maxTradesOk ? "market trade count accepted" : "maxTradesPerMarket reached"));
 
-        boolean idempotencyOk = idempotencyKey != null && !idempotencyKey.isBlank()
-                && tradeOrderRepository.findByClientOrderId(idempotencyKey)
-                .map(existing -> existing.getId().equals(orderId))
-                .orElse(true);
-        assessment.add(check(tradeId, orderId, mode, "IDEMPOTENCY", idempotencyOk,
-                idempotencyKey, "unique non-blank idempotency key",
-                idempotencyOk ? "idempotency key accepted" : "duplicate idempotency key belongs to a different order"));
+        boolean correlationOk = tradeOrderRepository.findByClientOrderId(correlationId).isEmpty();
+        assessment.add(check(correlationId, mode, "ENTRY_CORRELATION", correlationOk,
+                correlationId, "unique pre-order correlation ID", RiskSeverity.BLOCK,
+                correlationOk ? "entry correlation accepted" : "entry correlation already belongs to an order"));
 
         if (mode == ExecutionMode.LIVE) {
             long cooldownSeconds = properties.getLiveRetryCooldownSeconds();
-            if (cooldownSeconds > 0 && intent.side() == TradeSide.BUY) {
-                Instant cooldownSince = Instant.now().minus(Duration.ofSeconds(cooldownSeconds));
+            if (cooldownSeconds > 0) {
+                Instant cooldownSince = TimeMachine.now().minus(Duration.ofSeconds(cooldownSeconds));
                 boolean hasRecentRejectedEntry = tradeOrderRepository.existsRecentOrder(
                         intent.botId(),
                         intent.strategyId(),
                         intent.marketId(),
                         intent.tokenId(),
-                        intent.side(),
+                        TradeSide.BUY,
                         TradeOrderPhase.ENTRY,
                         mode,
                         COOLDOWN_STATUSES,
                         cooldownSince
                 );
-                assessment.add(check(tradeId, orderId, mode, "LIVE_RETRY_COOLDOWN", !hasRecentRejectedEntry,
+                assessment.add(check(correlationId, mode, "LIVE_RETRY_COOLDOWN", !hasRecentRejectedEntry,
                         hasRecentRejectedEntry ? "recent rejected entry" : "no recent rejected entry",
-                        cooldownSeconds + "s",
+                        cooldownSeconds + "s", RiskSeverity.BLOCK,
                         hasRecentRejectedEntry ? "recent live entry attempt was rejected" : "live retry cooldown accepted"));
             }
 
             boolean killSwitchOk = !properties.isKillSwitchEnabled();
-            assessment.add(check(tradeId, orderId, mode, "KILL_SWITCH", killSwitchOk,
-                    properties.isKillSwitchEnabled(), false,
+            assessment.add(check(correlationId, mode, "KILL_SWITCH", killSwitchOk,
+                    properties.isKillSwitchEnabled(), false, RiskSeverity.BLOCK,
                     killSwitchOk ? "kill switch disabled" : "kill switch is enabled"));
 
             boolean liveEnabledOk = properties.isLiveEnabled();
-            assessment.add(check(tradeId, orderId, mode, "LIVE_ENABLED", liveEnabledOk,
-                    properties.isLiveEnabled(), true,
+            assessment.add(check(correlationId, mode, "LIVE_ENABLED", liveEnabledOk,
+                    properties.isLiveEnabled(), true, RiskSeverity.BLOCK,
                     liveEnabledOk ? "live trading explicitly enabled" : "live trading not explicitly enabled"));
 
-            if (intent.side() == TradeSide.BUY) {
-                LiveArmService.LiveArmStatus armStatus = liveArmService.status();
-                assessment.add(check(tradeId, orderId, mode, "LIVE_ARM", armStatus.entryAllowed(),
-                        armStatus.armed(), true,
-                        armStatus.entryAllowed() ? "live arm active" : armStatus.entryBlockReason()));
-            }
+            LiveArmService.LiveArmStatus armStatus = liveArmService.status();
+            assessment.add(check(correlationId, mode, "LIVE_ARM", armStatus.entryAllowed(),
+                    armStatus.armed(), true, RiskSeverity.BLOCK,
+                    armStatus.entryAllowed() ? "live arm active" : armStatus.entryBlockReason()));
 
-            long openLiveTradesIncludingCurrent = tradeRepository.countLiveCapacityTrades(
+            long openLiveTrades = tradeRepository.countLiveCapacityTrades(
                     List.of(ExecutionMode.LIVE), ACTIVE_STATUSES, TimeMachine.now());
-            long openLiveTrades = tradeId == null
-                    ? openLiveTradesIncludingCurrent
-                    : Math.max(0, openLiveTradesIncludingCurrent - 1);
             boolean openLiveOk = openLiveTrades < properties.getMaxOpenLiveTrades();
-            assessment.add(check(tradeId, orderId, mode, "MAX_OPEN_LIVE_TRADES", openLiveOk,
-                    openLiveTrades, properties.getMaxOpenLiveTrades(),
+            assessment.add(check(correlationId, mode, "MAX_OPEN_LIVE_TRADES", openLiveOk,
+                    openLiveTrades, properties.getMaxOpenLiveTrades(), RiskSeverity.BLOCK,
                     openLiveOk ? "open live trade count accepted" : "maxOpenLiveTrades reached"));
         }
 
         return assessment;
     }
 
-    private long countActiveForToken(TradeIntent intent) { if (intent.botId() != null) { return tradeRepository.countByBotIdAndMarketIdAndTokenIdAndStrategyIdAndStatusIn(intent.botId(), intent.marketId(), intent.tokenId(), intent.strategyId(), ACTIVE_STATUSES); } return tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(intent.marketId(), intent.tokenId(), intent.strategyId(), ACTIVE_STATUSES); } private long countActiveForMarket(TradeIntent intent) { if (intent.botId() != null) { return tradeRepository.countByBotIdAndMarketIdAndStrategyIdAndStatusIn(intent.botId(), intent.marketId(), intent.strategyId(), ACTIVE_STATUSES); } return tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(intent.marketId(), intent.strategyId(), ACTIVE_STATUSES); } private TradeRiskCheckEntity check(Long tradeId, Long orderId, ExecutionMode mode, String name, boolean passed, Object observed, Object limit, String message) {
+    /**
+     * Compatibility assertion used by the existing execution adapters.
+     * It no longer evaluates policy. A BUY reaches those adapters only while a
+     * matching, already-persisted central decision is present.
+     */
+    @Deprecated
+    public RiskAssessment assess(TradeIntent intent, ExecutionMode mode, Long tradeId, Long orderId, String idempotencyKey) {
+        if (intent.side() != TradeSide.BUY) {
+            return new RiskAssessment(idempotencyKey);
+        }
+        return EntryRiskDecisionContext.current()
+                .filter(decision -> decision.request().matches(intent, mode))
+                .map(decision -> new RiskAssessment(decision.request().correlationId()))
+                .orElseGet(() -> missingBoundaryAssessment(mode, idempotencyKey));
+    }
+
+    private RiskAssessment missingBoundaryAssessment(ExecutionMode mode, String correlationId) {
+        RiskAssessment assessment = new RiskAssessment(correlationId);
+        assessment.add(check(correlationId, mode, "ENTRY_RISK_BOUNDARY_REQUIRED", false,
+                "no approved entry context", "approved central entry risk decision", RiskSeverity.BLOCK,
+                "BUY rejected because it did not cross EntryAcceptanceService"));
+        return assessment;
+    }
+
+    private long countActiveForToken(TradeIntent intent) {
+        if (intent.botId() != null) {
+            return tradeRepository.countByBotIdAndMarketIdAndTokenIdAndStrategyIdAndStatusIn(
+                    intent.botId(), intent.marketId(), intent.tokenId(), intent.strategyId(), ACTIVE_STATUSES);
+        }
+        return tradeRepository.countByMarketIdAndTokenIdAndStrategyIdAndStatusIn(
+                intent.marketId(), intent.tokenId(), intent.strategyId(), ACTIVE_STATUSES);
+    }
+
+    private long countActiveForMarket(TradeIntent intent) {
+        if (intent.botId() != null) {
+            return tradeRepository.countByBotIdAndMarketIdAndStrategyIdAndStatusIn(
+                    intent.botId(), intent.marketId(), intent.strategyId(), ACTIVE_STATUSES);
+        }
+        return tradeRepository.countByMarketIdAndStrategyIdAndStatusIn(
+                intent.marketId(), intent.strategyId(), ACTIVE_STATUSES);
+    }
+
+    private TradeRiskCheckEntity check(
+            String correlationId,
+            ExecutionMode mode,
+            String name,
+            boolean passed,
+            Object observed,
+            Object limit,
+            RiskSeverity failureSeverity,
+            String message
+    ) {
         return TradeRiskCheckEntity.of(
-                tradeId,
-                orderId,
+                null,
+                null,
+                correlationId,
                 mode,
                 name,
                 passed,
-                passed ? RiskSeverity.INFO : RiskSeverity.BLOCK,
+                passed ? RiskSeverity.INFO : failureSeverity,
                 observed,
                 limit,
                 message

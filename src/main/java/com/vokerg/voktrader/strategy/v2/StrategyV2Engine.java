@@ -8,9 +8,8 @@ import com.vokerg.voktrader.strategy.StrategyMarketView;
 import com.vokerg.voktrader.strategy.StrategyOutcomeView;
 import com.vokerg.voktrader.strategy.TradingStrategy;
 import com.vokerg.voktrader.time.TimeMachine;
+import com.vokerg.voktrader.trade.CancellationSubmissionService;
 import com.vokerg.voktrader.trade.OrderLifecycleResult;
-import com.vokerg.voktrader.trade.OrderGateway;
-import com.vokerg.voktrader.trade.OrderGatewayContext;
 import com.vokerg.voktrader.trade.OrderRuntimeState;
 import com.vokerg.voktrader.trade.StrategyInstanceKey;
 import com.vokerg.voktrader.trade.StrategyRuntimeState;
@@ -42,7 +41,7 @@ public class StrategyV2Engine implements TradingStrategy {
     private final StrategyV2DiagnosticsRecorder diagnosticsRecorder;
     private final StrategyV2ExecutionProperties executionProperties;
     private final TradeStateProvider tradeStateProvider;
-    private final OrderGateway orderGateway;
+    private final CancellationSubmissionService orderGateway;
     private final StrategyV2SetCatalog configCatalog;
     private final Map<CooldownKey, Instant> noFillCancelCooldownUntil = new ConcurrentHashMap<>();
 
@@ -57,7 +56,7 @@ public class StrategyV2Engine implements TradingStrategy {
             StrategyV2DiagnosticsRecorder diagnosticsRecorder,
             StrategyV2ExecutionProperties executionProperties,
             TradeStateProvider tradeStateProvider,
-            OrderGateway orderGateway,
+            CancellationSubmissionService orderGateway,
             StrategyV2SetCatalog configCatalog
     ) {
         this.properties = properties;
@@ -262,7 +261,7 @@ public class StrategyV2Engine implements TradingStrategy {
                 maxPendingSeconds,
                 null
         );
-        OrderLifecycleResult result = OrderGatewayContext.current().orElse(orderGateway).cancelOrder(cancelIdentifier, reason);
+        OrderLifecycleResult result = orderGateway.cancelOrder(cancelIdentifier, reason);
         diagnosticsRecorder.orderCancelLifecycle(
                 strategy,
                 state,
