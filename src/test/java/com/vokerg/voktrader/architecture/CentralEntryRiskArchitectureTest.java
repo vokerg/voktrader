@@ -44,16 +44,37 @@ class CentralEntryRiskArchitectureTest {
     }
 
     @Test
-    void bothExecutionRoutersRejectBuyWithoutApprovalContext() throws IOException {
+    void compatibilityAndPrimaryOrderRoutersRejectBuyWithoutApprovalContext() throws IOException {
         String compatibilityRouter = Files.readString(Path.of(
                 "src/main/java/com/vokerg/voktrader/trade/ExecutionRouter.java"));
-        String orderGateway = Files.readString(Path.of(
+        String primaryOrderGateway = Files.readString(Path.of(
+                "src/main/java/com/vokerg/voktrader/trade/RoutingOrderGateway.java"));
+        String liveOrderGateway = Files.readString(Path.of(
                 "src/main/java/com/vokerg/voktrader/trade/LiveOrderGateway.java"));
 
-        assertThat(compatibilityRouter)
-                .contains("intent.side() == TradeSide.BUY")
-                .contains("EntryRiskDecisionContext.approves(intent, mode)");
-        assertThat(orderGateway)
+        assertApprovalGuard(compatibilityRouter);
+        assertApprovalGuard(primaryOrderGateway);
+        assertApprovalGuard(liveOrderGateway);
+    }
+
+    @Test
+    void concretePaperGatewayIsOnlyWiredBehindThePrimaryRouter() throws IOException {
+        try (var paths = Files.walk(MAIN_SOURCE_ROOT)) {
+            List<String> files = paths
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .filter(path -> contains(path, "PaperOrderGateway"))
+                    .map(path -> path.getFileName().toString())
+                    .sorted()
+                    .toList();
+
+            assertThat(files)
+                    .as("production code must use the primary guarded OrderGateway instead of injecting PaperOrderGateway directly")
+                    .containsExactly("PaperOrderGateway.java", "RoutingOrderGateway.java");
+        }
+    }
+
+    private void assertApprovalGuard(String source) {
+        assertThat(source)
                 .contains("intent.side() == TradeSide.BUY")
                 .contains("EntryRiskDecisionContext.approves(intent, mode)");
     }
