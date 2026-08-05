@@ -13,6 +13,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -20,6 +21,11 @@ import java.util.Optional;
 public class TransactionalOrderIntentService {
     private static final String CLIENT_ORDER_PREFIX = "vok-";
     private static final ObjectMapper PAYLOAD_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final List<OrderDispatchState> EXPOSURE_BLOCKING_STATES = List.of(
+            OrderDispatchState.UNKNOWN,
+            OrderDispatchState.RECONCILE,
+            OrderDispatchState.MANUAL_REVIEW
+    );
 
     private final OrderIntentRepository intentRepository;
     private final OrderDispatchOutboxRepository dispatchRepository;
@@ -32,17 +38,8 @@ public class TransactionalOrderIntentService {
         this.dispatchRepository = dispatchRepository;
     }
 
-    /**
-     * Persists the immutable order intent and its dispatch row in one local
-     * transaction. This component deliberately has no executor dependency:
-     * remote submission belongs to the post-commit worker introduced by T021.
-     */
     @Transactional
-    public AcceptedOrderIntent accept(
-            TradeIntent intent,
-            ExecutionMode mode,
-            String riskDecisionId
-    ) {
+    public AcceptedOrderIntent accept(TradeIntent intent, ExecutionMode mode, String riskDecisionId) {
         Objects.requireNonNull(intent, "intent is required");
         Objects.requireNonNull(mode, "mode is required");
         requireText(riskDecisionId, "riskDecisionId");
@@ -55,23 +52,17 @@ public class TransactionalOrderIntentService {
         if (existing.isPresent()) {
             return existingAcceptance(existing.orElseThrow(), intentHash, riskDecisionId, mode);
         }
+        if (dispatchRepository.existsByStateIn(EXPOSURE_BLOCKING_STATES)) {
+            throw new IllegalStateException(
+                    "Order acceptance blocked while an earlier submission outcome is unresolved"
+            );
+        }
 
         Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
-        OrderIntentEntity storedIntent = intentRepository.save(
-                OrderIntentEntity.accepted(
-                        clientOrderId,
-                        intentHash,
-                        riskDecisionId,
-                        mode,
-                        intent.side(),
-                        payloadJson,
-                        now
-                )
-        );
-        OrderDispatchOutboxEntity dispatch = dispatchRepository.save(
-                OrderDispatchOutboxEntity.ready(storedIntent, now)
-        );
-
+        OrderIntentEntity storedIntent = intentRepository.save(OrderIntentEntity.accepted(
+                clientOrderId, intentHash, riskDecisionId, mode, intent.side(), payloadJson, now
+        ));
+        OrderDispatchOutboxEntity dispatch = dispatchRepository.save(OrderDispatchOutboxEntity.ready(storedIntent, now));
         return toAcceptance(storedIntent, dispatch);
     }
 
@@ -79,51 +70,32 @@ public class TransactionalOrderIntentService {
     public Optional<AcceptedOrderIntent> recover(String clientOrderId) {
         requireText(clientOrderId, "clientOrderId");
         return intentRepository.findByClientOrderId(clientOrderId)
-                .map(intent -> toAcceptance(
-                        intent,
-                        dispatchRepository.findByClientOrderId(clientOrderId)
-                                .orElseThrow(() -> new IllegalStateException(
-                                        "Missing dispatch row for accepted order intent " + clientOrderId
-                                ))
-                ));
+                .map(intent -> toAcceptance(intent, dispatchRepository.findByClientOrderId(clientOrderId)
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Missing dispatch row for accepted order intent " + clientOrderId
+                        ))));
     }
 
     private AcceptedOrderIntent existingAcceptance(
-            OrderIntentEntity existing,
-            String intentHash,
-            String riskDecisionId,
-            ExecutionMode mode
+            OrderIntentEntity existing, String intentHash, String riskDecisionId, ExecutionMode mode
     ) {
         if (!existing.getIntentHash().equals(intentHash)
                 || !existing.getRiskDecisionId().equals(riskDecisionId)
                 || existing.getExecutionMode() != mode) {
-            throw new IllegalStateException(
-                    "clientOrderId collision for " + existing.getClientOrderId()
-            );
+            throw new IllegalStateException("clientOrderId collision for " + existing.getClientOrderId());
         }
-        OrderDispatchOutboxEntity dispatch = dispatchRepository
-                .findByClientOrderId(existing.getClientOrderId())
+        OrderDispatchOutboxEntity dispatch = dispatchRepository.findByClientOrderId(existing.getClientOrderId())
                 .orElseThrow(() -> new IllegalStateException(
                         "Missing dispatch row for accepted order intent " + existing.getClientOrderId()
                 ));
         return toAcceptance(existing, dispatch);
     }
 
-    private AcceptedOrderIntent toAcceptance(
-            OrderIntentEntity intent,
-            OrderDispatchOutboxEntity dispatch
-    ) {
+    private AcceptedOrderIntent toAcceptance(OrderIntentEntity intent, OrderDispatchOutboxEntity dispatch) {
         return new AcceptedOrderIntent(
-                intent.getId(),
-                dispatch.getId(),
-                intent.getClientOrderId(),
-                intent.getIntentHash(),
-                intent.getRiskDecisionId(),
-                intent.getExecutionMode(),
-                intent.getSide(),
-                intent.getState(),
-                dispatch.getState(),
-                intent.getAcceptedAt()
+                intent.getId(), dispatch.getId(), intent.getClientOrderId(), intent.getIntentHash(),
+                intent.getRiskDecisionId(), intent.getExecutionMode(), intent.getSide(), intent.getState(),
+                dispatch.getState(), intent.getAcceptedAt()
         );
     }
 
@@ -149,8 +121,6 @@ public class TransactionalOrderIntentService {
     }
 
     private static void requireText(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " is required");
-        }
+        if (value == null || value.isBlank()) throw new IllegalArgumentException(name + " is required");
     }
 }
