@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.Objects;
 import java.util.Optional;
@@ -55,7 +56,7 @@ public class TransactionalOrderIntentService {
             return existingAcceptance(existing.orElseThrow(), intentHash, riskDecisionId, mode);
         }
 
-        Instant now = Instant.now();
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         OrderIntentEntity storedIntent = intentRepository.save(
                 OrderIntentEntity.accepted(
                         clientOrderId,
