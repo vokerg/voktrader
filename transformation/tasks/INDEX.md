@@ -94,7 +94,7 @@ Unrelated feature work is frozen while the integrated Java failure baseline is u
 | [T061](./PHASE-5-simulation-honesty.md#t061) | BLOCKED | P1 | T040, T030 | no | Persist normalized event log |
 | [T062](./PHASE-5-simulation-honesty.md#t062) | BLOCKED | P1 | T060, T061, T016, T042, T041 | no | Build live/replay parity tests and reset comparable baselines |
 | [T063](./PHASE-5-simulation-honesty.md#t063) | BLOCKED | P1 | T060, T031 | no | Implement calibrated execution simulator |
-| [T064](./PHASE-5-simulation-honesty.md#t064) | BLOCKED | P2 | T051, T061 | yes | Separate operational and analytical stores |
+| [T064](./PHASE-5-simulation-honesty.md#t064) | BLOCKED | P2 | T051, T061 | no | Separate operational and analytical stores |
 
 ## P6 - Fair-value layer and strategy simplification
 | Task | Status | Priority | Depends On | Parallelizable | Title |
