@@ -67,6 +67,10 @@ public class OrderDispatchWorker {
                     workerId
             );
         }
+        if (!executorProperties.isEnabled()) {
+            log.debug("Order outbox claim skipped because the Python executor is disabled");
+            return 0;
+        }
 
         int processed = 0;
         for (int index = 0; index < properties.getBatchSize(); index++) {
