@@ -2,20 +2,20 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
-The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T016 is DONE, so T020 is READY. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
+The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 is DONE, so T021 is READY. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
 
 ---
 
 ## T020 - Create transactional order outbox schema
 
-Status: READY
+Status: DONE
 Priority: P0
 Phase: P2 - Durable order lifecycle
-Owner: unclaimed
-Branch:
-PR:
-Started:
-Completed:
+Owner: vokerg-gpt-5.6-thinking-20260805
+Branch: task/T020-transactional-order-outbox-schema
+PR: #31
+Started: 2026-08-05T04:53:34Z
+Completed: 2026-08-05T05:17:54Z
 Depends On: T016
 Parallelizable: no
 
@@ -29,18 +29,18 @@ Persist accepted entry/exit work before any remote network side effect.
 4. Add a compatibility/backfill path for current order entities if needed.
 
 ### Acceptance criteria
-- [ ] Acceptance transaction writes intent and outbox row without calling executor.
-- [ ] Clean-database migration test passes.
-- [ ] Outbox row contains enough data to resume after restart.
+- [x] Acceptance transaction writes intent and outbox row without calling executor.
+- [x] Clean-database migration test passes.
+- [x] Outbox row contains enough data to resume after restart.
 
 ### Required report
-`transformation/reports/T020-YYYY-MM-DD-create-transactional-order-outbox-schema.md`
+`transformation/reports/T020-2026-08-05-create-transactional-order-outbox-schema.md`
 
 ---
 
 ## T021 - Implement outbox worker and claim lease
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P2 - Durable order lifecycle
 Owner: unclaimed
