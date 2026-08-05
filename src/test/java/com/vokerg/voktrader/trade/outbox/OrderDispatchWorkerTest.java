@@ -2,6 +2,7 @@ package com.vokerg.voktrader.trade.outbox;
 
 import com.vokerg.voktrader.VoktraderApplication;
 import com.vokerg.voktrader.executor.ExecutorOrderResponse;
+import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.support.ExecutorTestConfig;
 import com.vokerg.voktrader.support.ScriptedExecutorClient;
 import com.vokerg.voktrader.trade.TradeIntent;
@@ -38,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
                 "voktrader.order-outbox.enabled=false",
                 "voktrader.order-outbox.lease-duration=PT1S",
                 "voktrader.order-outbox.batch-size=4",
+                "voktrader.executor.enabled=true",
                 "voktrader.trading.mode=PAPER"
         }
 )
@@ -61,6 +63,9 @@ class OrderDispatchWorkerTest {
     @Autowired
     private ScriptedExecutorClient executor;
 
+    @Autowired
+    private ExecutorProperties executorProperties;
+
     private ExecutorService concurrentWorkers;
 
     @BeforeEach
@@ -68,6 +73,7 @@ class OrderDispatchWorkerTest {
         dispatchRepository.deleteAll();
         intentRepository.deleteAll();
         executor.reset();
+        executorProperties.setEnabled(true);
     }
 
     @AfterEach
@@ -87,6 +93,19 @@ class OrderDispatchWorkerTest {
         assertThat(dispatch.getAttempts()).isZero();
         assertThat(dispatch.getLeaseOwner()).isNull();
         assertThat(dispatch.getLeaseExpiresAt()).isNull();
+        assertThat(executor.submittedCommands()).isEmpty();
+    }
+
+    @Test
+    void disabledExecutorLeavesReadyDispatchUnclaimed() {
+        AcceptedOrderIntent accepted = accept("risk-executor-disabled");
+        executorProperties.setEnabled(false);
+
+        assertThat(worker.runOnce()).isZero();
+
+        OrderDispatchOutboxEntity dispatch = dispatch(accepted.clientOrderId());
+        assertThat(dispatch.getState()).isEqualTo(OrderDispatchState.OUTBOX_READY);
+        assertThat(dispatch.getAttempts()).isZero();
         assertThat(executor.submittedCommands()).isEmpty();
     }
 
