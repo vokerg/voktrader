@@ -1,6 +1,7 @@
 package com.vokerg.voktrader.trade.outbox;
 
 import com.vokerg.voktrader.VoktraderApplication;
+import com.vokerg.voktrader.support.ExecutorTestConfig;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeOrderType;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -30,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
                 "voktrader.trading.mode=PAPER"
         }
 )
+@Import(ExecutorTestConfig.class)
 class TransactionalOrderIntentServiceTest {
     @Autowired
     private TransactionalOrderIntentService service;
