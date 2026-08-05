@@ -94,6 +94,18 @@ public class OrderIntentEntity {
         return entity;
     }
 
+    void markDispatched() {
+        if (state == OrderIntentState.ACCEPTED) {
+            state = OrderIntentState.DISPATCHED;
+        }
+    }
+
+    void markRejected() {
+        if (state == OrderIntentState.ACCEPTED) {
+            state = OrderIntentState.REJECTED;
+        }
+    }
+
     private static String requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + " is required");
