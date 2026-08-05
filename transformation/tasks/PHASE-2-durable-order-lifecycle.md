@@ -8,13 +8,13 @@ The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. 
 
 ## T020 - Create transactional order outbox schema
 
-Status: READY
+Status: IN_PROGRESS
 Priority: P0
 Phase: P2 - Durable order lifecycle
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: vokerg-gpt-5.6-thinking-20260805
+Branch: task/T020-transactional-order-outbox-schema
+PR: #31
+Started: 2026-08-05T04:53:34Z
 Completed:
 Depends On: T016
 Parallelizable: no
