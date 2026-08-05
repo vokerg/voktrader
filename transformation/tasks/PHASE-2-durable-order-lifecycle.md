@@ -2,7 +2,7 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
-The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 is DONE, so T021 is READY. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
+The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 is DONE and T021 is IN_PROGRESS in PR #32. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
 
 ---
 
@@ -40,13 +40,13 @@ Persist accepted entry/exit work before any remote network side effect.
 
 ## T021 - Implement outbox worker and claim lease
 
-Status: READY
+Status: IN_PROGRESS
 Priority: P0
 Phase: P2 - Durable order lifecycle
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: vokerg-gpt-5.6-thinking-20260805
+Branch: task/T021-outbox-worker-claim-lease
+PR: #32
+Started: 2026-08-05T16:22:01Z
 Completed:
 Depends On: T020
 Parallelizable: no
