@@ -2,7 +2,7 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
-The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 and T021 are DONE, and T022 is READY. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
+The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 through T022 are DONE, and T023 is READY. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
 
 ---
 
@@ -73,14 +73,14 @@ Submit accepted outbox work after commit with bounded concurrency and recoverabl
 
 ## T022 - Make executor idempotency durable
 
-Status: READY
+Status: DONE
 Priority: P0
 Phase: P2 - Durable order lifecycle
-Owner: unclaimed
-Branch:
-PR:
-Started:
-Completed:
+Owner: vokerg-gpt-5.6-thinking-20260805
+Branch: task/T022-durable-executor-idempotency
+PR: #33
+Started: 2026-08-05T16:48:28Z
+Completed: 2026-08-05T20:06:27Z
 Depends On: T021
 Parallelizable: no
 
@@ -94,17 +94,17 @@ Ensure sidecar/JVM restart cannot duplicate accepted exchange orders.
 4. Document storage and cleanup policy.
 
 ### Acceptance criteria
-- [ ] Sidecar restart does not forget accepted clientOrderIds.
-- [ ] Retry with the same clientOrderId cannot create a second remote order.
+- [x] Sidecar restart does not forget accepted clientOrderIds.
+- [x] Retry with the same clientOrderId cannot create a second remote order.
 
 ### Required report
-`transformation/reports/T022-YYYY-MM-DD-make-executor-idempotency-durable.md`
+`transformation/reports/T022-2026-08-05-make-executor-idempotency-durable.md`
 
 ---
 
 ## T023 - Handle unknown submission outcomes
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P2 - Durable order lifecycle
 Owner: unclaimed
