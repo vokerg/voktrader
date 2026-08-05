@@ -148,7 +148,7 @@ class OrderDispatchWorkerTest {
     @Test
     void expiredSubmittingLeaseMovesToReconcileWithoutBlindRetry() {
         AcceptedOrderIntent accepted = accept("risk-expired-lease");
-        Instant claimedAt = Instant.parse("2026-08-05T16:00:00Z");
+        Instant claimedAt = Instant.now().plusSeconds(1);
 
         OrderDispatchClaim claim = stateService.claimNext("worker-a", claimedAt).orElseThrow();
         assertThat(dispatch(accepted.clientOrderId()).getState())
@@ -172,7 +172,7 @@ class OrderDispatchWorkerTest {
         accept("risk-concurrent-claim");
         concurrentWorkers = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
-        Instant now = Instant.parse("2026-08-05T16:00:00Z");
+        Instant now = Instant.now().plusSeconds(1);
 
         Future<Optional<OrderDispatchClaim>> first = concurrentWorkers.submit(() -> {
             start.await();
