@@ -18,19 +18,17 @@ import java.util.Optional;
 @Service
 public class TransactionalOrderIntentService {
     private static final String CLIENT_ORDER_PREFIX = "vok-";
+    private static final ObjectMapper PAYLOAD_MAPPER = new ObjectMapper().findAndRegisterModules();
 
     private final OrderIntentRepository intentRepository;
     private final OrderDispatchOutboxRepository dispatchRepository;
-    private final ObjectMapper objectMapper;
 
     public TransactionalOrderIntentService(
             OrderIntentRepository intentRepository,
-            OrderDispatchOutboxRepository dispatchRepository,
-            ObjectMapper objectMapper
+            OrderDispatchOutboxRepository dispatchRepository
     ) {
         this.intentRepository = intentRepository;
         this.dispatchRepository = dispatchRepository;
-        this.objectMapper = objectMapper;
     }
 
     /**
@@ -130,7 +128,7 @@ public class TransactionalOrderIntentService {
 
     private String serialize(TradeIntent intent) {
         try {
-            return objectMapper.writeValueAsString(intent);
+            return PAYLOAD_MAPPER.writeValueAsString(intent);
         } catch (JsonProcessingException exception) {
             throw new IllegalArgumentException("Order intent is not serializable", exception);
         }
