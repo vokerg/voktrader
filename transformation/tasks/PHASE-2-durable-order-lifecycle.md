@@ -2,7 +2,7 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
-The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 is DONE and T021 is IN_PROGRESS in PR #32. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
+The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 and T021 are DONE, and T022 is READY. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
 
 ---
 
@@ -40,14 +40,14 @@ Persist accepted entry/exit work before any remote network side effect.
 
 ## T021 - Implement outbox worker and claim lease
 
-Status: IN_PROGRESS
+Status: DONE
 Priority: P0
 Phase: P2 - Durable order lifecycle
 Owner: vokerg-gpt-5.6-thinking-20260805
 Branch: task/T021-outbox-worker-claim-lease
 PR: #32
 Started: 2026-08-05T16:22:01Z
-Completed:
+Completed: 2026-08-05T16:41:45Z
 Depends On: T020
 Parallelizable: no
 
@@ -62,18 +62,18 @@ Submit accepted outbox work after commit with bounded concurrency and recoverabl
 5. Instrument queue latency and submit RTT.
 
 ### Acceptance criteria
-- [ ] Crash before claim leaves row ready.
-- [ ] Crash after claim eventually reclaims or reconciles.
-- [ ] No two workers submit the same clientOrderId concurrently.
+- [x] Crash before claim leaves row ready.
+- [x] Crash after claim eventually reclaims or reconciles.
+- [x] No two workers submit the same clientOrderId concurrently.
 
 ### Required report
-`transformation/reports/T021-YYYY-MM-DD-implement-outbox-worker-and-claim-lease.md`
+`transformation/reports/T021-2026-08-05-implement-outbox-worker-and-claim-lease.md`
 
 ---
 
 ## T022 - Make executor idempotency durable
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P2 - Durable order lifecycle
 Owner: unclaimed
