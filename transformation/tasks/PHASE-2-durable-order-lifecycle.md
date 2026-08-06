@@ -2,7 +2,7 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
-The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 through T023 are DONE, and T024 is READY. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
+The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 through T023 are DONE, and T024 is IN_PROGRESS in PR #35. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
 
 ---
 
@@ -136,13 +136,13 @@ Replace blind retries with explicit UNKNOWN, RECONCILE, and MANUAL_REVIEW states
 
 ## T024 - Remove executor calls from DB transactions
 
-Status: READY
+Status: IN_PROGRESS
 Priority: P0
 Phase: P2 - Durable order lifecycle
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: vokerg-gpt-5.6-thinking-20260806
+Branch: task/T024-remove-executor-calls-from-db-transactions
+PR: #35
+Started: 2026-08-06T17:22:11Z
 Completed:
 Depends On: T021
 Parallelizable: no
@@ -161,7 +161,7 @@ Guarantee database transactions do not perform remote exchange calls.
 - [ ] Test fails if executor submit is reintroduced inside the acceptance transaction.
 
 ### Required report
-`transformation/reports/T024-YYYY-MM-DD-remove-executor-calls-from-db-transactions.md`
+`transformation/reports/T024-2026-08-06-remove-executor-calls-from-db-transactions.md`
 
 ---
 
