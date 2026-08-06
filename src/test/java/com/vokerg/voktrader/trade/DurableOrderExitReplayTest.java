@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -54,7 +53,10 @@ class DurableOrderExitReplayTest {
         trade.markExitPending();
 
         when(tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
-                exit.strategyId(), exit.marketId(), exit.tokenId(), anyList()
+                exit.strategyId(),
+                exit.marketId(),
+                exit.tokenId(),
+                List.of(TradeStatus.OPEN, TradeStatus.PARTIALLY_OPEN, TradeStatus.PARTIALLY_CLOSED, TradeStatus.EXIT_PENDING)
         )).thenReturn(Optional.of(trade));
         when(intentService.clientOrderIdFor(exit, "risk-exit")).thenReturn("vok-exit");
         when(orderRepository.findByClientOrderId("vok-exit")).thenReturn(Optional.of(pendingOrder));
