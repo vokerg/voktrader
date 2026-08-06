@@ -2,7 +2,7 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
-The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 through T022 are DONE, and T023 is IN_PROGRESS in PR #34. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
+The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 through T023 are DONE, and T024 is READY. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
 
 ---
 
@@ -104,14 +104,14 @@ Ensure sidecar/JVM restart cannot duplicate accepted exchange orders.
 
 ## T023 - Handle unknown submission outcomes
 
-Status: IN_PROGRESS
+Status: DONE
 Priority: P0
 Phase: P2 - Durable order lifecycle
 Owner: vokerg-gpt-5.6-thinking-20260805
 Branch: task/T023-handle-unknown-submission-outcomes
 PR: #34
 Started: 2026-08-05T20:12:19Z
-Completed:
+Completed: 2026-08-06T04:28:08Z
 Depends On: T021, T022
 Parallelizable: no
 
@@ -125,18 +125,18 @@ Replace blind retries with explicit UNKNOWN, RECONCILE, and MANUAL_REVIEW states
 4. Enter manual review when remote truth is not unique.
 
 ### Acceptance criteria
-- [ ] Ambiguous submit never blind-retries.
-- [ ] Unknown state blocks conflicting exposure until resolved.
-- [ ] Operator status shows unknown orders clearly.
+- [x] Ambiguous submit never blind-retries.
+- [x] Unknown state blocks conflicting exposure until resolved.
+- [x] Operator status shows unknown orders clearly.
 
 ### Required report
-`transformation/reports/T023-YYYY-MM-DD-handle-unknown-submission-outcomes.md`
+`transformation/reports/T023-2026-08-06-handle-unknown-submission-outcomes.md`
 
 ---
 
 ## T024 - Remove executor calls from DB transactions
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P2 - Durable order lifecycle
 Owner: unclaimed
