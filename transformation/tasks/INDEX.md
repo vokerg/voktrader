@@ -27,8 +27,8 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 9. `T022` - durable executor idempotency. **DONE** in merged PR #33.
 10. `T042` - unified fee model. Claimed by draft PR #12 and promoted to P0, but remains paused pending current-head reconciliation; do not absorb it into another task.
 11. `T023` - unknown submission outcomes. **DONE** in PR #34; ambiguous submissions are quarantined, unresolved exposure blocks acceptance, and operator evidence drives resolution.
-12. `T024` - remove executor calls from DB transactions. **READY** and next in the durable-order-lifecycle sequence; it is not claimed by PR #34.
-13. `T025` follows T024, then mandatory phase-exit gate `T026`.
+12. `T024` - remove executor calls from DB transactions. **IN_PROGRESS** in draft PR #35; implementation and focused tests are committed, with exact-head CI still queued.
+13. `T025` remains blocked on T024, then mandatory phase-exit gate `T026`.
 14. `T030` and all exchange-truth work remain blocked until T026.
 15. After T055 is DONE, `T054` retained-database rehearsal and `T056` control-plane default-auth proof may proceed in parallel.
 16. `T045` live preflight additionally requires T054 and T056.
@@ -58,7 +58,7 @@ Unrelated feature work is frozen while the integrated Java failure baseline is u
 | [T021](./PHASE-2-durable-order-lifecycle.md#t021) | DONE | P0 | T020 | no | Implement outbox worker and claim lease |
 | [T022](./PHASE-2-durable-order-lifecycle.md#t022) | DONE | P0 | T021 | no | Make executor idempotency durable |
 | [T023](./PHASE-2-durable-order-lifecycle.md#t023) | DONE | P0 | T021, T022 | no | Handle unknown submission outcomes |
-| [T024](./PHASE-2-durable-order-lifecycle.md#t024) | READY | P0 | T021 | no | Remove executor calls from DB transactions |
+| [T024](./PHASE-2-durable-order-lifecycle.md#t024) | IN_PROGRESS | P0 | T021 | no | Remove executor calls from DB transactions |
 | [T025](./PHASE-2-durable-order-lifecycle.md#t025) | BLOCKED | P1 | T021, T024 | no | Rebuild cancellation lifecycle |
 | [T026](./CHECKPOINT-2026-08-03.md#t026---close-durable-order-lifecycle-integration-failures) | BLOCKED | P0 | T020, T021, T022, T023, T024, T025 | no | Close durable order-lifecycle integration failures |
 
