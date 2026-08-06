@@ -20,8 +20,8 @@ class ExecutorSubmissionTransactionBoundaryArchitectureTest {
     private static final Path WORKER = Path.of(
             "src/main/java/com/vokerg/voktrader/trade/outbox/OrderDispatchWorker.java"
     );
-    private static final Path DETACHED_CLIENT = Path.of(
-            "src/main/java/com/vokerg/voktrader/executor/TransactionDetachedPythonExecutorClient.java"
+    private static final Path NETWORK_BOUNDARY = Path.of(
+            "src/main/java/com/vokerg/voktrader/executor/ExecutorTransactionBoundaryBeanPostProcessor.java"
     );
 
     @Test
@@ -53,9 +53,10 @@ class ExecutorSubmissionTransactionBoundaryArchitectureTest {
 
     @Test
     void allExecutorNetworkCallsSuspendAmbientTransactions() throws IOException {
-        String source = Files.readString(DETACHED_CLIENT);
+        String source = Files.readString(NETWORK_BOUNDARY);
 
-        assertThat(source).contains("@Primary");
-        assertThat(source).contains("@Transactional(propagation = Propagation.NOT_SUPPORTED)");
+        assertThat(source).contains("PythonExecutorClient");
+        assertThat(source).contains("TransactionDefinition.PROPAGATION_NOT_SUPPORTED");
+        assertThat(source).contains("TransactionInterceptor");
     }
 }
