@@ -5,6 +5,7 @@ import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
 import com.vokerg.voktrader.trade.model.TradeSide;
+import com.vokerg.voktrader.trade.model.TradeStatus;
 import com.vokerg.voktrader.trade.model.TradeVenue;
 import com.vokerg.voktrader.trade.outbox.AcceptedOrderIntent;
 import com.vokerg.voktrader.trade.outbox.TransactionalOrderIntentService;
@@ -14,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -26,6 +28,13 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class DurableOrderAcceptanceService {
+    private static final List<TradeStatus> EXIT_LOOKUP_STATUSES = List.of(
+            TradeStatus.OPEN,
+            TradeStatus.PARTIALLY_OPEN,
+            TradeStatus.PARTIALLY_CLOSED,
+            TradeStatus.EXIT_PENDING
+    );
+
     private final TransactionalOrderIntentService intentService;
     private final TradeRepository tradeRepository;
     private final TradeOrderRepository tradeOrderRepository;
@@ -71,7 +80,7 @@ public class DurableOrderAcceptanceService {
     }
 
     private OrderLifecycleResult acceptExit(TradeIntent intent, ExecutionMode mode, String riskDecisionId) {
-        TradeEntity trade = findActivePositionTrade(intent).orElse(null);
+        TradeEntity trade = findPositionTradeForExit(intent).orElse(null);
         if (trade == null) {
             return rejected(null, "sell rejected: no open or partially open trade to close");
         }
@@ -87,12 +96,16 @@ public class DurableOrderAcceptanceService {
                     + " can rest on the book while voktrader.executor.require-immediate-fill=true");
         }
 
-        AcceptedOrderIntent accepted = intentService.accept(sellIntent, mode, riskDecisionId);
-        Optional<TradeOrderEntity> replay = tradeOrderRepository.findByClientOrderId(accepted.clientOrderId());
+        String expectedClientOrderId = intentService.clientOrderIdFor(sellIntent, riskDecisionId);
+        Optional<TradeOrderEntity> replay = tradeOrderRepository.findByClientOrderId(expectedClientOrderId);
         if (replay.isPresent()) {
             return current(replay.orElseThrow(), "durable order intent replayed");
         }
+        if (trade.getStatus() == TradeStatus.EXIT_PENDING) {
+            return rejected(trade, "sell rejected: another exit is already pending");
+        }
 
+        AcceptedOrderIntent accepted = intentService.accept(sellIntent, mode, riskDecisionId);
         TradeOrderEntity order = tradeOrderRepository.save(TradeOrderEntity.fromIntent(
                 trade.getId(), sellIntent, mode, TradeVenue.POLYMARKET, accepted.clientOrderId()
         ));
@@ -101,14 +114,14 @@ public class DurableOrderAcceptanceService {
         return OrderLifecycleResult.of(trade, order, true, "accepted for durable dispatch");
     }
 
-    private Optional<TradeEntity> findActivePositionTrade(TradeIntent intent) {
+    private Optional<TradeEntity> findPositionTradeForExit(TradeIntent intent) {
         return intent.botId() == null
                 ? tradeRepository.findFirstByStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
-                        intent.strategyId(), intent.marketId(), intent.tokenId(), TradePositionSupport.EXITABLE_STATUSES
+                        intent.strategyId(), intent.marketId(), intent.tokenId(), EXIT_LOOKUP_STATUSES
                 )
                 : tradeRepository.findFirstByBotIdAndStrategyIdAndMarketIdAndTokenIdAndStatusInOrderByCreatedAtDesc(
                         intent.botId(), intent.strategyId(), intent.marketId(), intent.tokenId(),
-                        TradePositionSupport.EXITABLE_STATUSES
+                        EXIT_LOOKUP_STATUSES
                 );
     }
 
