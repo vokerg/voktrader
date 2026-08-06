@@ -7,8 +7,10 @@ import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -23,8 +25,9 @@ public class DurableOrderCancellationService {
     private final PythonExecutorClient executorClient;
     private final OrderReconciliationService reconciliationService;
     private final OrderCancellationEventEmitter cancellationEventEmitter;
-    private final TransactionTemplate transactionTemplate;
+    private final TransactionOperations transactions;
 
+    @Autowired
     public DurableOrderCancellationService(
             TradeRepository tradeRepository,
             TradeOrderRepository tradeOrderRepository,
@@ -33,22 +36,40 @@ public class DurableOrderCancellationService {
             OrderCancellationEventEmitter cancellationEventEmitter,
             PlatformTransactionManager transactionManager
     ) {
+        this(
+                tradeRepository,
+                tradeOrderRepository,
+                executorClient,
+                reconciliationService,
+                cancellationEventEmitter,
+                new TransactionTemplate(transactionManager)
+        );
+    }
+
+    DurableOrderCancellationService(
+            TradeRepository tradeRepository,
+            TradeOrderRepository tradeOrderRepository,
+            PythonExecutorClient executorClient,
+            OrderReconciliationService reconciliationService,
+            OrderCancellationEventEmitter cancellationEventEmitter,
+            TransactionOperations transactions
+    ) {
         this.tradeRepository = tradeRepository;
         this.tradeOrderRepository = tradeOrderRepository;
         this.executorClient = executorClient;
         this.reconciliationService = reconciliationService;
         this.cancellationEventEmitter = cancellationEventEmitter;
-        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.transactions = transactions;
     }
 
     public OrderLifecycleResult cancel(String localOrRemoteOrderId, String reason) {
-        PendingCancellation pending = transactionTemplate.execute(status -> persistRequest(localOrRemoteOrderId, reason));
+        PendingCancellation pending = transactions.execute(status -> persistRequest(localOrRemoteOrderId, reason));
         if (pending == null) {
             throw new IllegalStateException("Cancellation request transaction returned no result");
         }
 
         ExecutorCancelOrderResponse response = executorClient.cancelOrder(pending.remoteOrderId());
-        transactionTemplate.executeWithoutResult(status -> persistRemoteResponse(pending.orderId(), response));
+        transactions.executeWithoutResult(status -> persistRemoteResponse(pending.orderId(), response));
         return reconciliationService.reconcileOrder(pending.localOrderId(), OrderReconciliationSource.POST_CANCEL);
     }
 
