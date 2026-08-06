@@ -2,6 +2,7 @@ package com.vokerg.voktrader.trade.outbox;
 
 import com.vokerg.voktrader.VoktraderApplication;
 import com.vokerg.voktrader.api.runtime.OrderDispatchUncertaintyController;
+import com.vokerg.voktrader.executor.ExecutorOrderResponse;
 import com.vokerg.voktrader.executor.ExecutorSubmissionException;
 import com.vokerg.voktrader.executor.ExecutorSubmissionFailureType;
 import com.vokerg.voktrader.executor.ExecutorProperties;
@@ -91,6 +92,37 @@ class UnknownSubmissionOutcomeTest {
                     accepted.clientOrderId(), "remote reconciliation found no matching order", Instant.now()
             );
         }
+    }
+
+    @Test
+    void nonTerminalHttp200ResponsePersistsUnknownInsteadOfFalseRejection() {
+        AcceptedOrderIntent accepted = acceptanceService.accept(
+                intent(10), ExecutionMode.LIVE, "risk-http-200-failed"
+        );
+        executor.onSubmit(new ExecutorOrderResponse(
+                false,
+                false,
+                "FAILED",
+                null,
+                null,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                "exchange client failed after submission began",
+                "{\"status\":\"FAILED\"}",
+                Instant.now()
+        ));
+
+        assertThat(worker.runOnce()).isOne();
+
+        OrderDispatchOutboxEntity dispatch = dispatchRepository
+                .findByClientOrderId(accepted.clientOrderId()).orElseThrow();
+        assertThat(dispatch.getState()).isEqualTo(OrderDispatchState.UNKNOWN);
+        assertThat(dispatch.getUnknownOutcomeReason()).isEqualTo("EXECUTOR_CRASH");
+        assertThat(dispatch.getUnknownOutcomeDetails()).contains("non-terminal submission response");
+        assertThat(intentRepository.findByClientOrderId(accepted.clientOrderId()).orElseThrow().getState())
+                .isEqualTo(OrderIntentState.ACCEPTED);
+        assertThat(stateService.claimNext("retry-worker", Instant.now().plusSeconds(10))).isEmpty();
     }
 
     @Test
