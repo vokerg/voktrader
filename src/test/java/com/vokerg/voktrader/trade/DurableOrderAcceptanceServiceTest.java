@@ -76,6 +76,7 @@ class DurableOrderAcceptanceServiceTest {
         ordering.verify(intentService).accept(intent, ExecutionMode.LIVE, "risk-1");
         ordering.verify(tradeRepository).save(any(TradeEntity.class));
         ordering.verify(tradeOrderRepository).save(any(TradeOrderEntity.class));
+        ordering.verify(tradeRepository).save(any(TradeEntity.class));
     }
 
     @Test
