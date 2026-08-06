@@ -37,8 +37,12 @@ public class OrderDispatchLifecycleProjector {
             if (!response.accepted()) {
                 order.markRejected(response.safeMessage(), response.rawResponse());
                 tradeOrderRepository.save(order);
-                if (trade != null && order.getSide() == TradeSide.BUY) {
-                    trade.markFailed(response.safeMessage());
+                if (trade != null) {
+                    if (order.getSide() == TradeSide.BUY) {
+                        trade.markFailed(response.safeMessage());
+                    } else {
+                        restorePositionAfterExitFailure(trade);
+                    }
                     tradeRepository.save(trade);
                 }
                 return;
@@ -95,11 +99,49 @@ public class OrderDispatchLifecycleProjector {
             order.markRejected(details, details);
             tradeOrderRepository.save(order);
             TradeEntity trade = linkedTrade(order);
-            if (trade != null && order.getSide() == TradeSide.BUY) {
-                trade.markFailed(details);
+            if (trade != null) {
+                if (order.getSide() == TradeSide.BUY) {
+                    trade.markFailed(details);
+                } else {
+                    restorePositionAfterExitFailure(trade);
+                }
                 tradeRepository.save(trade);
             }
         });
+    }
+
+    private void restorePositionAfterExitFailure(TradeEntity trade) {
+        BigDecimal exitedShares = zeroIfNull(trade.getExitFilledShares());
+        if (exitedShares.signum() > 0) {
+            trade.markPartiallyClosed(
+                    trade.getExitAvgPrice(),
+                    trade.getExitFilledShares(),
+                    trade.getExitFilledUsd(),
+                    trade.getExitFeeUsd(),
+                    trade.getExitCompletedAt()
+            );
+            return;
+        }
+
+        BigDecimal entryShares = zeroIfNull(trade.getEntryFilledShares());
+        BigDecimal intendedShares = zeroIfNull(trade.getIntendedShares());
+        if (intendedShares.signum() > 0 && entryShares.compareTo(intendedShares) < 0) {
+            trade.markPartiallyOpen(
+                    trade.getEntryAvgPrice(),
+                    trade.getEntryFilledShares(),
+                    trade.getEntryFilledUsd(),
+                    trade.getEntryFeeUsd(),
+                    trade.getEntryCompletedAt()
+            );
+        } else {
+            trade.markOpen(
+                    trade.getEntryAvgPrice(),
+                    trade.getEntryFilledShares(),
+                    trade.getEntryFilledUsd(),
+                    trade.getEntryFeeUsd(),
+                    trade.getEntryCompletedAt()
+            );
+        }
     }
 
     private TradeEntity linkedTrade(TradeOrderEntity order) {
@@ -133,6 +175,10 @@ public class OrderDispatchLifecycleProjector {
 
     private <T> T firstNonNull(T primary, T fallback) {
         return primary != null ? primary : fallback;
+    }
+
+    private BigDecimal zeroIfNull(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     private boolean equalByValue(BigDecimal left, BigDecimal right) {
