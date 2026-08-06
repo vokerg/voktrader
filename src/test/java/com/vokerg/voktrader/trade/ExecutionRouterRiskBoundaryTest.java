@@ -20,9 +20,9 @@ import static org.mockito.Mockito.verify;
 class ExecutionRouterRiskBoundaryTest {
     private final TradingProperties properties = new TradingProperties();
     private final PaperExecutionService paperExecutionService = mock(PaperExecutionService.class);
-    private final LiveExecutionService liveExecutionService = mock(LiveExecutionService.class);
+    private final LiveOrderGateway liveOrderGateway = mock(LiveOrderGateway.class);
     private final ExecutionRouter router = new ExecutionRouter(
-            properties, paperExecutionService, liveExecutionService);
+            properties, paperExecutionService, liveOrderGateway);
 
     @Test
     void rawBacktestBuyCannotUseExecutionOverrideToBypassRisk() {
@@ -60,7 +60,10 @@ class ExecutionRouterRiskBoundaryTest {
 
         assertThat(result.get().accepted()).isTrue();
         verify(paperExecutionService, never()).execute(entry.tradeIntent());
-        verify(liveExecutionService, never()).execute(entry.tradeIntent(), ExecutionMode.BACKTEST);
+        verify(liveOrderGateway, never()).submitOrder(
+                entry.tradeIntent(), StrategyInstanceKey.of(entry.tradeIntent().botId(), entry.tradeIntent().strategyId()),
+                ExecutionMode.BACKTEST
+        );
     }
 
     private EntryIntent entryIntent() {
