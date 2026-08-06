@@ -10,6 +10,9 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ExecutorSubmissionTransactionBoundaryArchitectureTest {
+    private static final Path EXECUTION_ROUTER = Path.of(
+            "src/main/java/com/vokerg/voktrader/trade/ExecutionRouter.java"
+    );
     private static final Path LIVE_GATEWAY = Path.of(
             "src/main/java/com/vokerg/voktrader/trade/LiveOrderGateway.java"
     );
@@ -25,13 +28,17 @@ class ExecutorSubmissionTransactionBoundaryArchitectureTest {
     );
 
     @Test
-    void liveGatewayRoutesSubmissionThroughTransactionalOutboxAcceptance() throws IOException {
-        String source = Files.readString(LIVE_GATEWAY);
+    void allLiveRoutersReachTransactionalOutboxAcceptance() throws IOException {
+        String routerSource = Files.readString(EXECUTION_ROUTER);
+        String gatewaySource = Files.readString(LIVE_GATEWAY);
 
-        assertThat(source).contains("DurableOrderAcceptanceService");
-        assertThat(source).contains("acceptanceService.accept(");
-        assertThat(source).doesNotContain("orderManager.submitOrder(");
-        assertThat(source).doesNotContain("PythonExecutorClient");
+        assertThat(routerSource).contains("LiveOrderGateway");
+        assertThat(routerSource).contains("liveOrderGateway.submitOrder(");
+        assertThat(routerSource).doesNotContain("liveExecutionService.execute(");
+        assertThat(gatewaySource).contains("DurableOrderAcceptanceService");
+        assertThat(gatewaySource).contains("acceptanceService.accept(");
+        assertThat(gatewaySource).doesNotContain("orderManager.submitOrder(");
+        assertThat(gatewaySource).doesNotContain("PythonExecutorClient");
     }
 
     @Test
