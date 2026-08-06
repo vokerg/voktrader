@@ -2,6 +2,7 @@ package com.vokerg.voktrader.trade.outbox;
 
 import com.vokerg.voktrader.executor.ExecutorOrderResponse;
 import com.vokerg.voktrader.executor.ExecutorSubmissionException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -21,6 +22,7 @@ public class OrderDispatchStateService {
 
     private final OrderDispatchOutboxRepository dispatchRepository;
     private final OrderOutboxProperties properties;
+    private OrderDispatchLifecycleProjector lifecycleProjector;
 
     public OrderDispatchStateService(
             OrderDispatchOutboxRepository dispatchRepository,
@@ -28,6 +30,11 @@ public class OrderDispatchStateService {
     ) {
         this.dispatchRepository = dispatchRepository;
         this.properties = properties;
+    }
+
+    @Autowired
+    void setLifecycleProjector(OrderDispatchLifecycleProjector lifecycleProjector) {
+        this.lifecycleProjector = lifecycleProjector;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -41,10 +48,12 @@ public class OrderDispatchStateService {
         OrderIntentEntity intent = dispatch.getOrderIntent();
         long queueLatencyMs = Math.max(0L, Duration.between(intent.getAcceptedAt(), now).toMillis());
         dispatch.claim(workerId, now, now.plus(properties.getLeaseDuration()), queueLatencyMs);
-        return Optional.of(new OrderDispatchClaim(
+        OrderDispatchClaim claim = new OrderDispatchClaim(
                 dispatch.getId(), dispatch.getClientOrderId(), workerId,
                 intent.getExecutionMode(), intent.getPayloadJson(), intent.getAcceptedAt(), now
-        ));
+        );
+        if (lifecycleProjector != null) lifecycleProjector.markSubmitting(claim);
+        return Optional.of(claim);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -55,6 +64,9 @@ public class OrderDispatchStateService {
         );
         for (OrderDispatchOutboxEntity dispatch : expired) {
             dispatch.markExpiredLeaseForReconcile(EXPIRED_LEASE_REASON, EXPIRED_LEASE_DETAILS, now);
+            if (lifecycleProjector != null) {
+                lifecycleProjector.markReconcile(dispatch.getClientOrderId(), EXPIRED_LEASE_DETAILS);
+            }
         }
         return expired.size();
     }
@@ -77,6 +89,7 @@ public class OrderDispatchStateService {
             dispatch.markRejected(claim.leaseOwner(), response, now, submitRttMs);
             dispatch.getOrderIntent().markRejected();
         }
+        if (lifecycleProjector != null) lifecycleProjector.recordResponse(claim, response);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -106,6 +119,9 @@ public class OrderDispatchStateService {
         if (updated != 1) {
             throw new IllegalStateException("Claimed dispatch is no longer owned by this worker: " + claim.dispatchId());
         }
+        if (lifecycleProjector != null) {
+            lifecycleProjector.recordAmbiguousFailure(claim.clientOrderId(), truncate(details, 2000));
+        }
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -115,6 +131,7 @@ public class OrderDispatchStateService {
         if (dispatchRepository.markManualReview(clientOrderId, truncate(details, 2000), now) != 1) {
             throw new IllegalStateException("Dispatch is not unresolved: " + clientOrderId);
         }
+        if (lifecycleProjector != null) lifecycleProjector.recordAmbiguousFailure(clientOrderId, details);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -126,6 +143,7 @@ public class OrderDispatchStateService {
             throw new IllegalStateException("Dispatch is not unresolved: " + clientOrderId);
         }
         dispatchRepository.findByClientOrderId(clientOrderId).orElseThrow().getOrderIntent().markDispatched();
+        if (lifecycleProjector != null) lifecycleProjector.resolveAccepted(clientOrderId, remoteOrderId, details);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -136,6 +154,7 @@ public class OrderDispatchStateService {
             throw new IllegalStateException("Dispatch is not unresolved: " + clientOrderId);
         }
         dispatchRepository.findByClientOrderId(clientOrderId).orElseThrow().getOrderIntent().markRejected();
+        if (lifecycleProjector != null) lifecycleProjector.resolveRejected(clientOrderId, details);
     }
 
     private OrderDispatchOutboxEntity requiredDispatch(Long id) {
