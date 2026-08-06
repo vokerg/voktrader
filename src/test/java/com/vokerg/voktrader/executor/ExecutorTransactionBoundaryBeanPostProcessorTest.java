@@ -42,8 +42,8 @@ class ExecutorTransactionBoundaryBeanPostProcessorTest {
         verify(transactionManager).commit(transactionStatus);
     }
 
-    private static final class RecordingExecutorClient extends PythonExecutorClient {
-        private RecordingExecutorClient() {
+    static class RecordingExecutorClient extends PythonExecutorClient {
+        RecordingExecutorClient() {
             super(
                     new ExecutorProperties(),
                     mock(WebClient.Builder.class),
