@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vokerg.voktrader.executor.ExecutorOrderCommand;
 import com.vokerg.voktrader.executor.ExecutorOrderResponse;
 import com.vokerg.voktrader.executor.ExecutorProperties;
+import com.vokerg.voktrader.executor.ExecutorSubmissionException;
+import com.vokerg.voktrader.executor.ExecutorSubmissionFailureType;
 import com.vokerg.voktrader.executor.PythonExecutorClient;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
@@ -82,6 +84,7 @@ public class OrderDispatchWorker {
                     claim.executionMode() != ExecutionMode.LIVE || executorProperties.isDryRun()
             );
             ExecutorOrderResponse response = executorClient.submit(command);
+            requireTerminalSubmissionOutcome(response);
             long submitRttMs = elapsedMillis(startedNanos);
             stateService.recordResponse(claim, response, Instant.now(), submitRttMs);
             log.info(
@@ -96,6 +99,27 @@ public class OrderDispatchWorker {
                     claim.clientOrderId(), queueLatencyMillis(claim), submitRttMs, workerId, failure
             );
         }
+    }
+
+    private static void requireTerminalSubmissionOutcome(ExecutorOrderResponse response) {
+        if (response.accepted() || response.isDefinitiveRejection()) return;
+
+        String status = response.status();
+        ExecutorSubmissionFailureType failureType;
+        if (status == null || status.isBlank()) {
+            failureType = ExecutorSubmissionFailureType.MALFORMED_RESPONSE;
+        } else if (status.equalsIgnoreCase("FAILED") || status.equalsIgnoreCase("ERROR")) {
+            failureType = ExecutorSubmissionFailureType.EXECUTOR_CRASH;
+        } else {
+            failureType = ExecutorSubmissionFailureType.UNKNOWN_FAILURE;
+        }
+        throw new ExecutorSubmissionException(
+                failureType,
+                "Executor returned a non-terminal submission response status=" + status + ": " + response.safeMessage(),
+                null,
+                response.rawResponse(),
+                null
+        );
     }
 
     private TradeIntent deserialize(String payloadJson) {
