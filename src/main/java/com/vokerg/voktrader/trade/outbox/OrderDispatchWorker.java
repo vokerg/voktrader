@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vokerg.voktrader.executor.ExecutorOrderCommand;
 import com.vokerg.voktrader.executor.ExecutorOrderResponse;
 import com.vokerg.voktrader.executor.ExecutorProperties;
+import com.vokerg.voktrader.executor.ExecutorSubmissionException;
+import com.vokerg.voktrader.executor.ExecutorSubmissionFailureType;
 import com.vokerg.voktrader.executor.PythonExecutorClient;
 import com.vokerg.voktrader.trade.TradeIntent;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
@@ -48,24 +50,14 @@ public class OrderDispatchWorker {
             initialDelayString = "${voktrader.order-outbox.poll-ms:1000}"
     )
     public void poll() {
-        if (!properties.isEnabled()) {
-            return;
-        }
-        runOnce();
+        if (properties.isEnabled()) runOnce();
     }
 
     public int runOnce() {
         Instant cycleStartedAt = Instant.now();
-        int reconciled = stateService.reconcileExpiredLeases(
-                cycleStartedAt,
-                properties.getBatchSize()
-        );
+        int reconciled = stateService.reconcileExpiredLeases(cycleStartedAt, properties.getBatchSize());
         if (reconciled > 0) {
-            log.warn(
-                    "Moved expired order dispatch leases to reconciliation count={} workerId={}",
-                    reconciled,
-                    workerId
-            );
+            log.warn("Moved expired order dispatch leases to reconciliation count={} workerId={}", reconciled, workerId);
         }
         if (!executorProperties.isEnabled()) {
             log.debug("Order outbox claim skipped because the Python executor is disabled");
@@ -75,9 +67,7 @@ public class OrderDispatchWorker {
         int processed = 0;
         for (int index = 0; index < properties.getBatchSize(); index++) {
             Optional<OrderDispatchClaim> next = stateService.claimNext(workerId, Instant.now());
-            if (next.isEmpty()) {
-                break;
-            }
+            if (next.isEmpty()) break;
             dispatch(next.orElseThrow());
             processed++;
         }
@@ -86,7 +76,6 @@ public class OrderDispatchWorker {
 
     private void dispatch(OrderDispatchClaim claim) {
         long startedNanos = System.nanoTime();
-        ExecutorOrderResponse response;
         try {
             TradeIntent intent = deserialize(claim.payloadJson());
             ExecutorOrderCommand command = ExecutorOrderCommand.fromIntent(
@@ -94,33 +83,42 @@ public class OrderDispatchWorker {
                     claim.clientOrderId(),
                     claim.executionMode() != ExecutionMode.LIVE || executorProperties.isDryRun()
             );
-            response = executorClient.submit(command);
+            ExecutorOrderResponse response = executorClient.submit(command);
+            requireTerminalSubmissionOutcome(response);
+            long submitRttMs = elapsedMillis(startedNanos);
+            stateService.recordResponse(claim, response, Instant.now(), submitRttMs);
+            log.info(
+                    "Order dispatch completed clientOrderId={} accepted={} status={} queueLatencyMs={} submitRttMs={} workerId={}",
+                    claim.clientOrderId(), response.accepted(), response.status(), queueLatencyMillis(claim), submitRttMs, workerId
+            );
         } catch (RuntimeException failure) {
             long submitRttMs = elapsedMillis(startedNanos);
-            stateService.recordAmbiguousFailure(claim, failure, Instant.now());
+            stateService.recordAmbiguousFailure(claim, failure, Instant.now(), submitRttMs);
             log.error(
-                    "Order dispatch outcome requires reconciliation clientOrderId={} "
-                            + "queueLatencyMs={} submitRttMs={} workerId={}",
-                    claim.clientOrderId(),
-                    queueLatencyMillis(claim),
-                    submitRttMs,
-                    workerId,
-                    failure
+                    "Order dispatch outcome is UNKNOWN and blocks further acceptance clientOrderId={} queueLatencyMs={} submitRttMs={} workerId={}",
+                    claim.clientOrderId(), queueLatencyMillis(claim), submitRttMs, workerId, failure
             );
-            return;
         }
+    }
 
-        long submitRttMs = elapsedMillis(startedNanos);
-        stateService.recordResponse(claim, response, Instant.now(), submitRttMs);
-        log.info(
-                "Order dispatch completed clientOrderId={} accepted={} status={} "
-                        + "queueLatencyMs={} submitRttMs={} workerId={}",
-                claim.clientOrderId(),
-                response.accepted(),
-                response.status(),
-                queueLatencyMillis(claim),
-                submitRttMs,
-                workerId
+    private static void requireTerminalSubmissionOutcome(ExecutorOrderResponse response) {
+        if (response.accepted() || response.isDefinitiveRejection()) return;
+
+        String status = response.status();
+        ExecutorSubmissionFailureType failureType;
+        if (status == null || status.isBlank()) {
+            failureType = ExecutorSubmissionFailureType.MALFORMED_RESPONSE;
+        } else if (status.equalsIgnoreCase("FAILED") || status.equalsIgnoreCase("ERROR")) {
+            failureType = ExecutorSubmissionFailureType.EXECUTOR_CRASH;
+        } else {
+            failureType = ExecutorSubmissionFailureType.UNKNOWN_FAILURE;
+        }
+        throw new ExecutorSubmissionException(
+                failureType,
+                "Executor returned a non-terminal submission response status=" + status + ": " + response.safeMessage(),
+                null,
+                response.rawResponse(),
+                null
         );
     }
 
@@ -141,9 +139,7 @@ public class OrderDispatchWorker {
     }
 
     private static String resolveWorkerId(String configuredWorkerId) {
-        if (configuredWorkerId != null && !configuredWorkerId.isBlank()) {
-            return configuredWorkerId;
-        }
+        if (configuredWorkerId != null && !configuredWorkerId.isBlank()) return configuredWorkerId;
         return hostname() + "-" + UUID.randomUUID();
     }
 

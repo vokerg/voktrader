@@ -32,6 +32,10 @@ public record ExecutorOrderResponse(
         );
     }
 
+    public boolean isDefinitiveRejection() {
+        return !accepted && status != null && status.equalsIgnoreCase("REJECTED");
+    }
+
     public String safeMessage() {
         if (message != null && !message.isBlank()) {
             return message;

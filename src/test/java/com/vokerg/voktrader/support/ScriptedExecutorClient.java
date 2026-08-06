@@ -9,7 +9,6 @@ import com.vokerg.voktrader.executor.ExecutorOrderStatusResponse;
 import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.executor.PythonExecutorClient;
 import com.vokerg.voktrader.marketdata.TickSizeService;
-
 import org.springframework.web.reactive.function.client.WebClient;
 import tools.jackson.databind.ObjectMapper;
 
@@ -24,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.mockito.Mockito.mock;
 
 public class ScriptedExecutorClient extends PythonExecutorClient {
-    private final Deque<ExecutorOrderResponse> submitResponses = new ArrayDeque<>();
+    private final Deque<Object> submitOutcomes = new ArrayDeque<>();
     private final Map<String, Deque<ExecutorOrderStatusResponse>> orderStatuses = new ConcurrentHashMap<>();
     private final Map<String, Deque<ExecutorFillsResponse>> fills = new ConcurrentHashMap<>();
     private final Map<String, Deque<ExecutorCancelOrderResponse>> cancels = new ConcurrentHashMap<>();
@@ -35,66 +34,37 @@ public class ScriptedExecutorClient extends PythonExecutorClient {
     }
 
     public synchronized void reset() {
-        submitResponses.clear();
-        orderStatuses.clear();
-        fills.clear();
-        cancels.clear();
-        submittedCommands.clear();
+        submitOutcomes.clear(); orderStatuses.clear(); fills.clear(); cancels.clear(); submittedCommands.clear();
     }
 
-    public synchronized void resetCommands() {
-        submittedCommands.clear();
-    }
-
-    public synchronized void onSubmit(ExecutorOrderResponse response) {
-        submitResponses.addLast(response);
-    }
-
-    public synchronized void onGetOrderStatus(String remoteOrderId, ExecutorOrderStatusResponse... responses) {
-        queue(orderStatuses, remoteOrderId, responses);
-    }
-
-    public synchronized void onListFills(String remoteOrderId, ExecutorFillsResponse... responses) {
-        queue(fills, remoteOrderId, responses);
-    }
-
-    public synchronized void onCancel(String remoteOrderId, ExecutorCancelOrderResponse... responses) {
-        queue(cancels, remoteOrderId, responses);
-    }
-
-    public synchronized List<ExecutorOrderCommand> submittedCommands() {
-        return List.copyOf(submittedCommands);
-    }
-
-    public synchronized ExecutorOrderCommand lastSubmittedCommand() {
-        return submittedCommands.isEmpty() ? null : submittedCommands.getLast();
-    }
+    public synchronized void resetCommands() { submittedCommands.clear(); }
+    public synchronized void onSubmit(ExecutorOrderResponse response) { submitOutcomes.addLast(response); }
+    public synchronized void onSubmitFailure(RuntimeException failure) { submitOutcomes.addLast(failure); }
+    public synchronized void onGetOrderStatus(String id, ExecutorOrderStatusResponse... responses) { queue(orderStatuses, id, responses); }
+    public synchronized void onListFills(String id, ExecutorFillsResponse... responses) { queue(fills, id, responses); }
+    public synchronized void onCancel(String id, ExecutorCancelOrderResponse... responses) { queue(cancels, id, responses); }
+    public synchronized List<ExecutorOrderCommand> submittedCommands() { return List.copyOf(submittedCommands); }
+    public synchronized ExecutorOrderCommand lastSubmittedCommand() { return submittedCommands.isEmpty() ? null : submittedCommands.getLast(); }
 
     @Override
     public synchronized ExecutorOrderResponse submit(ExecutorOrderCommand command) {
         submittedCommands.add(command);
-        if (submitResponses.isEmpty()) {
-            return ExecutorOrderResponse.rejected("No scripted submit response");
-        }
-        return submitResponses.removeFirst();
+        if (submitOutcomes.isEmpty()) return ExecutorOrderResponse.rejected("No scripted submit response");
+        Object outcome = submitOutcomes.removeFirst();
+        if (outcome instanceof RuntimeException failure) throw failure;
+        return (ExecutorOrderResponse) outcome;
     }
 
     @Override
     public synchronized ExecutorCancelOrderResponse cancelOrder(String remoteOrderId) {
-        return nextOrDefault(
-                cancels,
-                remoteOrderId,
-                ExecutorCancelOrderResponse.failure(remoteOrderId, "UNSCRIPTED", "No scripted cancel response")
-        );
+        return nextOrDefault(cancels, remoteOrderId,
+                ExecutorCancelOrderResponse.failure(remoteOrderId, "UNSCRIPTED", "No scripted cancel response"));
     }
 
     @Override
     public synchronized ExecutorOrderStatusResponse getOrderStatus(String remoteOrderId) {
-        return nextOrDefault(
-                orderStatuses,
-                remoteOrderId,
-                ExecutorOrderStatusResponse.failure(remoteOrderId, "UNSCRIPTED", "No scripted order status response")
-        );
+        return nextOrDefault(orderStatuses, remoteOrderId,
+                ExecutorOrderStatusResponse.failure(remoteOrderId, "UNSCRIPTED", "No scripted order status response"));
     }
 
     @Override
@@ -104,39 +74,23 @@ public class ScriptedExecutorClient extends PythonExecutorClient {
 
     @Override
     public synchronized ExecutorFillsResponse listFills(
-            String remoteOrderId,
-            String marketId,
-            String tokenId,
+            String remoteOrderId, String marketId, String tokenId,
             com.vokerg.voktrader.trade.model.TradeSide side,
-            java.math.BigDecimal price,
-            java.math.BigDecimal shares,
-            Instant since
+            java.math.BigDecimal price, java.math.BigDecimal shares, Instant since
     ) {
-        return nextOrDefault(
-                fills,
-                remoteOrderId,
-                new ExecutorFillsResponse(true, List.of(), "[]", null)
-        );
+        return nextOrDefault(fills, remoteOrderId, new ExecutorFillsResponse(true, List.of(), "[]", null));
     }
 
     private <T> void queue(Map<String, Deque<T>> target, String key, T... values) {
         Deque<T> deque = new ArrayDeque<>();
-        if (values != null) {
-            for (T value : values) {
-                deque.addLast(value);
-            }
-        }
+        if (values != null) for (T value : values) deque.addLast(value);
         target.put(key, deque);
     }
 
     private <T> T nextOrDefault(Map<String, Deque<T>> target, String key, T fallback) {
         Deque<T> deque = target.get(key);
-        if (deque == null || deque.isEmpty()) {
-            return fallback;
-        }
-        if (deque.size() == 1) {
-            return deque.peekFirst();
-        }
+        if (deque == null || deque.isEmpty()) return fallback;
+        if (deque.size() == 1) return deque.peekFirst();
         return deque.removeFirst();
     }
 }

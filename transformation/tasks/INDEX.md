@@ -24,12 +24,14 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 6. `T015` - effective risk gate chain. **READY** in the base ledger but claim-locked by open draft PR #30; do not create a duplicate claim.
 7. `T020` - transactional order outbox schema. **DONE** in merged PR #31.
 8. `T021` - outbox worker and claim lease. **DONE** in merged PR #32.
-9. `T022` - durable executor idempotency. **DONE** in draft PR #33.
+9. `T022` - durable executor idempotency. **DONE** in merged PR #33.
 10. `T042` - unified fee model. Claimed by draft PR #12 and promoted to P0, but remains paused pending current-head reconciliation; do not absorb it into another task.
-11. `T023` is READY; T024 and T025 follow it, then mandatory phase-exit gate `T026`.
-12. `T030` and all exchange-truth work remain blocked until T026.
-13. After T055 is DONE, `T054` retained-database rehearsal and `T056` control-plane default-auth proof may proceed in parallel.
-14. `T045` live preflight additionally requires T054 and T056.
+11. `T023` - unknown submission outcomes. **DONE** in PR #34; ambiguous submissions are quarantined, unresolved exposure blocks acceptance, and operator evidence drives resolution.
+12. `T024` - remove executor calls from DB transactions. **READY** and next in the durable-order-lifecycle sequence; it is not claimed by PR #34.
+13. `T025` follows T024, then mandatory phase-exit gate `T026`.
+14. `T030` and all exchange-truth work remain blocked until T026.
+15. After T055 is DONE, `T054` retained-database rehearsal and `T056` control-plane default-auth proof may proceed in parallel.
+16. `T045` live preflight additionally requires T054 and T056.
 
 Unrelated feature work is frozen while the integrated Java failure baseline is unchanged or worsening. See [`CHECKPOINT-2026-08-03.md`](./CHECKPOINT-2026-08-03.md).
 
@@ -55,8 +57,8 @@ Unrelated feature work is frozen while the integrated Java failure baseline is u
 | [T020](./PHASE-2-durable-order-lifecycle.md#t020) | DONE | P0 | T016 | no | Create transactional order outbox schema |
 | [T021](./PHASE-2-durable-order-lifecycle.md#t021) | DONE | P0 | T020 | no | Implement outbox worker and claim lease |
 | [T022](./PHASE-2-durable-order-lifecycle.md#t022) | DONE | P0 | T021 | no | Make executor idempotency durable |
-| [T023](./PHASE-2-durable-order-lifecycle.md#t023) | READY | P0 | T021, T022 | no | Handle unknown submission outcomes |
-| [T024](./PHASE-2-durable-order-lifecycle.md#t024) | BLOCKED | P0 | T021 | no | Remove executor calls from DB transactions |
+| [T023](./PHASE-2-durable-order-lifecycle.md#t023) | DONE | P0 | T021, T022 | no | Handle unknown submission outcomes |
+| [T024](./PHASE-2-durable-order-lifecycle.md#t024) | READY | P0 | T021 | no | Remove executor calls from DB transactions |
 | [T025](./PHASE-2-durable-order-lifecycle.md#t025) | BLOCKED | P1 | T021, T024 | no | Rebuild cancellation lifecycle |
 | [T026](./CHECKPOINT-2026-08-03.md#t026---close-durable-order-lifecycle-integration-failures) | BLOCKED | P0 | T020, T021, T022, T023, T024, T025 | no | Close durable order-lifecycle integration failures |
 
