@@ -6,10 +6,15 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class LiveOrderGateway implements OrderGateway {
-    private final OrderManager orderManager;
+    private final DurableOrderAcceptanceService acceptanceService;
+    private final DurableOrderCancellationService cancellationService;
 
-    public LiveOrderGateway(OrderManager orderManager) {
-        this.orderManager = orderManager;
+    public LiveOrderGateway(
+            DurableOrderAcceptanceService acceptanceService,
+            DurableOrderCancellationService cancellationService
+    ) {
+        this.acceptanceService = acceptanceService;
+        this.cancellationService = cancellationService;
     }
 
     @Override
@@ -18,11 +23,27 @@ public class LiveOrderGateway implements OrderGateway {
             String message = "BUY rejected: approved central entry risk decision is required";
             return new OrderLifecycleResult(false, null, null, null, null, null, null, message, message);
         }
-        return orderManager.submitOrder(intent, mode);
+        return acceptanceService.accept(intent, mode, riskDecisionId(intent, mode));
     }
 
     @Override
     public OrderLifecycleResult cancelOrder(String localOrderId, String reason) {
-        return orderManager.cancelOrder(localOrderId, reason);
+        return cancellationService.cancel(localOrderId, reason);
+    }
+
+    private String riskDecisionId(TradeIntent intent, ExecutionMode mode) {
+        return EntryRiskDecisionContext.current()
+                .filter(decision -> decision.request().matches(intent, mode))
+                .map(EntryRiskDecisionContext.Decision::assessment)
+                .map(RiskAssessment::correlationId)
+                .filter(value -> value != null && !value.isBlank())
+                .orElseGet(() -> "lifecycle:"
+                        + mode + ":"
+                        + (intent.botId() == null ? "default" : intent.botId()) + ":"
+                        + intent.strategyId() + ":"
+                        + intent.marketId() + ":"
+                        + intent.tokenId() + ":"
+                        + intent.side() + ":"
+                        + intent.decisionAt().toEpochMilli());
     }
 }
