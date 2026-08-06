@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 public class ExecutionRouter {
     private final TradingProperties properties;
     private final PaperExecutionService paperExecutionService;
-    private final LiveExecutionService liveExecutionService;
+    private final LiveOrderGateway liveOrderGateway;
 
     public TradeExecutionResult route(TradeIntent intent) {
         ExecutionMode mode = properties.getMode();
@@ -36,7 +36,14 @@ public class ExecutionRouter {
                 mode, intent.strategyId(), intent.marketId(), intent.tokenId(), intent.outcome(), intent.side(), intent.amountUsd(), intent.expectedPrice(), intent.reason());
         return switch (mode) {
             case PAPER -> paperExecutionService.execute(intent);
-            case LIVE -> liveExecutionService.execute(intent, mode);
+            case LIVE -> TradeExecutionResult.fromOrderLifecycle(
+                    mode,
+                    liveOrderGateway.submitOrder(
+                            intent,
+                            StrategyInstanceKey.of(intent.botId(), intent.strategyId()),
+                            mode
+                    )
+            );
             case BACKTEST -> TradeExecutionResult.rejected(mode, null, null, null, null, "BACKTEST mode requires execution override");
         };
     }
