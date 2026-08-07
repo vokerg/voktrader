@@ -173,16 +173,17 @@ class LiveKillSwitchRouteMatrixTest {
         assertThat(exit.accepted()).isTrue();
         verify(routerTripwire).route(any());
 
-        OrderManager orderManager = mock(OrderManager.class);
-        when(orderManager.cancelOrder("local-order", "operator cancel")).thenReturn(new OrderLifecycleResult(
+        DurableOrderCancellationService cancellationService = mock(DurableOrderCancellationService.class);
+        when(cancellationService.cancel("local-order", "operator cancel")).thenReturn(new OrderLifecycleResult(
                 true, 1L, 2L, "local-order", "remote-order", TradeStatus.EXIT_PENDING,
                 TradeOrderStatus.CANCEL_REQUESTED, "cancel accepted", null));
-        LiveOrderGateway gateway = new LiveOrderGateway(orderManager);
+        LiveOrderGateway gateway = new LiveOrderGateway(
+                mock(DurableOrderAcceptanceService.class), cancellationService);
 
         OrderLifecycleResult cancellation = gateway.cancelOrder("local-order", "operator cancel");
 
         assertThat(cancellation.success()).isTrue();
-        verify(orderManager).cancelOrder("local-order", "operator cancel");
+        verify(cancellationService).cancel("local-order", "operator cancel");
     }
 
     private void assertBlocked(String route, BooleanSupplier attempt) {
@@ -193,11 +194,12 @@ class LiveKillSwitchRouteMatrixTest {
 
     private ExecutionRouter rawExecutionRouter() {
         PaperExecutionService paper = mock(PaperExecutionService.class);
-        LiveExecutionService live = mock(LiveExecutionService.class);
-        when(live.execute(any(), eq(ExecutionMode.LIVE))).thenAnswer(invocation -> {
+        LiveOrderGateway live = mock(LiveOrderGateway.class);
+        when(live.submitOrder(any(), any(), eq(ExecutionMode.LIVE))).thenAnswer(invocation -> {
             executor.submit(mock(ExecutorOrderCommand.class));
-            return TradeExecutionResult.accepted(
-                    ExecutionMode.LIVE, 1L, 2L, TradeStatus.OPEN, TradeOrderStatus.FILLED, "tripwire");
+            return new OrderLifecycleResult(
+                    true, 1L, 2L, "local", "remote", TradeStatus.OPEN,
+                    TradeOrderStatus.FILLED, "tripwire", null);
         });
         return new ExecutionRouter(tradingProperties, paper, live);
     }
@@ -215,14 +217,14 @@ class LiveKillSwitchRouteMatrixTest {
     }
 
     private LiveOrderGateway rawLiveOrderGateway() {
-        OrderManager orderManager = mock(OrderManager.class);
-        when(orderManager.submitOrder(any(), eq(ExecutionMode.LIVE))).thenAnswer(invocation -> {
+        DurableOrderAcceptanceService acceptanceService = mock(DurableOrderAcceptanceService.class);
+        when(acceptanceService.accept(any(), eq(ExecutionMode.LIVE), anyString())).thenAnswer(invocation -> {
             executor.submit(mock(ExecutorOrderCommand.class));
             return new OrderLifecycleResult(
                     true, 1L, 2L, "local", "remote", TradeStatus.OPEN,
                     TradeOrderStatus.FILLED, "tripwire", null);
         });
-        return new LiveOrderGateway(orderManager);
+        return new LiveOrderGateway(acceptanceService, mock(DurableOrderCancellationService.class));
     }
 
     private LiveExecutionService rawLiveExecutionService() {
