@@ -15,11 +15,11 @@
 - Pull request: #35
 - Base branch: `transformation/2.0`
 - Started: 2026-08-06T17:22:11Z
-- Completed: pending exact-head validation
+- Completed: 2026-08-07T16:27:15Z
 
 ## Files Changed
 - `src/main/java/com/vokerg/voktrader/trade/DurableOrderAcceptanceService.java`
-  - Provides the only transactional production acceptance boundary for LIVE entries and exits.
+  - Provides the transactional production acceptance boundary for LIVE entries and exits.
   - Atomically persists the outbox record plus linked trade/order state without an executor dependency.
   - Replays exact client-order retries and rejects a distinct exit while another exit is pending.
 - `src/main/java/com/vokerg/voktrader/trade/LiveOrderGateway.java`
@@ -56,28 +56,45 @@ Legacy compatibility services and reconciliation still use executor status, fill
 ### Cancellation scope remains narrow
 T024 persists `CANCEL_REQUESTED` and its event before the remote call. It does not add the full cancel worker, restart lease, fill-during-cancel state machine, or all T025 states. Those remain explicitly owned by T025.
 
-## Tests Run
-- GitHub Actions CI run #295 (`31123107439`): **QUEUED** at report creation; all seven jobs are awaiting runners.
-- No exact-head pass is claimed yet.
-- Task and index must remain `IN_PROGRESS` until the Java failure-baseline gate and the remaining CI jobs complete successfully.
+## Self Review
+- Reviewed all changed files against the T024 contract and confirmed the diff remains scoped to durable acceptance, transaction-detached executor I/O, lifecycle projection, cancellation sequencing, regression tests, and task metadata.
+- Confirmed there are no unresolved PR review threads or PR comments.
+- Confirmed `transformation/2.0` remained at `cceef8e8e876015205b7b962bd74757219dc898b` during validation, so the branch had no base drift.
+- CI exposed two stale test assumptions during review:
+  - `LiveKillSwitchRouteMatrixTest` still used the old gateway/router constructors; the fixtures were updated to exercise the durable boundaries.
+  - `CentralEntryRiskArchitectureTest` still required `LiveOrderGateway` to call `OrderManager.submitOrder`; it now asserts the stronger T024 invariant that no production source calls `orderManager.submitOrder(...)`.
+- Neither correction weakened a production safety boundary or changed strategy behavior.
 
-## Focused Coverage Added
-- `ExecutorSubmissionTransactionBoundaryArchitectureTest`
-  - Fails if either production LIVE router bypasses durable acceptance.
-  - Fails if transactional acceptance imports or invokes `PythonExecutorClient`/`submit`.
-  - Confirms the worker owns the production submit call.
-  - Confirms executor beans are wrapped with transaction suspension.
-- `DurableOrderAcceptanceServiceTest`
-  - Verifies outbox acceptance occurs before linked trade/order writes and all writes remain in the acceptance transaction.
-  - Verifies exact entry replay does not create duplicate lifecycle records.
-- `DurableOrderExitReplayTest`
-  - Verifies exact pending-exit replay and rejection of a distinct concurrent exit.
-- `DurableOrderCancellationServiceTest`
-  - Verifies cancellation request persistence and audit emission occur before the remote call.
-- `ExecutorTransactionBoundaryBeanPostProcessorTest`
-  - Verifies executor invocation uses `PROPAGATION_NOT_SUPPORTED`.
-- `OrderDispatchLifecycleProjectorTest`
-  - Verifies deterministic exit rejection restores the open position.
+## Validation
+- GitHub Actions CI run #299 (`31197436648`) validated implementation head `819f28468e3447c8fa1fcf1f2026dacd3d586548` through PR merge commit `0be441296fcec6447f8ab598674be7506a45b694`.
+- All seven jobs passed:
+  - Java failure baseline
+  - Python tests
+  - Angular tests and build
+  - Static repository checks
+  - Secret scan
+  - Clean PostgreSQL migration
+  - Java and executor compose smoke
+- Java no-regression evidence:
+  - 349 tests represented in Surefire XML.
+  - 24 current failure identities, exactly matching the 24 temporary baseline identities.
+  - 0 unexpected or changed identities.
+  - 0 resolved baseline identities.
+  - Maven itself still reports the known baseline failures; the repository policy gate passes because no failure identity regressed.
+- Focused T024/T023-adjacent coverage on the validated head passed, including:
+  - `LiveKillSwitchRouteMatrixTest`: 3/3
+  - `CentralEntryRiskArchitectureTest`: 5/5
+  - `ExecutorSubmissionTransactionBoundaryArchitectureTest`: 4/4
+  - `DurableOrderAcceptanceServiceTest`: 2/2
+  - `DurableOrderExitReplayTest`: 1/1
+  - `DurableOrderCancellationServiceTest`: 1/1
+  - `OrderDispatchLifecycleProjectorTest`: 1/1
+  - `ExecutorTransactionBoundaryBeanPostProcessorTest`: 1/1
+  - `UnknownSubmissionOutcomeTest`: 4/4
+  - `OrderDispatchWorkerTest`: 6/6
+  - `LiveOrderGatewayRiskBoundaryTest`: 3/3
+  - `ExecutionRouterTest`: 3/3
+  - `ExecutionRouterRiskBoundaryTest`: 2/2
 
 ## Safety Impact
 - A committed accepted order always exists durably before production remote submission.
@@ -90,26 +107,25 @@ T024 persists `CANCEL_REQUESTED` and its event before the remote call. It does n
 ## Backward Compatibility
 - Existing `OrderLifecycleResult` and `TradeExecutionResult` surfaces remain in use.
 - Existing trade/order tables remain the operator-visible lifecycle and are now projected from durable outbox truth.
-- Legacy synchronous execution services remain as compatibility/test surfaces, but production routers no longer use them for submission and executor calls are transaction-detached.
+- Legacy synchronous execution services remain compatibility/test surfaces, but production routers no longer use them for submission and executor calls are transaction-detached.
 - No database migration was required because T020-T023 already provided the durable schema and the existing order table already stores `clientOrderId`.
 
 ## Remaining Risks
-- Exact-head CI has not completed because run #295 is queued; compilation and Spring-context behavior remain unverified until it executes.
 - T025 must add the complete restartable cancellation worker and fill-during-cancel convergence states.
-- The transaction-suspending executor proxy is intentionally broad; CI must confirm all Spring test contexts still replace and inject scripted executor subclasses correctly.
-- T026 remains the mandatory integrated phase-exit gate.
+- The 24 existing Java failure identities remain unchanged and are owned by the checkpoint remediation sequence, with T026 as the mandatory integrated phase-exit gate.
+- The transaction-suspending executor proxy is intentionally broad; exact-head Spring-context and compose validation passed, but future executor bean changes must preserve that boundary.
 
 ## Follow-up Tasks
-- T025 remains BLOCKED until T024 passes exact-head validation and is marked DONE.
-- No subsequent task was claimed.
+- T025 is READY after T024 completion.
+- T026 remains BLOCKED until T025 is DONE.
 
 ## Completion Checklist
 - [x] Production LIVE submission routes through the durable outbox.
 - [x] Transactional acceptance has no executor dependency.
 - [x] Cancellation request persists before the remote call.
 - [x] Architecture and focused regression tests added.
-- [ ] Exact-head Java failure-baseline gate passing.
-- [ ] Remaining exact-head CI jobs passing.
-- [x] Required report added in provisional form.
-- [ ] Phase ledger and index transitioned to DONE/READY.
+- [x] Exact-head Java failure-baseline gate passing with 0 unexpected/changed identities.
+- [x] All remaining exact-head CI jobs passing.
+- [x] Required report finalized.
+- [x] Phase ledger and index transitioned to DONE/READY.
 - [x] T042 and PR #12 untouched.
