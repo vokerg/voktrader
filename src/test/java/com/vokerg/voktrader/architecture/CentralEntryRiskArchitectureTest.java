@@ -22,11 +22,10 @@ class CentralEntryRiskArchitectureTest {
     }
 
     @Test
-    void onlyGuardedGatewayMaySubmitThroughOrderManager() throws IOException {
-        assertOnlyCaller(
+    void productionRoutesDoNotSubmitThroughOrderManager() throws IOException {
+        assertNoCallers(
                 "orderManager.submitOrder(",
-                "LiveOrderGateway.java",
-                "production entry routes must not bypass the guarded order gateway"
+                "production routes must use durable acceptance rather than synchronous OrderManager submission"
         );
     }
 
@@ -91,6 +90,19 @@ class CentralEntryRiskArchitectureTest {
                     .as(description)
                     .extracting(path -> path.getFileName().toString())
                     .containsExactly(expectedFile);
+        }
+    }
+
+    private void assertNoCallers(String needle, String description) throws IOException {
+        try (var paths = Files.walk(MAIN_SOURCE_ROOT)) {
+            List<Path> callers = paths
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .filter(path -> contains(path, needle))
+                    .toList();
+
+            assertThat(callers)
+                    .as(description)
+                    .isEmpty();
         }
     }
 
