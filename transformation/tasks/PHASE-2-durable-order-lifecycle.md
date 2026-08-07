@@ -2,7 +2,7 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
-The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 through T023 are DONE, and T024 is IN_PROGRESS in PR #35. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
+The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 through T024 are DONE, and T025 is READY. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
 
 ---
 
@@ -136,14 +136,14 @@ Replace blind retries with explicit UNKNOWN, RECONCILE, and MANUAL_REVIEW states
 
 ## T024 - Remove executor calls from DB transactions
 
-Status: IN_PROGRESS
+Status: DONE
 Priority: P0
 Phase: P2 - Durable order lifecycle
 Owner: vokerg-gpt-5.6-thinking-20260806
 Branch: task/T024-remove-executor-calls-from-db-transactions
 PR: #35
 Started: 2026-08-06T17:22:11Z
-Completed:
+Completed: 2026-08-07T16:27:15Z
 Depends On: T021
 Parallelizable: no
 
@@ -157,17 +157,19 @@ Guarantee database transactions do not perform remote exchange calls.
 4. Add architecture tests detecting executor dependencies in transactional acceptance methods.
 
 ### Acceptance criteria
-- [ ] No transactional entry acceptance method calls PythonExecutorClient.submit.
-- [ ] Test fails if executor submit is reintroduced inside the acceptance transaction.
+- [x] No transactional entry acceptance method calls PythonExecutorClient.submit.
+- [x] Test fails if executor submit is reintroduced inside the acceptance transaction.
 
 ### Required report
 `transformation/reports/T024-2026-08-06-remove-executor-calls-from-db-transactions.md`
+
+Validation: CI #299 (`31197436648`) passed all seven jobs on implementation head `819f28468e3447c8fa1fcf1f2026dacd3d586548`; Java represented 349 tests with the exact 24 known baseline identities and 0 unexpected/changed failures.
 
 ---
 
 ## T025 - Rebuild cancellation lifecycle
 
-Status: BLOCKED
+Status: READY
 Priority: P1
 Phase: P2 - Durable order lifecycle
 Owner: unclaimed
