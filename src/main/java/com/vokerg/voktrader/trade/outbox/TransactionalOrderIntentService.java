@@ -66,6 +66,12 @@ public class TransactionalOrderIntentService {
         return toAcceptance(storedIntent, dispatch);
     }
 
+    public String clientOrderIdFor(TradeIntent intent, String riskDecisionId) {
+        Objects.requireNonNull(intent, "intent is required");
+        requireText(riskDecisionId, "riskDecisionId");
+        return clientOrderId(riskDecisionId, sha256(serialize(intent)));
+    }
+
     @Transactional(readOnly = true)
     public Optional<AcceptedOrderIntent> recover(String clientOrderId) {
         requireText(clientOrderId, "clientOrderId");

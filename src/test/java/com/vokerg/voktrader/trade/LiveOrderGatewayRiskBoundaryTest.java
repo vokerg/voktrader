@@ -12,17 +12,19 @@ import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class LiveOrderGatewayRiskBoundaryTest {
-    private final OrderManager orderManager = mock(OrderManager.class);
-    private final LiveOrderGateway gateway = new LiveOrderGateway(orderManager);
+    private final DurableOrderAcceptanceService acceptanceService = mock(DurableOrderAcceptanceService.class);
+    private final DurableOrderCancellationService cancellationService = mock(DurableOrderCancellationService.class);
+    private final LiveOrderGateway gateway = new LiveOrderGateway(acceptanceService, cancellationService);
 
     @Test
-    void rawBuyWithoutCentralApprovalIsRejectedBeforeOrderManager() {
+    void rawBuyWithoutCentralApprovalIsRejectedBeforeDurableAcceptance() {
         EntryIntent entry = entryIntent();
 
         OrderLifecycleResult result = gateway.submitOrder(
@@ -30,17 +32,18 @@ class LiveOrderGatewayRiskBoundaryTest {
 
         assertThat(result.success()).isFalse();
         assertThat(result.message()).contains("central entry risk decision");
-        verify(orderManager, never()).submitOrder(any(), any());
+        verify(acceptanceService, never()).accept(any(), any(), anyString());
     }
 
     @Test
-    void matchingApprovedDecisionAllowsExactlyThatBuy() {
+    void matchingApprovedDecisionRoutesExactlyThatBuyToDurableAcceptance() {
         EntryIntent entry = entryIntent();
         EntryRiskRequest request = EntryRiskRequest.of(entry, ExecutionMode.LIVE);
         RiskAssessment assessment = new RiskAssessment(request.correlationId());
-        when(orderManager.submitOrder(entry.tradeIntent(), ExecutionMode.LIVE)).thenReturn(new OrderLifecycleResult(
-                true, 1L, 2L, "local", "remote", TradeStatus.ENTRY_PENDING,
-                TradeOrderStatus.SUBMITTED, "submitted", null));
+        when(acceptanceService.accept(entry.tradeIntent(), ExecutionMode.LIVE, request.correlationId()))
+                .thenReturn(new OrderLifecycleResult(
+                        true, 1L, 2L, "local", null, TradeStatus.ENTRY_PENDING,
+                        TradeOrderStatus.CREATED, "accepted for durable dispatch", null));
 
         OrderLifecycleResult result = EntryRiskDecisionContext.withApproved(
                 request,
@@ -49,22 +52,22 @@ class LiveOrderGatewayRiskBoundaryTest {
         );
 
         assertThat(result.success()).isTrue();
-        verify(orderManager).submitOrder(entry.tradeIntent(), ExecutionMode.LIVE);
+        verify(acceptanceService).accept(entry.tradeIntent(), ExecutionMode.LIVE, request.correlationId());
     }
 
     @Test
     void sellRemainsAvailableWithoutEntryApproval() {
         ExitIntent exit = ExitIntent.sell(
                 market(), price(), new BigDecimal("2"), "strategy", "exit", "reduce exposure");
-        when(orderManager.submitOrder(exit.tradeIntent(), ExecutionMode.LIVE)).thenReturn(new OrderLifecycleResult(
-                true, 1L, 2L, "local", "remote", TradeStatus.EXIT_PENDING,
-                TradeOrderStatus.SUBMITTED, "submitted", null));
+        when(acceptanceService.accept(any(), any(), anyString())).thenReturn(new OrderLifecycleResult(
+                true, 1L, 2L, "local", null, TradeStatus.EXIT_PENDING,
+                TradeOrderStatus.CREATED, "accepted for durable dispatch", null));
 
         OrderLifecycleResult result = gateway.submitOrder(
                 exit.tradeIntent(), exit.owner(), ExecutionMode.LIVE);
 
         assertThat(result.success()).isTrue();
-        verify(orderManager).submitOrder(exit.tradeIntent(), ExecutionMode.LIVE);
+        verify(acceptanceService).accept(any(), any(), anyString());
     }
 
     private EntryIntent entryIntent() {
