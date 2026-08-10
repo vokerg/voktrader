@@ -34,6 +34,8 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Lo
 
     List<TradeOrderEntity> findByStatusInAndRemoteOrderIdIsNotNull(List<TradeOrderStatus> statuses);
 
+    List<TradeOrderEntity> findByCancelReasonIsNotNullAndStatusInAndRemoteOrderIdIsNotNull(List<TradeOrderStatus> statuses);
+
     List<TradeOrderEntity> findByModeAndVenueAndStatusInOrderByUpdatedAtAsc(
             ExecutionMode mode,
             TradeVenue venue,
