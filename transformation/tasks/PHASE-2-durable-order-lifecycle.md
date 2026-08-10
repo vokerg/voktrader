@@ -2,7 +2,7 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
-The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 through T024 are DONE, and T025 is READY. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
+The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 through T025 are DONE, and T026 is READY. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
 
 ---
 
@@ -169,14 +169,14 @@ Validation: CI #299 (`31197436648`) passed all seven jobs on implementation head
 
 ## T025 - Rebuild cancellation lifecycle
 
-Status: IN_PROGRESS
+Status: DONE
 Priority: P1
 Phase: P2 - Durable order lifecycle
 Owner: vokerg-gpt-5.6-sol-20260810
 Branch: task/T025-rebuild-cancellation-lifecycle
 PR: #36
 Started: 2026-08-10T18:36:59Z
-Completed:
+Completed: 2026-08-10T20:12:31Z
 Depends On: T021, T024
 Parallelizable: no
 
@@ -190,12 +190,14 @@ Make cancellation evented, recoverable, and always available for open orders.
 4. Add restart tests around cancel boundaries.
 
 ### Acceptance criteria
-- [ ] Cancel request survives restart.
-- [ ] Fill during cancel converges to correct order/position state.
-- [ ] Cancel remains available under kill switch.
+- [x] Cancel request survives restart.
+- [x] Fill during cancel converges to correct order/position state.
+- [x] Cancel remains available under kill switch.
 
 ### Required report
-`transformation/reports/T025-YYYY-MM-DD-rebuild-cancellation-lifecycle.md`
+`transformation/reports/T025-2026-08-10-rebuild-cancellation-lifecycle.md`
+
+Validation: CI #317 (`31427668954`) passed all seven jobs on implementation head `5eed0ec6d117187ec2bebe8cdccccd11cad95a18`; Java represented 354 tests with the exact 24 known baseline identities, 0 new failures, and 0 removed failures.
 
 ---
 
