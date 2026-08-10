@@ -46,7 +46,7 @@ Implementation report: `transformation/reports/T016-2026-08-04-stabilize-integra
 ## T026 - Close durable order-lifecycle integration failures
 
 Issue: #20
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: Checkpoint remediation
 Owner: unclaimed
