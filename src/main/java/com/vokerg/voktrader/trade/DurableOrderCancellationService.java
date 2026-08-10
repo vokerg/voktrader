@@ -407,7 +407,7 @@ public class DurableOrderCancellationService {
         }
         TradeOrderStatus remote = ExecutorOrderStatusMapper.toLifecycleStatus(result.remoteStatus());
         return switch (remote) {
-            case CREATED, SUBMITTING, SUBMITTED, RESTING, OPEN, PARTIALLY_FILLED, PARTIAL, CANCEL_REQUESTED -> true;
+            case CREATED, SUBMITTING, SUBMITTED, RESTING, OPEN, PARTIALLY_FILLED, PARTIAL -> true;
             default -> false;
         };
     }
