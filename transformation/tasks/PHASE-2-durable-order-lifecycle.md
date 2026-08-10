@@ -169,13 +169,13 @@ Validation: CI #299 (`31197436648`) passed all seven jobs on implementation head
 
 ## T025 - Rebuild cancellation lifecycle
 
-Status: READY
+Status: IN_PROGRESS
 Priority: P1
 Phase: P2 - Durable order lifecycle
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: vokerg-gpt-5.6-sol-20260810
+Branch: task/T025-rebuild-cancellation-lifecycle
+PR: #36
+Started: 2026-08-10T18:36:59Z
 Completed:
 Depends On: T021, T024
 Parallelizable: no
