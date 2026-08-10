@@ -28,7 +28,7 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 10. `T042` - unified fee model. Claimed by draft PR #12 and promoted to P0, but remains paused pending current-head reconciliation; do not absorb it into another task.
 11. `T023` - unknown submission outcomes. **DONE** in PR #34; ambiguous submissions are quarantined, unresolved exposure blocks acceptance, and operator evidence drives resolution.
 12. `T024` - remove executor calls from DB transactions. **DONE** in PR #35; production LIVE submission is outbox-only and executor network I/O is transaction-detached.
-13. `T025` - rebuild cancellation lifecycle. **READY** and next in the durable-order-lifecycle sequence, then mandatory phase-exit gate `T026`.
+13. `T025` - rebuild cancellation lifecycle. **DONE** in PR #36; cancellation is restartable, evented, reconcile-before-retry, and fill-race safe. `T026` is now **READY** as the mandatory durable-order-lifecycle phase-exit gate.
 14. `T030` and all exchange-truth work remain blocked until T026.
 15. After T055 is DONE, `T054` retained-database rehearsal and `T056` control-plane default-auth proof may proceed in parallel.
 16. `T045` live preflight additionally requires T054 and T056.
@@ -59,8 +59,8 @@ Unrelated feature work is frozen while the integrated Java failure baseline is u
 | [T022](./PHASE-2-durable-order-lifecycle.md#t022) | DONE | P0 | T021 | no | Make executor idempotency durable |
 | [T023](./PHASE-2-durable-order-lifecycle.md#t023) | DONE | P0 | T021, T022 | no | Handle unknown submission outcomes |
 | [T024](./PHASE-2-durable-order-lifecycle.md#t024) | DONE | P0 | T021 | no | Remove executor calls from DB transactions |
-| [T025](./PHASE-2-durable-order-lifecycle.md#t025) | READY | P1 | T021, T024 | no | Rebuild cancellation lifecycle |
-| [T026](./CHECKPOINT-2026-08-03.md#t026---close-durable-order-lifecycle-integration-failures) | BLOCKED | P0 | T020, T021, T022, T023, T024, T025 | no | Close durable order-lifecycle integration failures |
+| [T025](./PHASE-2-durable-order-lifecycle.md#t025) | DONE | P1 | T021, T024 | no | Rebuild cancellation lifecycle |
+| [T026](./CHECKPOINT-2026-08-03.md#t026---close-durable-order-lifecycle-integration-failures) | READY | P0 | T020, T021, T022, T023, T024, T025 | no | Close durable order-lifecycle integration failures |
 
 ## P3 - Exchange truth and settlement ledger
 | Task | Status | Priority | Depends On | Parallelizable | Title |
