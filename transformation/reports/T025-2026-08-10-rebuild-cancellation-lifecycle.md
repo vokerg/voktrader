@@ -2,14 +2,14 @@
 
 ## Summary
 
-Implementation in progress. This report is created as the minimal branch commit required before GitHub can open the draft claim PR.
+Implementation in progress. This report was created as the minimal branch commit required before GitHub could open the draft claim PR.
 
 ## Task
 
 - Task ID: T025
 - Task section: `transformation/tasks/PHASE-2-durable-order-lifecycle.md#t025---rebuild-cancellation-lifecycle`
 - Branch: `task/T025-rebuild-cancellation-lifecycle`
-- PR: pending
+- PR: #36
 - Status at completion: IN_PROGRESS
 
 ## Files changed
