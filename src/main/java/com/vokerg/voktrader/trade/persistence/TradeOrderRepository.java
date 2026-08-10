@@ -36,7 +36,7 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Lo
 
     List<TradeOrderEntity> findByStatusInAndRemoteOrderIdIsNotNull(List<TradeOrderStatus> statuses);
 
-    List<TradeOrderEntity> findByCancelReasonIsNotNullAndStatusInAndRemoteOrderIdIsNotNull(List<TradeOrderStatus> statuses);
+    List<TradeOrderEntity> findByCancelReasonIsNotNullAndStatusIn(List<TradeOrderStatus> statuses);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from TradeOrderEntity o where o.id = :orderId")
