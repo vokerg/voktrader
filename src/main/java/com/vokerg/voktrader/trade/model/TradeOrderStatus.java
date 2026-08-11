@@ -8,6 +8,10 @@ public enum TradeOrderStatus {
     PARTIALLY_FILLED_DONE,
     FILLED,
     CANCEL_REQUESTED,
+    CANCEL_SUBMITTING,
+    CANCEL_ACKNOWLEDGED,
+    CANCEL_UNKNOWN,
+    CANCEL_RECONCILE,
     CANCELLED,
     EXPIRED,
     REJECTED,
@@ -22,7 +26,15 @@ public enum TradeOrderStatus {
 
     public boolean isActive() {
         return switch (this) {
-            case CREATED, SUBMITTING, SUBMITTED, RESTING, OPEN, PARTIALLY_FILLED, PARTIAL, CANCEL_REQUESTED -> true;
+            case CREATED, SUBMITTING, SUBMITTED, RESTING, OPEN, PARTIALLY_FILLED, PARTIAL,
+                    CANCEL_REQUESTED, CANCEL_SUBMITTING, CANCEL_ACKNOWLEDGED, CANCEL_UNKNOWN, CANCEL_RECONCILE -> true;
+            default -> false;
+        };
+    }
+
+    public boolean isCancellationInFlight() {
+        return switch (this) {
+            case CANCEL_REQUESTED, CANCEL_SUBMITTING, CANCEL_ACKNOWLEDGED, CANCEL_UNKNOWN, CANCEL_RECONCILE -> true;
             default -> false;
         };
     }

@@ -1,7 +1,9 @@
 package com.vokerg.voktrader.trade.outbox;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,6 +15,15 @@ import java.util.Optional;
 
 public interface OrderDispatchOutboxRepository extends JpaRepository<OrderDispatchOutboxEntity, Long> {
     Optional<OrderDispatchOutboxEntity> findByClientOrderId(String clientOrderId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select d
+            from OrderDispatchOutboxEntity d
+            join fetch d.orderIntent
+            where d.clientOrderId = :clientOrderId
+            """)
+    Optional<OrderDispatchOutboxEntity> findByClientOrderIdForUpdate(@Param("clientOrderId") String clientOrderId);
 
     long countByState(OrderDispatchState state);
 

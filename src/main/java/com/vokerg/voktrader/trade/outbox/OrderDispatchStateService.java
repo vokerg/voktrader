@@ -56,6 +56,33 @@ public class OrderDispatchStateService {
         return Optional.of(claim);
     }
 
+    @Transactional
+    public boolean cancelBeforeSubmission(String clientOrderId, String reason, Instant now) {
+        requireText(clientOrderId, "clientOrderId");
+        Objects.requireNonNull(now, "now is required");
+        Optional<OrderDispatchOutboxEntity> existing = dispatchRepository.findByClientOrderIdForUpdate(clientOrderId);
+        if (existing.isEmpty()) {
+            return false;
+        }
+        OrderDispatchOutboxEntity dispatch = existing.orElseThrow();
+        if (dispatch.getState() != OrderDispatchState.OUTBOX_READY) {
+            return false;
+        }
+        dispatch.markCancelledBeforeSubmission(reason, now);
+        dispatch.getOrderIntent().markCancelled();
+        return true;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean wasCancelledBeforeSubmission(String clientOrderId) {
+        if (clientOrderId == null || clientOrderId.isBlank()) {
+            return false;
+        }
+        return dispatchRepository.findByClientOrderId(clientOrderId)
+                .map(dispatch -> dispatch.getState() == OrderDispatchState.CANCELLED)
+                .orElse(false);
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int reconcileExpiredLeases(Instant now, int limit) {
         Objects.requireNonNull(now, "now is required");

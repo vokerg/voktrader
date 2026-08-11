@@ -2,7 +2,7 @@
 
 This ledger contains the detailed task contracts for this phase. Agents claim and update one task section per PR.
 
-The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 through T024 are DONE, and T025 is READY. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
+The 2026-08-03 checkpoint adds T026 as a mandatory phase-exit integration gate. T020 through T025 are DONE, and T026 is READY. Exchange-truth work must not begin until T020-T025 and T026 are DONE. See `CHECKPOINT-2026-08-03.md`.
 
 ---
 
@@ -169,14 +169,14 @@ Validation: CI #299 (`31197436648`) passed all seven jobs on implementation head
 
 ## T025 - Rebuild cancellation lifecycle
 
-Status: READY
+Status: DONE
 Priority: P1
 Phase: P2 - Durable order lifecycle
-Owner: unclaimed
-Branch:
-PR:
-Started:
-Completed:
+Owner: vokerg-gpt-5.6-sol-20260810
+Branch: task/T025-rebuild-cancellation-lifecycle
+PR: #36
+Started: 2026-08-10T18:36:59Z
+Completed: 2026-08-11T04:14:28Z
 Depends On: T021, T024
 Parallelizable: no
 
@@ -190,12 +190,14 @@ Make cancellation evented, recoverable, and always available for open orders.
 4. Add restart tests around cancel boundaries.
 
 ### Acceptance criteria
-- [ ] Cancel request survives restart.
-- [ ] Fill during cancel converges to correct order/position state.
-- [ ] Cancel remains available under kill switch.
+- [x] Cancel request survives restart.
+- [x] Fill during cancel converges to correct order/position state.
+- [x] Cancel remains available under kill switch.
 
 ### Required report
-`transformation/reports/T025-YYYY-MM-DD-rebuild-cancellation-lifecycle.md`
+`transformation/reports/T025-2026-08-10-rebuild-cancellation-lifecycle.md`
+
+Validation: after a two-pass review found and remediated pre-submit cancel/submit serialization, stale JPA cancellation-intent recovery, and cancelled-exit trade-state issues, CI #331 (`31457779703`) passed all seven jobs on remediation head `23d41e474b8b12f01141240c40e1d6771fe48ec7`. Java represented 357 tests with the exact 24 known baseline identities and 0 unexpected/changed failures. Focused cancellation coverage included 9 green tests across durable cancellation, fill-race, pre-submit outbox cancellation, and cancelled-exit recovery.
 
 ---
 
