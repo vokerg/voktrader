@@ -176,7 +176,7 @@ Owner: vokerg-gpt-5.6-sol-20260810
 Branch: task/T025-rebuild-cancellation-lifecycle
 PR: #36
 Started: 2026-08-10T18:36:59Z
-Completed: 2026-08-10T20:12:31Z
+Completed: 2026-08-11T04:14:28Z
 Depends On: T021, T024
 Parallelizable: no
 
@@ -197,7 +197,7 @@ Make cancellation evented, recoverable, and always available for open orders.
 ### Required report
 `transformation/reports/T025-2026-08-10-rebuild-cancellation-lifecycle.md`
 
-Validation: CI #317 (`31427668954`) passed all seven jobs on implementation head `5eed0ec6d117187ec2bebe8cdccccd11cad95a18`; Java represented 354 tests with the exact 24 known baseline identities, 0 new failures, and 0 removed failures.
+Validation: after a two-pass review found and remediated pre-submit cancel/submit serialization, stale JPA cancellation-intent recovery, and cancelled-exit trade-state issues, CI #331 (`31457779703`) passed all seven jobs on remediation head `23d41e474b8b12f01141240c40e1d6771fe48ec7`. Java represented 357 tests with the exact 24 known baseline identities and 0 unexpected/changed failures. Focused cancellation coverage included 9 green tests across durable cancellation, fill-race, pre-submit outbox cancellation, and cancelled-exit recovery.
 
 ---
 
