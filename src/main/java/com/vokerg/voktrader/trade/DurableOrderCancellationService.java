@@ -8,6 +8,7 @@ import com.vokerg.voktrader.time.TimeMachine;
 import com.vokerg.voktrader.trade.model.OrderReconciliationSource;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderPhase;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.outbox.OrderDispatchStateService;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
@@ -19,6 +20,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
@@ -390,6 +392,7 @@ public class DurableOrderCancellationService {
     private OrderLifecycleResult reconcileCancellation(Long orderId) {
         TradeOrderEntity order = requireOrder(orderId);
         if (order.getStatus().isTerminal()) {
+            restorePositionAfterCancelledExit(order);
             return currentResult(orderId, true, "cancellation resolved to terminal order state");
         }
         OrderReconciliationResult result = reconciliationService.reconcileOrderDetailed(
@@ -398,6 +401,7 @@ public class DurableOrderCancellationService {
         );
         TradeOrderEntity reconciled = requireOrder(orderId);
         if (reconciled.getStatus().isTerminal()) {
+            restorePositionAfterCancelledExit(reconciled);
             return currentResult(
                     orderId,
                     result.remoteStatusSuccess() || result.remoteFillsSuccess(),
@@ -462,6 +466,7 @@ public class DurableOrderCancellationService {
         order.markCancelled(cancelReason, null);
         tradeOrderRepository.save(order);
         reconciliationService.reconcileTradeAfterOrderState(trade, order);
+        restorePositionAfterCancelledExit(trade, order);
         if (trade != null) {
             tradeRepository.save(trade);
         }
@@ -473,6 +478,56 @@ public class DurableOrderCancellationService {
                 cancelReason,
                 null
         );
+    }
+
+    private void restorePositionAfterCancelledExit(TradeOrderEntity order) {
+        TradeEntity trade = findTrade(order);
+        restorePositionAfterCancelledExit(trade, order);
+        if (trade != null) {
+            tradeRepository.save(trade);
+        }
+    }
+
+    private void restorePositionAfterCancelledExit(TradeEntity trade, TradeOrderEntity order) {
+        if (trade == null
+                || order.getPhase() != TradeOrderPhase.EXIT
+                || (order.getStatus() != TradeOrderStatus.CANCELLED
+                && order.getStatus() != TradeOrderStatus.EXPIRED)
+                || (trade.getStatus() != null && trade.getStatus().isTerminal())) {
+            return;
+        }
+
+        BigDecimal exitedShares = zeroIfNull(trade.getExitFilledShares());
+        if (exitedShares.signum() > 0) {
+            trade.markPartiallyClosed(
+                    trade.getExitAvgPrice(),
+                    trade.getExitFilledShares(),
+                    trade.getExitFilledUsd(),
+                    trade.getExitFeeUsd(),
+                    trade.getExitCompletedAt()
+            );
+            return;
+        }
+
+        BigDecimal entryShares = zeroIfNull(trade.getEntryFilledShares());
+        BigDecimal intendedShares = zeroIfNull(trade.getIntendedShares());
+        if (intendedShares.signum() > 0 && entryShares.compareTo(intendedShares) < 0) {
+            trade.markPartiallyOpen(
+                    trade.getEntryAvgPrice(),
+                    trade.getEntryFilledShares(),
+                    trade.getEntryFilledUsd(),
+                    trade.getEntryFeeUsd(),
+                    trade.getEntryCompletedAt()
+            );
+        } else {
+            trade.markOpen(
+                    trade.getEntryAvgPrice(),
+                    trade.getEntryFilledShares(),
+                    trade.getEntryFilledUsd(),
+                    trade.getEntryFeeUsd(),
+                    trade.getEntryCompletedAt()
+            );
+        }
     }
 
     private void transitionCancellationState(
@@ -594,6 +649,10 @@ public class DurableOrderCancellationService {
 
     private boolean isUsefulRaw(String value) {
         return value != null && !value.isBlank() && !"null".equalsIgnoreCase(value.trim());
+    }
+
+    private BigDecimal zeroIfNull(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     private static Duration recoveryDelay(ExecutorProperties properties) {
