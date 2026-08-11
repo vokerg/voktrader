@@ -10,6 +10,7 @@ import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeVenue;
+import com.vokerg.voktrader.trade.outbox.OrderDispatchStateService;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import org.junit.jupiter.api.Test;
@@ -85,11 +86,39 @@ class DurableOrderCancellationServiceTest {
     }
 
     @Test
+    void cancelBeforeRemoteSubmissionCancelsOutboxAndNeverCallsExecutor() {
+        Fixture fixture = fixture(Duration.ofSeconds(12), false);
+        when(fixture.dispatchStateService.cancelBeforeSubmission(
+                eq("local-1"), eq("operator requested"), any(Instant.class)
+        )).thenReturn(true);
+
+        OrderLifecycleResult result = fixture.service.cancel("local-1", "operator requested");
+
+        assertThat(result.success()).isTrue();
+        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.CANCELLED);
+        assertThat(fixture.order.getCancelReason()).isEqualTo("operator requested");
+        verify(fixture.executorClient, never()).cancelOrder(any());
+        verify(fixture.reconciliationService).reconcileTradeAfterOrderState(fixture.trade, fixture.order);
+        verify(fixture.eventEmitter).emitCancelRequested(
+                fixture.trade, fixture.order, "operator requested", null
+        );
+        verify(fixture.eventEmitter).emitCancelled(
+                eq(fixture.trade),
+                eq(fixture.order),
+                eq(TradeOrderStatus.CANCEL_REQUESTED),
+                eq(TradeOrderStatus.CANCELLED),
+                eq("operator requested"),
+                eq(null)
+        );
+    }
+
+    @Test
     void persistedCancelRequestedIsDispatchedAfterRestart() {
         Fixture fixture = fixture();
         fixture.order.markCancelRequested("restart recovery");
-        when(fixture.orderRepository.findByCancelReasonIsNotNullAndStatusIn(any()))
-                .thenReturn(List.of(fixture.order));
+        when(fixture.orderRepository.findRecoverableCancellations(
+                any(), eq(OrderCancellationEventEmitter.CANCEL_REQUESTED_EVENT)
+        )).thenReturn(List.of(fixture.order));
         when(fixture.executorClient.cancelOrder("remote-1")).thenReturn(new ExecutorCancelOrderResponse(
                 true, "remote-1", "CANCELLED", "{\"status\":\"CANCELLED\"}", null
         ));
@@ -119,6 +148,43 @@ class DurableOrderCancellationServiceTest {
     }
 
     @Test
+    void eventBackedCancelRecoverySurvivesStaleLifecycleWriteWithoutBlindRetry() {
+        Fixture fixture = fixture();
+        fixture.order.markResting("{\"status\":\"OPEN\"}");
+        when(fixture.orderRepository.findRecoverableCancellations(
+                any(), eq(OrderCancellationEventEmitter.CANCEL_REQUESTED_EVENT)
+        )).thenReturn(List.of(fixture.order));
+        when(fixture.reconciliationService.reconcileOrderDetailed(
+                fixture.order,
+                OrderReconciliationSource.POST_CANCEL
+        )).thenAnswer(invocation -> {
+            TradeOrderStatus previous = fixture.order.getStatus();
+            fixture.order.markCancelled(fixture.order.getCancelReason(), "{\"status\":\"CANCELLED\"}");
+            return OrderReconciliationResult.from(
+                    fixture.order,
+                    previous,
+                    true,
+                    true,
+                    "CANCELLED",
+                    0,
+                    0,
+                    List.of()
+            );
+        });
+
+        int resumed = fixture.service.resumePendingCancellations();
+
+        assertThat(resumed).isEqualTo(1);
+        assertThat(fixture.order.getCancelReason()).contains("recovered durable cancellation request event");
+        assertThat(fixture.order.getStatus()).isEqualTo(TradeOrderStatus.CANCELLED);
+        verify(fixture.executorClient, never()).cancelOrder(any());
+        verify(fixture.reconciliationService).reconcileOrderDetailed(
+                fixture.order,
+                OrderReconciliationSource.POST_CANCEL
+        );
+    }
+
+    @Test
     void staleSubmittingAfterRestartReconcilesBeforeAnyRetry() {
         Fixture fixture = fixture(Duration.ZERO);
         fixture.order.markCancelRequested("restart recovery");
@@ -133,8 +199,9 @@ class DurableOrderCancellationServiceTest {
                 null,
                 null
         );
-        when(fixture.orderRepository.findByCancelReasonIsNotNullAndStatusIn(any()))
-                .thenReturn(List.of(fixture.order));
+        when(fixture.orderRepository.findRecoverableCancellations(
+                any(), eq(OrderCancellationEventEmitter.CANCEL_REQUESTED_EVENT)
+        )).thenReturn(List.of(fixture.order));
         when(fixture.reconciliationService.reconcileOrderDetailed(
                 fixture.order,
                 OrderReconciliationSource.POST_CANCEL
@@ -203,11 +270,16 @@ class DurableOrderCancellationServiceTest {
     }
 
     private Fixture fixture(Duration staleAfter) {
+        return fixture(staleAfter, true);
+    }
+
+    private Fixture fixture(Duration staleAfter, boolean submitted) {
         TradeRepository tradeRepository = mock(TradeRepository.class);
         TradeOrderRepository orderRepository = mock(TradeOrderRepository.class);
         PythonExecutorClient executorClient = mock(PythonExecutorClient.class);
         OrderReconciliationService reconciliationService = mock(OrderReconciliationService.class);
         OrderCancellationEventEmitter eventEmitter = mock(OrderCancellationEventEmitter.class);
+        OrderDispatchStateService dispatchStateService = mock(OrderDispatchStateService.class);
         TransactionOperations transactions = new ImmediateTransactions();
 
         TradeIntent intent = entryIntent();
@@ -217,12 +289,15 @@ class DurableOrderCancellationServiceTest {
                 11L, intent, ExecutionMode.LIVE, TradeVenue.POLYMARKET, "local-1"
         );
         ReflectionTestUtils.setField(order, "id", 22L);
-        order.markSubmitted("remote-1", "{}");
+        if (submitted) {
+            order.markSubmitted("remote-1", "{}");
+        }
 
         when(orderRepository.findByLocalOrderId("local-1")).thenReturn(Optional.of(order));
         when(orderRepository.findById(22L)).thenReturn(Optional.of(order));
         when(orderRepository.findByIdForUpdate(22L)).thenReturn(Optional.of(order));
         when(tradeRepository.findById(11L)).thenReturn(Optional.of(trade));
+        when(tradeRepository.save(any(TradeEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(orderRepository.save(any(TradeOrderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         DurableOrderCancellationService service = new DurableOrderCancellationService(
@@ -231,6 +306,7 @@ class DurableOrderCancellationServiceTest {
                 executorClient,
                 reconciliationService,
                 eventEmitter,
+                dispatchStateService,
                 transactions,
                 staleAfter
         );
@@ -241,6 +317,7 @@ class DurableOrderCancellationServiceTest {
                 executorClient,
                 reconciliationService,
                 eventEmitter,
+                dispatchStateService,
                 trade,
                 order
         );
@@ -270,6 +347,7 @@ class DurableOrderCancellationServiceTest {
             PythonExecutorClient executorClient,
             OrderReconciliationService reconciliationService,
             OrderCancellationEventEmitter eventEmitter,
+            OrderDispatchStateService dispatchStateService,
             TradeEntity trade,
             TradeOrderEntity order
     ) {
