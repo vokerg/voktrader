@@ -106,6 +106,12 @@ public class OrderIntentEntity {
         }
     }
 
+    void markCancelled() {
+        if (state == OrderIntentState.ACCEPTED) {
+            state = OrderIntentState.CANCELLED;
+        }
+    }
+
     private static String requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + " is required");
