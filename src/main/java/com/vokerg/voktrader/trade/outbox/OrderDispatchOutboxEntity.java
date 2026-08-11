@@ -138,6 +138,18 @@ public class OrderDispatchOutboxEntity {
         lastError = null;
     }
 
+    void markCancelledBeforeSubmission(String reason, Instant now) {
+        if (state != OrderDispatchState.OUTBOX_READY) {
+            throw new IllegalStateException("Only OUTBOX_READY dispatches can be cancelled before submission");
+        }
+        state = OrderDispatchState.CANCELLED;
+        completedAt = Objects.requireNonNull(now, "now is required");
+        executorStatus = "CANCELLED_BEFORE_SUBMIT";
+        lastError = truncate(reason, 2000);
+        clearLease();
+        updatedAt = now;
+    }
+
     void markSubmitted(
             String owner,
             ExecutorOrderResponse response,
