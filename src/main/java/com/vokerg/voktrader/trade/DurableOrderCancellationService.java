@@ -9,6 +9,7 @@ import com.vokerg.voktrader.trade.model.OrderReconciliationSource;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.outbox.OrderDispatchStateService;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
 import com.vokerg.voktrader.trade.persistence.TradeRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,7 @@ import java.util.List;
 @Slf4j
 @Service
 public class DurableOrderCancellationService {
+    private static final String EVENT_RECOVERY_REASON = "recovered durable cancellation request event";
     private static final List<TradeOrderStatus> CANCELLATION_RECOVERY_STATUSES = Arrays.stream(TradeOrderStatus.values())
             .filter(status -> status.isActive() || status == TradeOrderStatus.UNKNOWN)
             .toList();
@@ -40,6 +42,7 @@ public class DurableOrderCancellationService {
     private final PythonExecutorClient executorClient;
     private final OrderReconciliationService reconciliationService;
     private final OrderCancellationEventEmitter cancellationEventEmitter;
+    private final OrderDispatchStateService dispatchStateService;
     private final TransactionOperations transactions;
     private final Duration cancelSubmittingStaleAfter;
 
@@ -50,6 +53,7 @@ public class DurableOrderCancellationService {
             PythonExecutorClient executorClient,
             OrderReconciliationService reconciliationService,
             OrderCancellationEventEmitter cancellationEventEmitter,
+            OrderDispatchStateService dispatchStateService,
             ExecutorProperties executorProperties,
             PlatformTransactionManager transactionManager
     ) {
@@ -59,6 +63,7 @@ public class DurableOrderCancellationService {
                 executorClient,
                 reconciliationService,
                 cancellationEventEmitter,
+                dispatchStateService,
                 new TransactionTemplate(transactionManager),
                 recoveryDelay(executorProperties)
         );
@@ -78,6 +83,7 @@ public class DurableOrderCancellationService {
                 executorClient,
                 reconciliationService,
                 cancellationEventEmitter,
+                null,
                 transactions,
                 Duration.ofSeconds(12)
         );
@@ -92,11 +98,34 @@ public class DurableOrderCancellationService {
             TransactionOperations transactions,
             Duration cancelSubmittingStaleAfter
     ) {
+        this(
+                tradeRepository,
+                tradeOrderRepository,
+                executorClient,
+                reconciliationService,
+                cancellationEventEmitter,
+                null,
+                transactions,
+                cancelSubmittingStaleAfter
+        );
+    }
+
+    DurableOrderCancellationService(
+            TradeRepository tradeRepository,
+            TradeOrderRepository tradeOrderRepository,
+            PythonExecutorClient executorClient,
+            OrderReconciliationService reconciliationService,
+            OrderCancellationEventEmitter cancellationEventEmitter,
+            OrderDispatchStateService dispatchStateService,
+            TransactionOperations transactions,
+            Duration cancelSubmittingStaleAfter
+    ) {
         this.tradeRepository = tradeRepository;
         this.tradeOrderRepository = tradeOrderRepository;
         this.executorClient = executorClient;
         this.reconciliationService = reconciliationService;
         this.cancellationEventEmitter = cancellationEventEmitter;
+        this.dispatchStateService = dispatchStateService;
         this.transactions = transactions;
         this.cancelSubmittingStaleAfter = cancelSubmittingStaleAfter == null
                 ? Duration.ofSeconds(12)
@@ -109,33 +138,46 @@ public class DurableOrderCancellationService {
             throw new IllegalStateException("Cancellation request transaction returned no result");
         }
         if (!pending.recoverable()) {
-            return currentResult(pending.orderId(), true, "order is already terminal; cancellation not required");
+            return currentResult(pending.orderId(), true, pending.message());
         }
         return advanceCancellation(pending.orderId());
     }
 
     public int resumePendingCancellations() {
         Instant now = TimeMachine.now();
-        List<TradeOrderEntity> pending = tradeOrderRepository.findByCancelReasonIsNotNullAndStatusIn(
-                CANCELLATION_RECOVERY_STATUSES
+        List<TradeOrderEntity> pending = tradeOrderRepository.findRecoverableCancellations(
+                CANCELLATION_RECOVERY_STATUSES,
+                OrderCancellationEventEmitter.CANCEL_REQUESTED_EVENT
         );
         int resumed = 0;
-        for (TradeOrderEntity order : pending) {
-            if (order.getId() == null || order.getStatus().isTerminal() || order.isReconciliationPaused()) {
-                continue;
-            }
-            if (order.getNextReconcileAt() != null && now.isBefore(order.getNextReconcileAt())) {
-                continue;
-            }
-            if (order.getStatus() == TradeOrderStatus.CANCEL_SUBMITTING && !isStaleSubmitting(order, now)) {
+        for (TradeOrderEntity candidate : pending) {
+            if (candidate.getId() == null || candidate.getStatus().isTerminal()) {
                 continue;
             }
             try {
+                if (wasCancelledBeforeSubmission(candidate)) {
+                    advanceCancellation(candidate.getId());
+                    resumed++;
+                    continue;
+                }
+                if (candidate.getCancelReason() == null || candidate.getCancelReason().isBlank()) {
+                    restoreEventBackedCancellationIntent(candidate.getId());
+                }
+                TradeOrderEntity order = requireOrder(candidate.getId());
+                if (order.getStatus().isTerminal() || order.isReconciliationPaused()) {
+                    continue;
+                }
+                if (order.getNextReconcileAt() != null && now.isBefore(order.getNextReconcileAt())) {
+                    continue;
+                }
+                if (order.getStatus() == TradeOrderStatus.CANCEL_SUBMITTING && !isStaleSubmitting(order, now)) {
+                    continue;
+                }
                 advanceCancellation(order.getId());
                 resumed++;
             } catch (RuntimeException exception) {
                 log.warn("Failed to resume cancellation orderId={} localOrderId={} status={}",
-                        order.getId(), order.getLocalOrderId(), order.getStatus(), exception);
+                        candidate.getId(), candidate.getLocalOrderId(), candidate.getStatus(), exception);
             }
         }
         return resumed;
@@ -144,37 +186,66 @@ public class DurableOrderCancellationService {
     private PendingCancellation persistRequest(String localOrRemoteOrderId, String reason) {
         TradeOrderEntity order = findOrder(localOrRemoteOrderId);
         if (order.getStatus().isTerminal()) {
-            return new PendingCancellation(order.getId(), order.getLocalOrderId(), order.getRemoteOrderId(), false);
-        }
-        TradeEntity trade = findTrade(order);
-        String cancelReason = normalizeReason(reason);
-        if (order.getStatus().isCancellationInFlight()) {
-            return new PendingCancellation(order.getId(), order.getLocalOrderId(), order.getRemoteOrderId(), true);
+            return new PendingCancellation(
+                    order.getId(),
+                    false,
+                    "order is already terminal; cancellation not required"
+            );
         }
 
-        if (order.getCancelReason() != null && !order.getCancelReason().isBlank()) {
-            TradeOrderStatus previousStatus = order.getStatus();
-            transitionStatus(order, TradeOrderStatus.CANCEL_RECONCILE, null);
-            tradeOrderRepository.save(order);
-            cancellationEventEmitter.emitCancelStateChanged(
-                    trade,
-                    order,
-                    previousStatus,
-                    "existing cancellation intent resumed before retry",
-                    null
-            );
-        } else {
-            order.markCancelRequested(cancelReason);
-            tradeOrderRepository.save(order);
-            cancellationEventEmitter.emitCancelRequested(trade, order, cancelReason, null);
+        String cancelReason = normalizeReason(reason);
+        boolean cancelledBeforeSubmission = cancelBeforeSubmission(order, cancelReason);
+        TradeEntity trade = findTrade(order);
+
+        if (!order.getStatus().isCancellationInFlight()) {
+            if (order.getCancelReason() != null && !order.getCancelReason().isBlank()) {
+                TradeOrderStatus previousStatus = order.getStatus();
+                transitionStatus(order, TradeOrderStatus.CANCEL_RECONCILE, null);
+                tradeOrderRepository.save(order);
+                cancellationEventEmitter.emitCancelStateChanged(
+                        trade,
+                        order,
+                        previousStatus,
+                        "existing cancellation intent resumed before retry",
+                        null
+                );
+            } else {
+                order.markCancelRequested(cancelReason);
+                tradeOrderRepository.save(order);
+                cancellationEventEmitter.emitCancelRequested(trade, order, cancelReason, null);
+            }
         }
-        return new PendingCancellation(order.getId(), order.getLocalOrderId(), order.getRemoteOrderId(), true);
+
+        if (cancelledBeforeSubmission) {
+            finalizeCancelledBeforeSubmission(order, trade, cancelReason);
+            return new PendingCancellation(
+                    order.getId(),
+                    false,
+                    "order cancelled before remote submission"
+            );
+        }
+        return new PendingCancellation(order.getId(), true, "cancellation request persisted");
     }
 
     private OrderLifecycleResult advanceCancellation(Long orderId) {
         TradeOrderEntity order = requireOrder(orderId);
         if (order.getStatus().isTerminal()) {
             return currentResult(orderId, true, "cancellation resolved to terminal order state");
+        }
+        if (wasCancelledBeforeSubmission(order)) {
+            transactions.executeWithoutResult(status -> {
+                TradeOrderEntity locked = tradeOrderRepository.findByIdForUpdate(orderId)
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Order disappeared while finalizing pre-submit cancellation: " + orderId));
+                if (!locked.getStatus().isTerminal()) {
+                    finalizeCancelledBeforeSubmission(
+                            locked,
+                            findTrade(locked),
+                            firstNonBlank(locked.getCancelReason(), "cancelled before remote submission")
+                    );
+                }
+            });
+            return currentResult(orderId, true, "order cancelled before remote submission");
         }
         return switch (order.getStatus()) {
             case CANCEL_REQUESTED -> dispatchCancellation(orderId);
@@ -359,6 +430,51 @@ public class DurableOrderCancellationService {
         );
     }
 
+    private void restoreEventBackedCancellationIntent(Long orderId) {
+        transactions.executeWithoutResult(status -> {
+            TradeOrderEntity order = tradeOrderRepository.findByIdForUpdate(orderId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Order disappeared while restoring cancellation intent: " + orderId));
+            if (order.getStatus().isTerminal()
+                    || (order.getCancelReason() != null && !order.getCancelReason().isBlank())) {
+                return;
+            }
+            TradeOrderStatus previousStatus = order.getStatus();
+            order.markCancelRequested(EVENT_RECOVERY_REASON);
+            transitionStatus(order, TradeOrderStatus.CANCEL_RECONCILE, null);
+            tradeOrderRepository.save(order);
+            cancellationEventEmitter.emitCancelStateChanged(
+                    findTrade(order),
+                    order,
+                    previousStatus,
+                    "durable cancel-request event restored cancellation obligation after stale lifecycle write",
+                    null
+            );
+        });
+    }
+
+    private void finalizeCancelledBeforeSubmission(
+            TradeOrderEntity order,
+            TradeEntity trade,
+            String cancelReason
+    ) {
+        TradeOrderStatus previousStatus = order.getStatus();
+        order.markCancelled(cancelReason, null);
+        tradeOrderRepository.save(order);
+        reconciliationService.reconcileTradeAfterOrderState(trade, order);
+        if (trade != null) {
+            tradeRepository.save(trade);
+        }
+        cancellationEventEmitter.emitCancelled(
+                trade,
+                order,
+                previousStatus,
+                TradeOrderStatus.CANCELLED,
+                cancelReason,
+                null
+        );
+    }
+
     private void transitionCancellationState(
             Long orderId,
             TradeOrderStatus targetStatus,
@@ -399,6 +515,18 @@ public class DurableOrderCancellationService {
                 order.getFillRole(),
                 rawResponse
         );
+    }
+
+    private boolean cancelBeforeSubmission(TradeOrderEntity order, String reason) {
+        return dispatchStateService != null
+                && order.getClientOrderId() != null
+                && dispatchStateService.cancelBeforeSubmission(order.getClientOrderId(), reason, TimeMachine.now());
+    }
+
+    private boolean wasCancelledBeforeSubmission(TradeOrderEntity order) {
+        return dispatchStateService != null
+                && order.getClientOrderId() != null
+                && dispatchStateService.wasCancelledBeforeSubmission(order.getClientOrderId());
     }
 
     private boolean remoteConfirmsStillOpen(OrderReconciliationResult result) {
@@ -475,7 +603,7 @@ public class DurableOrderCancellationService {
         return timeout.plusSeconds(2);
     }
 
-    private record PendingCancellation(Long orderId, String localOrderId, String remoteOrderId, boolean recoverable) {
+    private record PendingCancellation(Long orderId, boolean recoverable, String message) {
     }
 
     private record DispatchClaim(boolean claimed, String remoteOrderId) {
