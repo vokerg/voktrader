@@ -5,6 +5,7 @@ import com.vokerg.voktrader.trade.model.OrderReconciliationSource;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeFillEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
+import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeVenue;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
@@ -89,11 +90,7 @@ public class OrderManager {
         if (response.filled()) {
             persistImmediateFillIfAbsent(trade, order, intent, response);
             reconciliationService.applyImmediateFill(trade, order, response);
-            try {
-                reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_FILL_AUDIT);
-            } catch (RuntimeException ignored) {
-                // Post-fill audit is observability; the accepted fill path must not depend on remote history lag.
-            }
+            auditImmediateFill(order);
             return OrderLifecycleResult.of(trade, order, true, response.safeMessage());
         }
 
@@ -165,11 +162,7 @@ public class OrderManager {
         if (response.filled()) {
             persistImmediateFillIfAbsent(trade, order, sellIntent, response);
             reconciliationService.applyImmediateFill(trade, order, response);
-            try {
-                reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_FILL_AUDIT);
-            } catch (RuntimeException ignored) {
-                // Post-fill audit is observability; the accepted fill path must not depend on remote history lag.
-            }
+            auditImmediateFill(order);
             return OrderLifecycleResult.of(trade, order, true, response.safeMessage());
         }
 
@@ -179,6 +172,17 @@ public class OrderManager {
         tradeRepository.save(trade);
         reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_SUBMIT);
         return OrderLifecycleResult.of(trade, order, true, response.safeMessage());
+    }
+
+    private void auditImmediateFill(TradeOrderEntity order) {
+        if (order.getStatus() == TradeOrderStatus.PARTIALLY_FILLED_DONE) {
+            return;
+        }
+        try {
+            reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_FILL_AUDIT);
+        } catch (RuntimeException ignored) {
+            // Post-fill audit is observability; the accepted fill path must not depend on remote history lag.
+        }
     }
 
     private void persistImmediateFillIfAbsent(
