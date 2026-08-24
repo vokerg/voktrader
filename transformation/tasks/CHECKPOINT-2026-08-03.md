@@ -46,13 +46,13 @@ Implementation report: `transformation/reports/T016-2026-08-04-stabilize-integra
 ## T026 - Close durable order-lifecycle integration failures
 
 Issue: #20
-Status: READY
+Status: IN_PROGRESS
 Priority: P0
 Phase: Checkpoint remediation
-Owner: unclaimed
-Branch:
+Owner: openai-gpt-5.6-sol-20260824
+Branch: task/T026-durable-order-lifecycle-integration
 PR:
-Started:
+Started: 2026-08-24T04:55:00Z
 Completed:
 Depends On: T020, T021, T022, T023, T024, T025
 Parallelizable: no
