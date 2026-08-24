@@ -29,6 +29,7 @@ import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeStatus;
+import com.vokerg.voktrader.trade.outbox.OrderDispatchWorker;
 import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
@@ -94,6 +95,9 @@ class StrategyV2OrderLifecycleIntegrationTest {
 
     @Autowired
     private OrderManager orderManager;
+
+    @Autowired
+    private OrderDispatchWorker orderDispatchWorker;
 
     @Autowired
     private DbTradeStateProvider dbTradeStateProvider;
@@ -165,6 +169,7 @@ class StrategyV2OrderLifecycleIntegrationTest {
         stubCurrentMarket();
 
         engine.tick();
+        orderDispatchWorker.runOnce();
 
         assertThat(executor.submittedCommands()).hasSize(1);
         assertThat(executor.lastSubmittedCommand().side()).isEqualTo(TradeSide.SELL);
@@ -231,6 +236,7 @@ class StrategyV2OrderLifecycleIntegrationTest {
         stubCurrentMarket();
 
         engine.tick();
+        orderDispatchWorker.runOnce();
 
         assertThat(executor.submittedCommands()).hasSize(1);
         assertThat(executor.lastSubmittedCommand().side()).isEqualTo(TradeSide.SELL);
