@@ -8,6 +8,7 @@ import com.vokerg.voktrader.executor.ExecutorOrderResponse;
 import com.vokerg.voktrader.executor.ExecutorOrderStatusResponse;
 import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
+import com.vokerg.voktrader.marketdata.TickSizeService;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.strategy.StrategyMarketDataProvider;
 import com.vokerg.voktrader.strategy.StrategyMarketView;
@@ -103,6 +104,9 @@ class StrategyV2OrderLifecycleIntegrationTest {
     private DbTradeStateProvider dbTradeStateProvider;
 
     @Autowired
+    private TickSizeService tickSizeService;
+
+    @Autowired
     private TradeRepository tradeRepository;
 
     @Autowired
@@ -136,6 +140,7 @@ class StrategyV2OrderLifecycleIntegrationTest {
         executor.reset();
         reset(marketDataProvider, trackedMarketState);
 
+        tickSizeService.recordRestBook(TOKEN_ID, MARKET_ID, "0.01", Instant.parse("2026-05-23T11:59:00Z"));
         tradingProperties.setMode(ExecutionMode.LIVE);
         executionProperties.setUseOrderLayer(true);
         strategyProperties.getEngine().setEnabled(true);
