@@ -31,6 +31,7 @@ public class RuntimeStatusController {
     private final ExecutorCapabilityService executorCapabilityService;
     private final LiveArmService liveArmService;
     private final OrderLayerProperties orderLayerProperties;
+    private final RiskGateStatusService riskGateStatusService;
     private final StrategyProperties strategyProperties;
     private final StrategyV2Properties strategyV2Properties;
     private final BotConfigRepository botConfigRepository;
@@ -42,6 +43,7 @@ public class RuntimeStatusController {
             ExecutorCapabilityService executorCapabilityService,
             LiveArmService liveArmService,
             OrderLayerProperties orderLayerProperties,
+            RiskGateStatusService riskGateStatusService,
             StrategyProperties strategyProperties,
             StrategyV2Properties strategyV2Properties,
             BotConfigRepository botConfigRepository
@@ -52,6 +54,7 @@ public class RuntimeStatusController {
         this.executorCapabilityService = executorCapabilityService;
         this.liveArmService = liveArmService;
         this.orderLayerProperties = orderLayerProperties;
+        this.riskGateStatusService = riskGateStatusService;
         this.strategyProperties = strategyProperties;
         this.strategyV2Properties = strategyV2Properties;
         this.botConfigRepository = botConfigRepository;
@@ -59,13 +62,16 @@ public class RuntimeStatusController {
 
     @GetMapping("/status")
     public RuntimeStatusResponse status() {
+        LiveArmService.LiveArmStatus liveArm = liveArmService.status();
+        ExecutorCapabilityService.ExecutorCapabilityReport capabilities = executorCapabilityService.report();
         return new RuntimeStatusResponse(
                 Arrays.asList(environment.getActiveProfiles()),
                 maskDatasourceUrl(environment.getProperty("spring.datasource.url")),
                 tradingProperties.getMode().name(),
                 tradingProperties.isKillSwitchEnabled(),
                 tradingProperties.isLiveEnabled(),
-                liveArmService.status(),
+                liveArm,
+                riskGateStatusService.status(liveArm, capabilities),
                 tradingProperties.getMaxOrderUsd(),
                 tradingProperties.getMaxTradesPerMarket(),
                 new PortfolioExposurePolicyStatus(
@@ -82,7 +88,7 @@ public class RuntimeStatusController {
                         executorProperties.isDryRun(),
                         executorProperties.getBaseUrl(),
                         executorProperties.isRequireImmediateFill(),
-                        executorCapabilityService.report()
+                        capabilities
                 ),
                 new OrderLayerStatus(
                         orderLayerProperties.isEnabled(),
@@ -110,6 +116,7 @@ public class RuntimeStatusController {
             boolean killSwitchEnabled,
             boolean liveEnabled,
             LiveArmService.LiveArmStatus liveArm,
+            RiskGateStatus riskGateStatus,
             BigDecimal maxOrderUsd,
             int maxTradesPerMarket,
             PortfolioExposurePolicyStatus portfolioExposurePolicy,
