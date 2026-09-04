@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   java:
-    name: Java failure baseline
+    name: Java tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,39 +28,16 @@ jobs:
           distribution: temurin
           java-version: "22"
           cache: maven
-      - name: Run Java suite and enforce failure baseline
+      - name: Run Java suite
         run: |
-          set -uo pipefail
           chmod +x mvnw
-          rm -rf target/surefire-reports
-
-          set +e
-          ./mvnw -B -ntp test 2>&1 | tee java-test.log
-          maven_status=${PIPESTATUS[0]}
-          set -e
-
-          set +e
-          python scripts/ci/check_java_failure_baseline.py \
-            --reports target/surefire-reports \
-            --baseline .github/ci/java-failure-baseline.json \
-            --ledger transformation/tasks/CHECKPOINT-2026-08-03.md \
-            --maven-log java-test.log \
-            --maven-exit-code "$maven_status" \
-            --summary java-failure-summary.md
-          policy_status=$?
-          set -e
-
-          cat java-failure-summary.md >> "$GITHUB_STEP_SUMMARY"
-          exit "$policy_status"
+          ./mvnw -B -ntp test
       - name: Upload Java test evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: java-test-evidence
-          path: |
-            java-test.log
-            java-failure-summary.md
-            target/surefire-reports/TEST-*.xml
+          path: target/surefire-reports/TEST-*.xml
           if-no-files-found: ignore
 
   python:
