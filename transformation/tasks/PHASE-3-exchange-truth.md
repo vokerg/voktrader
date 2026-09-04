@@ -8,7 +8,7 @@ The 2026-08-03 checkpoint requires durable lifecycle phase-exit gate T026 before
 
 ## T030 - Add authenticated user WebSocket consumer
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P3 - Exchange truth and settlement ledger
 Owner: unclaimed

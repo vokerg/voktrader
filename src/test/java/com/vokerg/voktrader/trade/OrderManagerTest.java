@@ -169,8 +169,8 @@ class OrderManagerTest {
         orderManager.submitOrder(intent(TradeSide.BUY), ExecutionMode.LIVE);
 
         ArgumentCaptor<TradeOrderEntity> orderCaptor = ArgumentCaptor.forClass(TradeOrderEntity.class);
-        org.mockito.Mockito.verify(reconciliationService).applyImmediateFill(any(TradeEntity.class), orderCaptor.capture(), any(ExecutorOrderResponse.class));
-        assertThat(orderCaptor.getValue().getStatus()).isEqualTo(TradeOrderStatus.FILLED);
+        verify(reconciliationService).applyImmediateFill(any(TradeEntity.class), orderCaptor.capture(), any(ExecutorOrderResponse.class));
+        assertThat(orderCaptor.getValue().getStatus()).isEqualTo(TradeOrderStatus.SUBMITTING);
         assertThat(orderCaptor.getValue().getRemoteOrderId()).isEqualTo("remote-1");
         ArgumentCaptor<TradeFillEntity> fillCaptor = ArgumentCaptor.forClass(TradeFillEntity.class);
         verify(tradeFillRepository).save(fillCaptor.capture());
@@ -265,16 +265,14 @@ class OrderManagerTest {
         OrderLifecycleResult result = orderManager.submitOrder(intent(TradeSide.SELL), ExecutionMode.LIVE);
 
         assertThat(result.success()).isTrue();
-        assertThat(trade.getStatus()).isEqualTo(TradeStatus.CLOSED);
         verify(liveArmService, never()).status();
+        verify(tradeRepository, never()).save(any(TradeEntity.class));
 
         ArgumentCaptor<TradeOrderEntity> orderCaptor = ArgumentCaptor.forClass(TradeOrderEntity.class);
-        verify(tradeOrderRepository, org.mockito.Mockito.atLeastOnce()).save(orderCaptor.capture());
-        assertThat(orderCaptor.getAllValues().getLast().getTradeId()).isEqualTo(77L);
-
-        ArgumentCaptor<TradeEntity> tradeCaptor = ArgumentCaptor.forClass(TradeEntity.class);
-        verify(tradeRepository, org.mockito.Mockito.atLeastOnce()).save(tradeCaptor.capture());
-        assertThat(tradeCaptor.getAllValues()).allMatch(saved -> saved == trade);
+        verify(reconciliationService).applyImmediateFill(eq(trade), orderCaptor.capture(), any(ExecutorOrderResponse.class));
+        assertThat(orderCaptor.getValue().getTradeId()).isEqualTo(77L);
+        assertThat(orderCaptor.getValue().getStatus()).isEqualTo(TradeOrderStatus.SUBMITTING);
+        assertThat(orderCaptor.getValue().getRemoteOrderId()).isEqualTo("remote-exit");
     }
 
     @Test

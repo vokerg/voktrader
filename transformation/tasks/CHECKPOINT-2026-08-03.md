@@ -46,14 +46,14 @@ Implementation report: `transformation/reports/T016-2026-08-04-stabilize-integra
 ## T026 - Close durable order-lifecycle integration failures
 
 Issue: #20
-Status: READY
+Status: DONE
 Priority: P0
 Phase: Checkpoint remediation
-Owner: unclaimed
-Branch:
-PR:
-Started:
-Completed:
+Owner: openai-gpt-5.6-sol-20260824
+Branch: task/T026-durable-order-lifecycle-integration
+PR: #37
+Started: 2026-08-24T04:55:00Z
+Completed: 2026-09-04T05:33:25Z
 Depends On: T020, T021, T022, T023, T024, T025
 Parallelizable: no
 
@@ -63,11 +63,15 @@ Prove the integrated order/trade lifecycle is coherent before authenticated exch
 
 ### Acceptance criteria
 
-- [ ] `OrderManagerTest`, `OrderLifecycleIntegrationTest`, and `StrategyV2OrderLifecycleIntegrationTest` pass.
-- [ ] FOK, FAK, GTC, GTD, partial fill, partial exit, cancellation, reconciliation, restart, and oversell behavior are covered.
-- [ ] Immediate fills, resting orders, rejected orders, and completed exits persist correct states.
-- [ ] Full Java suite has no entry/exit/order-lifecycle failures or errors.
-- [ ] No remote executor submission occurs inside an acceptance transaction.
+- [x] `OrderManagerTest`, `OrderLifecycleIntegrationTest`, and `StrategyV2OrderLifecycleIntegrationTest` pass.
+- [x] FOK, FAK, GTC, GTD, partial fill, partial exit, cancellation, reconciliation, restart, and oversell behavior are covered.
+- [x] Immediate fills, resting orders, rejected orders, and completed exits persist correct states.
+- [x] Full Java suite has no entry/exit/order-lifecycle failures or errors.
+- [x] No remote executor submission occurs inside an acceptance transaction.
+
+Validation: CI run #346 hard-green Java suite: 357 tests, 0 failures, 0 errors, 2 skipped. The temporary Java failure baseline is removed and the CI Java job is an ordinary fail-closed Maven gate.
+
+Implementation report: `transformation/reports/T026-2026-09-04-close-durable-order-lifecycle-integration-failures.md`
 
 ---
 

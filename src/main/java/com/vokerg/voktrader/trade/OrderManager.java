@@ -89,11 +89,7 @@ public class OrderManager {
         if (response.filled()) {
             persistImmediateFillIfAbsent(trade, order, intent, response);
             reconciliationService.applyImmediateFill(trade, order, response);
-            try {
-                reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_FILL_AUDIT);
-            } catch (RuntimeException ignored) {
-                // Post-fill audit is observability; the accepted fill path must not depend on remote history lag.
-            }
+            auditImmediateFill(order);
             return OrderLifecycleResult.of(trade, order, true, response.safeMessage());
         }
 
@@ -165,11 +161,7 @@ public class OrderManager {
         if (response.filled()) {
             persistImmediateFillIfAbsent(trade, order, sellIntent, response);
             reconciliationService.applyImmediateFill(trade, order, response);
-            try {
-                reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_FILL_AUDIT);
-            } catch (RuntimeException ignored) {
-                // Post-fill audit is observability; the accepted fill path must not depend on remote history lag.
-            }
+            auditImmediateFill(order);
             return OrderLifecycleResult.of(trade, order, true, response.safeMessage());
         }
 
@@ -179,6 +171,14 @@ public class OrderManager {
         tradeRepository.save(trade);
         reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_SUBMIT);
         return OrderLifecycleResult.of(trade, order, true, response.safeMessage());
+    }
+
+    private void auditImmediateFill(TradeOrderEntity order) {
+        try {
+            reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_FILL_AUDIT);
+        } catch (RuntimeException ignored) {
+            // Post-fill audit is observability; the accepted fill path must not depend on remote history lag.
+        }
     }
 
     private void persistImmediateFillIfAbsent(

@@ -162,13 +162,13 @@ class StrategyV2RuntimeStateAwarenessTest {
     }
 
     @Test
-    void partiallyOpenExposesPartialStateWithoutNormalEntry() {
+    void partiallyOpenWithActiveEntrySuppressesExitUntilRemainderDone() {
         StrategyRuntimeState state = state(TradeStatus.PARTIALLY_OPEN, entryOrder(TradeOrderStatus.PARTIALLY_FILLED, 1), null);
         EngineFixture fixture = fixture(true, state);
 
         fixture.engine.tick();
 
-        verify(exitEvaluator).evaluate(eq(fixture.strategy), any(), any(), eq(state));
+        verify(exitEvaluator, never()).evaluate(any(), any(), any(), any(StrategyRuntimeState.class));
         verify(entryEvaluator, never()).evaluate(any(), anyList(), any());
     }
 

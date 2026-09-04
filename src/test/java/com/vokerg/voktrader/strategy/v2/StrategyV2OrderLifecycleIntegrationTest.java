@@ -8,6 +8,7 @@ import com.vokerg.voktrader.executor.ExecutorOrderResponse;
 import com.vokerg.voktrader.executor.ExecutorOrderStatusResponse;
 import com.vokerg.voktrader.market.TrackedMarketState;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
+import com.vokerg.voktrader.marketdata.TickSizeService;
 import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.strategy.StrategyMarketDataProvider;
 import com.vokerg.voktrader.strategy.StrategyMarketView;
@@ -29,6 +30,7 @@ import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeStatus;
+import com.vokerg.voktrader.trade.outbox.OrderDispatchWorker;
 import com.vokerg.voktrader.trade.persistence.TradeEventRepository;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
 import com.vokerg.voktrader.trade.persistence.TradeOrderRepository;
@@ -96,7 +98,13 @@ class StrategyV2OrderLifecycleIntegrationTest {
     private OrderManager orderManager;
 
     @Autowired
+    private OrderDispatchWorker orderDispatchWorker;
+
+    @Autowired
     private DbTradeStateProvider dbTradeStateProvider;
+
+    @Autowired
+    private TickSizeService tickSizeService;
 
     @Autowired
     private TradeRepository tradeRepository;
@@ -132,6 +140,7 @@ class StrategyV2OrderLifecycleIntegrationTest {
         executor.reset();
         reset(marketDataProvider, trackedMarketState);
 
+        tickSizeService.recordRestBook(TOKEN_ID, MARKET_ID, "0.01", Instant.parse("2026-05-23T11:59:00Z"));
         tradingProperties.setMode(ExecutionMode.LIVE);
         executionProperties.setUseOrderLayer(true);
         strategyProperties.getEngine().setEnabled(true);
@@ -165,6 +174,7 @@ class StrategyV2OrderLifecycleIntegrationTest {
         stubCurrentMarket();
 
         engine.tick();
+        orderDispatchWorker.runOnce();
 
         assertThat(executor.submittedCommands()).hasSize(1);
         assertThat(executor.lastSubmittedCommand().side()).isEqualTo(TradeSide.SELL);
@@ -231,6 +241,7 @@ class StrategyV2OrderLifecycleIntegrationTest {
         stubCurrentMarket();
 
         engine.tick();
+        orderDispatchWorker.runOnce();
 
         assertThat(executor.submittedCommands()).hasSize(1);
         assertThat(executor.lastSubmittedCommand().side()).isEqualTo(TradeSide.SELL);
