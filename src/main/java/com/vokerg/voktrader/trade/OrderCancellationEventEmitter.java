@@ -19,6 +19,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class OrderCancellationEventEmitter {
     public static final String CANCEL_REQUESTED_EVENT = "LIVE_ORDER_CANCEL_REQUESTED";
+    public static final String CANCEL_STATE_CHANGED_EVENT = "LIVE_ORDER_CANCEL_STATE_CHANGED";
     public static final String CANCELLED_EVENT = "LIVE_ORDER_CANCELLED";
     public static final String PAPER_CANCEL_REQUESTED_EVENT = "PAPER_ORDER_CANCEL_REQUESTED";
     public static final String PAPER_CANCELLED_EVENT = "PAPER_ORDER_CANCELLED";
@@ -42,6 +43,30 @@ public class OrderCancellationEventEmitter {
                 reason,
                 rawResponse
         );
+    }
+
+    public void emitCancelStateChanged(
+            TradeEntity trade,
+            TradeOrderEntity order,
+            TradeOrderStatus previousStatus,
+            String reason,
+            String rawResponse
+    ) {
+        tradeEventRepository.save(TradeEventEntity.of(
+                order == null ? null : order.getTradeId(),
+                order == null ? null : order.getId(),
+                null,
+                CANCEL_STATE_CHANGED_EVENT,
+                "live order cancel state changed",
+                payloadJson(
+                        trade,
+                        order,
+                        previousStatus,
+                        order == null ? null : order.getStatus(),
+                        reason,
+                        rawResponse
+                )
+        ));
     }
 
     public void emitCancelled(

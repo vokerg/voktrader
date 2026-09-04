@@ -117,14 +117,47 @@ Required executor env vars:
 - `MAX_ORDER_AMOUNT_USD`
 - `REQUIRE_FOK=false`
 
-Start Java:
+Before starting Java, generate four distinct random secrets of at least 32 characters. Do not reuse the executor token, commit these values, pass them in URLs, or place them in browser storage.
 
 ```powershell
 cd C:\repos\voktrader
 $env:SPRING_PROFILES_ACTIVE="live,live-test"
-$env:VOKTRADER_EXECUTOR_API_TOKEN="change-me"
+$env:VOKTRADER_EXECUTOR_API_TOKEN="<executor-token>"
+$env:VOKTRADER_CONTROL_READ_ONLY_TOKEN="<read-only-token>"
+$env:VOKTRADER_CONTROL_OPERATOR_TOKEN="<operator-token>"
+$env:VOKTRADER_CONTROL_ADMIN_TOKEN="<admin-token>"
+$env:VOKTRADER_CONTROL_CONFIRMATION_TOKEN="<separate-confirmation-token>"
 .\mvnw.cmd spring-boot:run
 ```
+
+The live Java server binds to `127.0.0.1` by default. Deliberate remote exposure requires `VOKTRADER_LIVE_BIND_ADDRESS`; use a trusted reverse proxy, encrypted transport, and network access controls rather than binding directly to an untrusted interface.
+
+### Live control-plane authentication
+
+Every live `/api/**` request requires `Authorization: Bearer <role-token>`:
+
+- Read-only token: GET and HEAD only.
+- Operator token: reads plus POST, PUT, and PATCH.
+- Admin token: operator permissions plus DELETE.
+
+Every authenticated POST, PUT, PATCH, or DELETE also requires `X-Voktrader-Confirmation: <separate-confirmation-token>`. Mutation attempts are audit-written before controller dispatch. If the audit write fails, the mutation fails closed.
+
+Read runtime status:
+
+```powershell
+curl.exe http://127.0.0.1:8080/api/runtime/status `
+  -H "Authorization: Bearer $env:VOKTRADER_CONTROL_READ_ONLY_TOKEN"
+```
+
+Pause a bot with operator confirmation:
+
+```powershell
+curl.exe -X POST http://127.0.0.1:8080/api/bots/10/pause `
+  -H "Authorization: Bearer $env:VOKTRADER_CONTROL_OPERATOR_TOKEN" `
+  -H "X-Voktrader-Confirmation: $env:VOKTRADER_CONTROL_CONFIRMATION_TOKEN"
+```
+
+The live profile disables H2 Console, Swagger/OpenAPI routes, and Spring Boot Admin. Requests to those routes are also denied by the live security chain.
 
 Live safety gates:
 

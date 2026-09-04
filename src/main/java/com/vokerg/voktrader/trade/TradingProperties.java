@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -23,12 +24,35 @@ public class TradingProperties {
     /** A second explicit switch. Real live modes require liveEnabled=true and killSwitchEnabled=false. */
     private boolean liveEnabled = false;
 
+    /**
+     * Operator-declared account identity that must be repeated when creating a short-lived live arm.
+     */
+    private String expectedAccountId = "";
+
+    /**
+     * Maximum lifetime of one explicit live arm. Every arm expires automatically.
+     */
+    private Duration liveArmTtl = Duration.ofMinutes(15);
+
     private BigDecimal maxOrderUsd = new BigDecimal("1.00");
     private BigDecimal minMakerOrderShares = new BigDecimal("5.00");
     private BigDecimal maxSpread = new BigDecimal("0.03");
     private long maxPriceAgeMs = 1500;
     private int maxOpenLiveTrades = 1;
-    private int maxTradesPerMarket = 1;
+
+    /** Block another inner strategy while any entry or position is active for the same bot and market. */
+    private boolean onePositionPerBotMarket = true;
+
+    /** Block another entry while any entry or position is active for the same bot, market, and token. */
+    private boolean onePositionPerToken = true;
+
+    /** Active exposure cap for one bot/account/mode and market. Values <= 0 disable this cap. */
+    private int maxActivePositionsPerMarket = 1;
+
+    /** Active exposure cap for one bot/account/mode across markets. Values <= 0 disable this cap. */
+    private int maxActivePositionsPerPortfolio = 0;
+
+    /** Attempt throttle; unlike active-position caps, this considers recent failed/rejected live entry orders. */
     private long liveRetryCooldownSeconds = 0;
     private int minSecondsToExpiry = 30;
     private BigDecimal paperFeeRate = new BigDecimal("0.072");
@@ -62,6 +86,22 @@ public class TradingProperties {
 
     public void setLiveEnabled(boolean liveEnabled) {
         this.liveEnabled = liveEnabled;
+    }
+
+    public String getExpectedAccountId() {
+        return expectedAccountId;
+    }
+
+    public void setExpectedAccountId(String expectedAccountId) {
+        this.expectedAccountId = expectedAccountId;
+    }
+
+    public Duration getLiveArmTtl() {
+        return liveArmTtl;
+    }
+
+    public void setLiveArmTtl(Duration liveArmTtl) {
+        this.liveArmTtl = liveArmTtl;
     }
 
     public BigDecimal getMaxOrderUsd() {
@@ -104,12 +144,50 @@ public class TradingProperties {
         this.maxOpenLiveTrades = maxOpenLiveTrades;
     }
 
-    public int getMaxTradesPerMarket() {
-        return maxTradesPerMarket;
+    public boolean isOnePositionPerBotMarket() {
+        return onePositionPerBotMarket;
     }
 
+    public void setOnePositionPerBotMarket(boolean onePositionPerBotMarket) {
+        this.onePositionPerBotMarket = onePositionPerBotMarket;
+    }
+
+    public boolean isOnePositionPerToken() {
+        return onePositionPerToken;
+    }
+
+    public void setOnePositionPerToken(boolean onePositionPerToken) {
+        this.onePositionPerToken = onePositionPerToken;
+    }
+
+    public int getMaxActivePositionsPerMarket() {
+        return maxActivePositionsPerMarket;
+    }
+
+    public void setMaxActivePositionsPerMarket(int maxActivePositionsPerMarket) {
+        this.maxActivePositionsPerMarket = maxActivePositionsPerMarket;
+    }
+
+    public int getMaxActivePositionsPerPortfolio() {
+        return maxActivePositionsPerPortfolio;
+    }
+
+    public void setMaxActivePositionsPerPortfolio(int maxActivePositionsPerPortfolio) {
+        this.maxActivePositionsPerPortfolio = maxActivePositionsPerPortfolio;
+    }
+
+    /**
+     * Compatibility alias for the old ambiguous name. This is an active-position cap, not a cumulative attempt cap.
+     */
+    @Deprecated
+    public int getMaxTradesPerMarket() {
+        return maxActivePositionsPerMarket;
+    }
+
+    /** Compatibility binder for existing `max-trades-per-market` configuration. */
+    @Deprecated
     public void setMaxTradesPerMarket(int maxTradesPerMarket) {
-        this.maxTradesPerMarket = maxTradesPerMarket;
+        this.maxActivePositionsPerMarket = maxTradesPerMarket;
     }
 
     public long getLiveRetryCooldownSeconds() {

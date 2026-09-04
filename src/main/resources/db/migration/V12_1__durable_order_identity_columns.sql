@@ -1,0 +1,3 @@
+ALTER TABLE trade_orders ADD COLUMN IF NOT EXISTS local_order_id VARCHAR(255);
+ALTER TABLE trade_orders ADD COLUMN IF NOT EXISTS remote_order_id VARCHAR(255);
+ALTER TABLE trade_fills ADD COLUMN IF NOT EXISTS remote_fill_id VARCHAR(255);

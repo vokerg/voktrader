@@ -33,6 +33,7 @@ public class OrderManager {
     private final TradeFillRepository tradeFillRepository;
     private final PythonExecutorClient pythonExecutorClient;
     private final ExecutorProperties executorProperties;
+    private final LiveArmService liveArmService;
     private final OrderReconciliationService reconciliationService;
     private final OrderCancellationEventEmitter cancellationEventEmitter;
     private final ObjectMapper objectMapper;
@@ -41,6 +42,24 @@ public class OrderManager {
     public OrderLifecycleResult submitOrder(TradeIntent intent, ExecutionMode mode) {
         if (intent.side() == TradeSide.SELL) {
             return submitExitOrder(intent, mode);
+        }
+
+        if (mode == ExecutionMode.LIVE) {
+            LiveArmService.LiveArmStatus armStatus = liveArmService.status();
+            if (!armStatus.entryAllowed()) {
+                String message = "LIVE entry rejected before executor call: " + armStatus.entryBlockReason();
+                return new OrderLifecycleResult(
+                        false,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        message,
+                        message
+                );
+            }
         }
 
         TradeEntity trade = tradeRepository.save(TradeEntity.fromIntent(intent, mode));
@@ -70,11 +89,7 @@ public class OrderManager {
         if (response.filled()) {
             persistImmediateFillIfAbsent(trade, order, intent, response);
             reconciliationService.applyImmediateFill(trade, order, response);
-            try {
-                reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_FILL_AUDIT);
-            } catch (RuntimeException ignored) {
-                // Post-fill audit is observability; the accepted fill path must not depend on remote history lag.
-            }
+            auditImmediateFill(order);
             return OrderLifecycleResult.of(trade, order, true, response.safeMessage());
         }
 
@@ -146,11 +161,7 @@ public class OrderManager {
         if (response.filled()) {
             persistImmediateFillIfAbsent(trade, order, sellIntent, response);
             reconciliationService.applyImmediateFill(trade, order, response);
-            try {
-                reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_FILL_AUDIT);
-            } catch (RuntimeException ignored) {
-                // Post-fill audit is observability; the accepted fill path must not depend on remote history lag.
-            }
+            auditImmediateFill(order);
             return OrderLifecycleResult.of(trade, order, true, response.safeMessage());
         }
 
@@ -160,6 +171,14 @@ public class OrderManager {
         tradeRepository.save(trade);
         reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_SUBMIT);
         return OrderLifecycleResult.of(trade, order, true, response.safeMessage());
+    }
+
+    private void auditImmediateFill(TradeOrderEntity order) {
+        try {
+            reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_FILL_AUDIT);
+        } catch (RuntimeException ignored) {
+            // Post-fill audit is observability; the accepted fill path must not depend on remote history lag.
+        }
     }
 
     private void persistImmediateFillIfAbsent(

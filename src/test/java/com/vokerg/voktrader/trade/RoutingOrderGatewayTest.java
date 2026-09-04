@@ -1,10 +1,11 @@
 package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.strategy.v2.StrategyV2ExecutionProperties;
-import com.vokerg.voktrader.trade.paper.PaperOrderGateway;
 import com.vokerg.voktrader.trade.model.ExecutionMode;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
+import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeStatus;
+import com.vokerg.voktrader.trade.paper.PaperOrderGateway;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -74,6 +75,34 @@ class RoutingOrderGatewayTest {
 
         assertThat(routed).isSameAs(result);
         verify(liveOrderGateway).submitOrder(intent, owner, ExecutionMode.LIVE);
+        verify(paperOrderGateway, never()).submitOrder(intent, owner, ExecutionMode.LIVE);
+    }
+
+    @Test
+    void rawPaperBuyCannotBypassCentralEntryRisk() {
+        TradeIntent intent = mock(TradeIntent.class);
+        when(intent.side()).thenReturn(TradeSide.BUY);
+        StrategyInstanceKey owner = StrategyInstanceKey.of(1L, "MK_GTD_EDGE_A");
+
+        OrderLifecycleResult result = gateway.submitOrder(intent, owner, ExecutionMode.PAPER);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains("approved central entry risk decision is required");
+        verify(paperOrderGateway, never()).submitOrder(intent, owner, ExecutionMode.PAPER);
+        verify(liveOrderGateway, never()).submitOrder(intent, owner, ExecutionMode.PAPER);
+    }
+
+    @Test
+    void rawLiveBuyIsRejectedBeforeSelectingADelegate() {
+        TradeIntent intent = mock(TradeIntent.class);
+        when(intent.side()).thenReturn(TradeSide.BUY);
+        StrategyInstanceKey owner = StrategyInstanceKey.of(1L, "MK_GTD_EDGE_A");
+
+        OrderLifecycleResult result = gateway.submitOrder(intent, owner, ExecutionMode.LIVE);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains("approved central entry risk decision is required");
+        verify(liveOrderGateway, never()).submitOrder(intent, owner, ExecutionMode.LIVE);
         verify(paperOrderGateway, never()).submitOrder(intent, owner, ExecutionMode.LIVE);
     }
 }

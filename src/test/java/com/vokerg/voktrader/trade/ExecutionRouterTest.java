@@ -23,11 +23,11 @@ import static org.mockito.Mockito.when;
 class ExecutionRouterTest {
     private final TradingProperties properties = new TradingProperties();
     private final PaperExecutionService paperExecutionService = mock(PaperExecutionService.class);
-    private final LiveExecutionService liveExecutionService = mock(LiveExecutionService.class);
+    private final LiveOrderGateway liveOrderGateway = mock(LiveOrderGateway.class);
     private final ExecutionRouter router = new ExecutionRouter(
             properties,
             paperExecutionService,
-            liveExecutionService
+            liveOrderGateway
     );
 
     @Test
@@ -48,27 +48,33 @@ class ExecutionRouterTest {
 
         assertThat(result).isSameAs(paperResult);
         verify(paperExecutionService).execute(intent);
-        verifyNoInteractions(liveExecutionService);
+        verifyNoInteractions(liveOrderGateway);
     }
 
     @Test
-    void liveModeRoutesEverythingToLiveExecutor() {
+    void liveModeRoutesEverythingToDurableLiveGateway() {
         properties.setMode(ExecutionMode.LIVE);
         TradeIntent intent = sellIntent();
-        TradeExecutionResult liveResult = TradeExecutionResult.accepted(
-                ExecutionMode.LIVE,
+        StrategyInstanceKey owner = StrategyInstanceKey.of(intent.botId(), intent.strategyId());
+        OrderLifecycleResult liveResult = new OrderLifecycleResult(
+                true,
                 5317L,
                 6363L,
+                "vok-client",
+                null,
                 TradeStatus.EXIT_PENDING,
-                TradeOrderStatus.SUBMITTED,
-                "live exit submitted"
+                TradeOrderStatus.CREATED,
+                "accepted for durable dispatch",
+                null
         );
-        when(liveExecutionService.execute(intent, ExecutionMode.LIVE)).thenReturn(liveResult);
+        when(liveOrderGateway.submitOrder(intent, owner, ExecutionMode.LIVE)).thenReturn(liveResult);
 
         TradeExecutionResult result = router.route(intent);
 
-        assertThat(result).isSameAs(liveResult);
-        verify(liveExecutionService).execute(intent, ExecutionMode.LIVE);
+        assertThat(result.accepted()).isTrue();
+        assertThat(result.localOrderId()).isEqualTo("vok-client");
+        assertThat(result.orderStatus()).isEqualTo(TradeOrderStatus.CREATED);
+        verify(liveOrderGateway).submitOrder(intent, owner, ExecutionMode.LIVE);
         verifyNoInteractions(paperExecutionService);
     }
 
@@ -79,7 +85,7 @@ class ExecutionRouterTest {
         assertThatThrownBy(() -> router.route(sellIntent()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("voktrader.trading.mode");
-        verifyNoInteractions(paperExecutionService, liveExecutionService);
+        verifyNoInteractions(paperExecutionService, liveOrderGateway);
     }
 
     private TradeIntent sellIntent() {

@@ -1,0 +1,15 @@
+FROM python:3.12-slim
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+COPY pyproject.toml requirements.lock ./
+COPY voktrader_executor ./voktrader_executor
+RUN python -m pip install --no-cache-dir --upgrade pip==26.1.2 \
+    && python -m pip install --no-cache-dir --requirement requirements.lock \
+    && python -m pip install --no-cache-dir --no-deps . \
+    && python -m pip check
+
+EXPOSE 8099
+CMD ["uvicorn", "voktrader_executor.main:app", "--host", "0.0.0.0", "--port", "8099"]

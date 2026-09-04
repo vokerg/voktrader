@@ -19,6 +19,10 @@ public final class TimeMachine {
         return current == null ? fallback.instant() : current;
     }
 
+    public static boolean isOverridden() {
+        return CURRENT.get() != null;
+    }
+
     public static void runAt(Instant instant, Runnable runnable) {
         Instant previous = CURRENT.get();
         CURRENT.set(instant);

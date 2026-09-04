@@ -1,15 +1,15 @@
 package com.vokerg.voktrader.strategy;
 
 import com.vokerg.voktrader.market.TrackedMarketState;
-import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.marketdata.LatestPriceState;
 import com.vokerg.voktrader.marketdata.OutcomePrice;
+import com.vokerg.voktrader.polymarket.dto.GammaMarketDto;
 import com.vokerg.voktrader.telemetry.TelemetryData;
 import com.vokerg.voktrader.telemetry.TradingEventLogger;
-import com.vokerg.voktrader.trade.ExecutionRouter;
-import com.vokerg.voktrader.trade.TradeIntent;
-import com.vokerg.voktrader.trade.model.TradeOrderType;
 import com.vokerg.voktrader.time.TimeMachine;
+import com.vokerg.voktrader.trade.EntryIntent;
+import com.vokerg.voktrader.trade.LegacyStrategyIntentAdapter;
+import com.vokerg.voktrader.trade.model.TradeOrderType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -33,7 +33,7 @@ public class StrategyEntrySupport {
     private final TrackedMarketState trackedMarketState;
     private final StrategyTimeWindow strategyTimeWindow;
     private final StrategyTradeSupport tradeSupport;
-    private final ExecutionRouter executionRouter;
+    private final LegacyStrategyIntentAdapter intentAdapter;
     private final TradingEventLogger eventLogger;
     private final StrategyMarketDataProvider marketDataProvider;
     private final Clock clock;
@@ -44,11 +44,32 @@ public class StrategyEntrySupport {
             TrackedMarketState trackedMarketState,
             StrategyTimeWindow strategyTimeWindow,
             StrategyTradeSupport tradeSupport,
-            ExecutionRouter executionRouter,
+            LegacyStrategyIntentAdapter intentAdapter,
             TradingEventLogger eventLogger,
             StrategyMarketDataProvider marketDataProvider
     ) {
-        this(latestPriceState, trackedMarketState, strategyTimeWindow, tradeSupport, executionRouter, eventLogger, marketDataProvider, Clock.systemUTC());
+        this(latestPriceState, trackedMarketState, strategyTimeWindow, tradeSupport, intentAdapter, eventLogger, marketDataProvider, Clock.systemUTC());
+    }
+
+    public StrategyEntrySupport(
+            LatestPriceState latestPriceState,
+            TrackedMarketState trackedMarketState,
+            StrategyTimeWindow strategyTimeWindow,
+            StrategyTradeSupport tradeSupport,
+            Object legacyRouter,
+            TradingEventLogger eventLogger,
+            StrategyMarketDataProvider marketDataProvider
+    ) {
+        this(
+                latestPriceState,
+                trackedMarketState,
+                strategyTimeWindow,
+                tradeSupport,
+                LegacyStrategyIntentAdapter.fromLegacyRouter(legacyRouter),
+                eventLogger,
+                marketDataProvider,
+                Clock.systemUTC()
+        );
     }
 
     StrategyEntrySupport(
@@ -56,7 +77,29 @@ public class StrategyEntrySupport {
             TrackedMarketState trackedMarketState,
             StrategyTimeWindow strategyTimeWindow,
             StrategyTradeSupport tradeSupport,
-            ExecutionRouter executionRouter,
+            Object legacyRouter,
+            TradingEventLogger eventLogger,
+            StrategyMarketDataProvider marketDataProvider,
+            Clock clock
+    ) {
+        this(
+                latestPriceState,
+                trackedMarketState,
+                strategyTimeWindow,
+                tradeSupport,
+                LegacyStrategyIntentAdapter.fromLegacyRouter(legacyRouter),
+                eventLogger,
+                marketDataProvider,
+                clock
+        );
+    }
+
+    private StrategyEntrySupport(
+            LatestPriceState latestPriceState,
+            TrackedMarketState trackedMarketState,
+            StrategyTimeWindow strategyTimeWindow,
+            StrategyTradeSupport tradeSupport,
+            LegacyStrategyIntentAdapter intentAdapter,
             TradingEventLogger eventLogger,
             StrategyMarketDataProvider marketDataProvider,
             Clock clock
@@ -65,7 +108,7 @@ public class StrategyEntrySupport {
         this.trackedMarketState = trackedMarketState;
         this.strategyTimeWindow = strategyTimeWindow;
         this.tradeSupport = tradeSupport;
-        this.executionRouter = executionRouter;
+        this.intentAdapter = intentAdapter;
         this.eventLogger = eventLogger;
         this.marketDataProvider = marketDataProvider;
         this.clock = clock;
@@ -223,7 +266,7 @@ public class StrategyEntrySupport {
     }
 
     private void routeBuy(String strategyId, String ruleId, GammaMarketDto market, EntrySignal signal) {
-        var result = executionRouter.route(TradeIntent.buy(
+        var result = intentAdapter.routeEntry(EntryIntent.buy(
                 tradeSupport.currentBotId(),
                 market,
                 signal.candidate(),

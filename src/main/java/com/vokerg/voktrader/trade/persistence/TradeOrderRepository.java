@@ -1,14 +1,17 @@
 package com.vokerg.voktrader.trade.persistence;
 
 import com.vokerg.voktrader.trade.model.ExecutionMode;
+import com.vokerg.voktrader.trade.model.TradeEventEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderPhase;
 import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeVenue;
+import jakarta.persistence.LockModeType;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
@@ -33,6 +36,32 @@ public interface TradeOrderRepository extends JpaRepository<TradeOrderEntity, Lo
     List<TradeOrderEntity> findByStatusIn(List<TradeOrderStatus> statuses);
 
     List<TradeOrderEntity> findByStatusInAndRemoteOrderIdIsNotNull(List<TradeOrderStatus> statuses);
+
+    List<TradeOrderEntity> findByCancelReasonIsNotNullAndStatusIn(List<TradeOrderStatus> statuses);
+
+    @Query("""
+            select o
+            from TradeOrderEntity o
+            where o.status in :statuses
+              and (
+                    o.cancelReason is not null
+                    or exists (
+                        select e.id
+                        from TradeEventEntity e
+                        where e.tradeOrderId = o.id
+                          and e.eventType = :eventType
+                    )
+              )
+            order by o.updatedAt asc
+            """)
+    List<TradeOrderEntity> findRecoverableCancellations(
+            @Param("statuses") List<TradeOrderStatus> statuses,
+            @Param("eventType") String eventType
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from TradeOrderEntity o where o.id = :orderId")
+    Optional<TradeOrderEntity> findByIdForUpdate(@Param("orderId") Long orderId);
 
     List<TradeOrderEntity> findByModeAndVenueAndStatusInOrderByUpdatedAtAsc(
             ExecutionMode mode,

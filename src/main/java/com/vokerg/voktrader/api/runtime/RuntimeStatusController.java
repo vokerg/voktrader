@@ -2,9 +2,11 @@ package com.vokerg.voktrader.api.runtime;
 
 import com.vokerg.voktrader.bot.BotConfigEntity;
 import com.vokerg.voktrader.bot.BotConfigRepository;
+import com.vokerg.voktrader.executor.ExecutorCapabilityService;
 import com.vokerg.voktrader.executor.ExecutorProperties;
 import com.vokerg.voktrader.strategy.StrategyProperties;
 import com.vokerg.voktrader.strategy.v2.StrategyV2Properties;
+import com.vokerg.voktrader.trade.LiveArmService;
 import com.vokerg.voktrader.trade.OrderLayerProperties;
 import com.vokerg.voktrader.trade.TradingProperties;
 import org.springframework.core.env.Environment;
@@ -26,6 +28,8 @@ public class RuntimeStatusController {
     private final Environment environment;
     private final TradingProperties tradingProperties;
     private final ExecutorProperties executorProperties;
+    private final ExecutorCapabilityService executorCapabilityService;
+    private final LiveArmService liveArmService;
     private final OrderLayerProperties orderLayerProperties;
     private final StrategyProperties strategyProperties;
     private final StrategyV2Properties strategyV2Properties;
@@ -35,6 +39,8 @@ public class RuntimeStatusController {
             Environment environment,
             TradingProperties tradingProperties,
             ExecutorProperties executorProperties,
+            ExecutorCapabilityService executorCapabilityService,
+            LiveArmService liveArmService,
             OrderLayerProperties orderLayerProperties,
             StrategyProperties strategyProperties,
             StrategyV2Properties strategyV2Properties,
@@ -43,6 +49,8 @@ public class RuntimeStatusController {
         this.environment = environment;
         this.tradingProperties = tradingProperties;
         this.executorProperties = executorProperties;
+        this.executorCapabilityService = executorCapabilityService;
+        this.liveArmService = liveArmService;
         this.orderLayerProperties = orderLayerProperties;
         this.strategyProperties = strategyProperties;
         this.strategyV2Properties = strategyV2Properties;
@@ -57,15 +65,24 @@ public class RuntimeStatusController {
                 tradingProperties.getMode().name(),
                 tradingProperties.isKillSwitchEnabled(),
                 tradingProperties.isLiveEnabled(),
+                liveArmService.status(),
                 tradingProperties.getMaxOrderUsd(),
                 tradingProperties.getMaxTradesPerMarket(),
+                new PortfolioExposurePolicyStatus(
+                        tradingProperties.isOnePositionPerBotMarket(),
+                        tradingProperties.isOnePositionPerToken(),
+                        tradingProperties.getMaxActivePositionsPerMarket(),
+                        tradingProperties.getMaxActivePositionsPerPortfolio(),
+                        tradingProperties.getLiveRetryCooldownSeconds()
+                ),
                 tradingProperties.getMaxOpenLiveTrades(),
                 tradingProperties.getAllowedStrategyIds(),
                 new ExecutorStatus(
                         executorProperties.isEnabled(),
                         executorProperties.isDryRun(),
                         executorProperties.getBaseUrl(),
-                        executorProperties.isRequireImmediateFill()
+                        executorProperties.isRequireImmediateFill(),
+                        executorCapabilityService.report()
                 ),
                 new OrderLayerStatus(
                         orderLayerProperties.isEnabled(),
@@ -92,8 +109,10 @@ public class RuntimeStatusController {
             String tradingMode,
             boolean killSwitchEnabled,
             boolean liveEnabled,
+            LiveArmService.LiveArmStatus liveArm,
             BigDecimal maxOrderUsd,
             int maxTradesPerMarket,
+            PortfolioExposurePolicyStatus portfolioExposurePolicy,
             int maxOpenLiveTrades,
             Set<String> allowedStrategyIds,
             ExecutorStatus executor,
@@ -104,11 +123,21 @@ public class RuntimeStatusController {
     ) {
     }
 
+    public record PortfolioExposurePolicyStatus(
+            boolean onePositionPerBotMarket,
+            boolean onePositionPerToken,
+            int maxActivePositionsPerMarket,
+            int maxActivePositionsPerPortfolio,
+            long liveEntryAttemptCooldownSeconds
+    ) {
+    }
+
     public record ExecutorStatus(
             boolean enabled,
             boolean dryRun,
             String baseUrl,
-            boolean requireImmediateFill
+            boolean requireImmediateFill,
+            ExecutorCapabilityService.ExecutorCapabilityReport capabilities
     ) {
     }
 

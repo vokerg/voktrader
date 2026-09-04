@@ -288,17 +288,23 @@ public class TradeOrderEntity {
             LiquidityRole fillRole,
             String rawResponse
     ) {
-        this.status = status;
+        TradeOrderStatus resolvedStatus = this.status == TradeOrderStatus.PARTIALLY_FILLED_DONE
+                && status == TradeOrderStatus.PARTIALLY_FILLED
+                ? TradeOrderStatus.PARTIALLY_FILLED_DONE
+                : status;
+        this.status = resolvedStatus;
         this.filledPrice = avgPrice;
         this.avgFillPrice = avgPrice;
         this.filledShares = filledShares;
         this.filledAmountUsd = filledAmountUsd;
-        this.remainingShares = remainingShares;
+        this.remainingShares = resolvedStatus == TradeOrderStatus.PARTIALLY_FILLED_DONE
+                ? BigDecimal.ZERO
+                : remainingShares;
         this.realizedFeeUsd = feeUsd;
         this.feeKnown = feeKnown;
         this.fillRole = fillRole;
         setRawResponseIfUseful(rawResponse);
-        if (status.isTerminal()) {
+        if (resolvedStatus.isTerminal()) {
             this.completedAt = TimeMachine.now();
         }
         touch();
