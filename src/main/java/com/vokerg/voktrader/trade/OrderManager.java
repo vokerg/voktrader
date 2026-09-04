@@ -5,7 +5,6 @@ import com.vokerg.voktrader.trade.model.OrderReconciliationSource;
 import com.vokerg.voktrader.trade.model.TradeEntity;
 import com.vokerg.voktrader.trade.model.TradeFillEntity;
 import com.vokerg.voktrader.trade.model.TradeOrderEntity;
-import com.vokerg.voktrader.trade.model.TradeOrderStatus;
 import com.vokerg.voktrader.trade.model.TradeSide;
 import com.vokerg.voktrader.trade.model.TradeVenue;
 import com.vokerg.voktrader.trade.persistence.TradeFillRepository;
@@ -175,9 +174,6 @@ public class OrderManager {
     }
 
     private void auditImmediateFill(TradeOrderEntity order) {
-        if (order.getStatus() == TradeOrderStatus.PARTIALLY_FILLED_DONE) {
-            return;
-        }
         try {
             reconciliationService.reconcileOrder(order, OrderReconciliationSource.POST_FILL_AUDIT);
         } catch (RuntimeException ignored) {
