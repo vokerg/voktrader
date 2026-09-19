@@ -29,9 +29,10 @@ Pick the lowest-numbered `READY` task whose dependencies are `DONE`, unless the 
 11. `T023` - unknown submission outcomes. **DONE** in PR #34; ambiguous submissions are quarantined, unresolved exposure blocks acceptance, and operator evidence drives resolution.
 12. `T024` - remove executor calls from DB transactions. **DONE** in PR #35; production LIVE submission is outbox-only and executor network I/O is transaction-detached.
 13. `T025` - rebuild cancellation lifecycle. **DONE** in PR #36; cancellation is restartable, evented, reconcile-before-retry, and fill-race safe.
-14. `T026` - durable-order-lifecycle phase-exit gate. **DONE** in PR #37; lifecycle suites are green, the temporary Java failure baseline is removed, and T030 is now **READY**.
-15. After T055 is DONE, `T054` retained-database rehearsal and `T056` control-plane default-auth proof may proceed in parallel.
-16. `T045` live preflight additionally requires T054 and T056.
+14. `T026` - durable-order-lifecycle phase-exit gate. **DONE** in PR #37; lifecycle suites are green and the temporary Java failure baseline is removed.
+15. `T030` - authenticated user WebSocket consumer. **DONE** in PR #38; private order/trade lifecycle evidence is durable, connection health gates exposed live state, and T031 is now **READY**.
+16. After T055 is DONE, `T054` retained-database rehearsal and `T056` control-plane default-auth proof may proceed in parallel.
+17. `T045` live preflight additionally requires T054 and T056.
 
 Unrelated feature work is frozen while the integrated Java failure baseline is unchanged or worsening. See [`CHECKPOINT-2026-08-03.md`](./CHECKPOINT-2026-08-03.md).
 
@@ -65,12 +66,12 @@ Unrelated feature work is frozen while the integrated Java failure baseline is u
 ## P3 - Exchange truth and settlement ledger
 | Task | Status | Priority | Depends On | Parallelizable | Title |
 | --- | --- | --- | --- | --- | --- |
-| [T030](./PHASE-3-exchange-truth.md#t030) | READY | P0 | T026 | no | Add authenticated user WebSocket consumer |
-| [T031](./PHASE-3-exchange-truth.md#t031) | BLOCKED | P0 | T030 | no | Implement provisional settlement state machine |
+| [T030](./PHASE-3-exchange-truth.md#t030) | DONE | P0 | T026 | no | Add authenticated user WebSocket consumer |
+| [T031](./PHASE-3-exchange-truth.md#t031) | READY | P0 | T030 | no | Implement provisional settlement state machine |
 | [T032](./PHASE-3-exchange-truth.md#t032) | BLOCKED | P0 | T031 | no | Split settled and provisional ledger queries |
 | [T033](./PHASE-3-exchange-truth.md#t033) | BLOCKED | P1 | T030, T031 | no | Remove ambiguous fill association |
 | [T034](./PHASE-3-exchange-truth.md#t034) | BLOCKED | P0 | T030, T031, T023 | no | Build startup reconciliation preflight |
-| [T035](./PHASE-3-exchange-truth.md#t035) | BLOCKED | P1 | T030, T025 | no | Implement exchange dead-man heartbeat |
+| [T035](./PHASE-3-exchange-truth.md#t035) | READY | P1 | T030, T025 | no | Implement exchange dead-man heartbeat |
 
 ## P4 - Protocol currency and control-plane hardening
 | Task | Status | Priority | Depends On | Parallelizable | Title |
@@ -93,7 +94,7 @@ Unrelated feature work is frozen while the integrated Java failure baseline is u
 | Task | Status | Priority | Depends On | Parallelizable | Title |
 | --- | --- | --- | --- | --- | --- |
 | [T060](./PHASE-5-simulation-honesty.md#t060) | DONE | P0 | T050 | no | Replay exact recorded depth levels |
-| [T061](./PHASE-5-simulation-honesty.md#t061) | BLOCKED | P1 | T040, T030 | no | Persist normalized event log |
+| [T061](./PHASE-5-simulation-honesty.md#t061) | READY | P1 | T040, T030 | no | Persist normalized event log |
 | [T062](./PHASE-5-simulation-honesty.md#t062) | BLOCKED | P1 | T060, T061, T016, T042, T041 | no | Build live/replay parity tests and reset comparable baselines |
 | [T063](./PHASE-5-simulation-honesty.md#t063) | BLOCKED | P1 | T060, T031 | no | Implement calibrated execution simulator |
 | [T064](./PHASE-5-simulation-honesty.md#t064) | BLOCKED | P2 | T051, T061 | no | Separate operational and analytical stores |
