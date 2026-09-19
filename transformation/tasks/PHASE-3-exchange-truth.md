@@ -8,13 +8,13 @@ The 2026-08-03 checkpoint requires durable lifecycle phase-exit gate T026 before
 
 ## T030 - Add authenticated user WebSocket consumer
 
-Status: READY
+Status: IN_PROGRESS
 Priority: P0
 Phase: P3 - Exchange truth and settlement ledger
-Owner: unclaimed
-Branch:
-PR:
-Started:
+Owner: openai-gpt-5.6-sol-20260919
+Branch: task/T030-user-websocket
+PR: #38
+Started: 2026-09-19T15:28:18Z
 Completed:
 Depends On: T026
 Parallelizable: no
