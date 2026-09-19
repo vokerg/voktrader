@@ -8,14 +8,14 @@ The 2026-08-03 checkpoint requires durable lifecycle phase-exit gate T026 before
 
 ## T030 - Add authenticated user WebSocket consumer
 
-Status: IN_PROGRESS
+Status: DONE
 Priority: P0
 Phase: P3 - Exchange truth and settlement ledger
 Owner: openai-gpt-5.6-sol-20260919
 Branch: task/T030-user-websocket
 PR: #38
 Started: 2026-09-19T15:28:18Z
-Completed:
+Completed: 2026-09-19T15:39:34Z
 Depends On: T026
 Parallelizable: no
 
@@ -30,9 +30,9 @@ Consume user order/trade lifecycle events as primary exchange truth.
 5. Expose user-WS health and connection generation.
 
 ### Acceptance criteria
-- [ ] User-WS events update local state within one processing cycle.
-- [ ] A dropped connection blocks arming when live orders or provisional fills exist.
-- [ ] REST is reconciliation, not the primary lifecycle source.
+- [x] User-WS events update local state within one processing cycle.
+- [x] A dropped connection blocks arming when live orders or provisional fills exist.
+- [x] REST is reconciliation, not the primary lifecycle source.
 
 ### Required report
 `transformation/reports/T030-YYYY-MM-DD-add-authenticated-user-websocket-consumer.md`
@@ -41,7 +41,7 @@ Consume user order/trade lifecycle events as primary exchange truth.
 
 ## T031 - Implement provisional settlement state machine
 
-Status: BLOCKED
+Status: READY
 Priority: P0
 Phase: P3 - Exchange truth and settlement ledger
 Owner: unclaimed
@@ -168,7 +168,7 @@ Refuse live arming until local and remote truth converge.
 
 ## T035 - Implement exchange dead-man heartbeat
 
-Status: BLOCKED
+Status: READY
 Priority: P1
 Phase: P3 - Exchange truth and settlement ledger
 Owner: unclaimed
