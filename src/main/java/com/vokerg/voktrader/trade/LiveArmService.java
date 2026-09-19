@@ -1,7 +1,10 @@
 package com.vokerg.voktrader.trade;
 
 import com.vokerg.voktrader.executor.ExecutorProperties;
+import com.vokerg.voktrader.polymarket.user.UserWebSocketHealthService;
+import com.vokerg.voktrader.polymarket.user.UserWebSocketSafetyService;
 import com.vokerg.voktrader.time.TimeMachine;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -16,14 +19,28 @@ public class LiveArmService {
 
     private final TradingProperties tradingProperties;
     private final ExecutorProperties executorProperties;
+    private final UserWebSocketSafetyService userWebSocketSafetyService;
+    private final UserWebSocketHealthService userWebSocketHealthService;
 
     private Instant armedAt;
     private Instant expiresAt;
     private String armedAccountId;
 
-    public LiveArmService(TradingProperties tradingProperties, ExecutorProperties executorProperties) {
+    @Autowired
+    public LiveArmService(
+            TradingProperties tradingProperties,
+            ExecutorProperties executorProperties,
+            UserWebSocketSafetyService userWebSocketSafetyService,
+            UserWebSocketHealthService userWebSocketHealthService
+    ) {
         this.tradingProperties = tradingProperties;
         this.executorProperties = executorProperties;
+        this.userWebSocketSafetyService = userWebSocketSafetyService;
+        this.userWebSocketHealthService = userWebSocketHealthService;
+    }
+
+    public LiveArmService(TradingProperties tradingProperties, ExecutorProperties executorProperties) {
+        this(tradingProperties, executorProperties, null, null);
     }
 
     public synchronized LiveArmStatus arm(String accountId) {
@@ -110,6 +127,11 @@ public class LiveArmService {
         }
         if (!expectedAccountConfigured()) {
             blockers.add("expected live account metadata is not configured");
+        }
+        if (userWebSocketSafetyService != null
+                && userWebSocketSafetyService.requiresHealthyStream()
+                && (userWebSocketHealthService == null || !userWebSocketHealthService.snapshot().healthy())) {
+            blockers.add("authenticated user websocket is not healthy while live orders or provisional fills exist");
         }
         Duration ttl = tradingProperties.getLiveArmTtl();
         if (ttl == null || ttl.isZero() || ttl.isNegative()) {
