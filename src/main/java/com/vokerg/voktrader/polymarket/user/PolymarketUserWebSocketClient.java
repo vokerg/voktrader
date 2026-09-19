@@ -170,13 +170,7 @@ public class PolymarketUserWebSocketClient {
     }
 
     private String safeError(Throwable error) {
-        if (error == null) {
-            return "unknown";
-        }
-        String message = error.getMessage();
-        return message == null || message.isBlank()
-                ? error.getClass().getSimpleName()
-                : error.getClass().getSimpleName() + ": " + message;
+        return error == null ? "unknown" : error.getClass().getSimpleName();
     }
 
     private record UserSubscription(
