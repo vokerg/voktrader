@@ -97,11 +97,7 @@ public class UserWebSocketHealthService {
     }
 
     private String safeReason(Throwable cause) {
-        String message = cause.getMessage();
-        if (message == null || message.isBlank()) {
-            return cause.getClass().getSimpleName();
-        }
-        return cause.getClass().getSimpleName() + ": " + message;
+        return cause.getClass().getSimpleName();
     }
 
     public record Snapshot(
