@@ -100,6 +100,12 @@ public class TradeOrderEntity {
     @Column(columnDefinition = "TEXT")
     private String rawResponse;
 
+    private String lastUserWsEventType;
+    private String lastUserWsStatus;
+    private String lastUserWsTradeId;
+    private Instant lastUserWsEventAt;
+    private Long lastUserWsGeneration;
+
     private Instant submittedAt;
     private Instant acknowledgedAt;
     private Instant completedAt;
@@ -396,6 +402,21 @@ public class TradeOrderEntity {
         touch();
     }
 
+    public void recordUserWebSocketEvent(
+            String eventType,
+            String lifecycleStatus,
+            String remoteTradeId,
+            Instant eventAt,
+            long connectionGeneration
+    ) {
+        this.lastUserWsEventType = eventType;
+        this.lastUserWsStatus = lifecycleStatus;
+        this.lastUserWsTradeId = remoteTradeId;
+        this.lastUserWsEventAt = eventAt == null ? TimeMachine.now() : eventAt;
+        this.lastUserWsGeneration = connectionGeneration;
+        touch();
+    }
+
     private void touch() {
         this.updatedAt = TimeMachine.now();
     }
@@ -598,6 +619,26 @@ public class TradeOrderEntity {
 
     public String getRawResponse() {
         return rawResponse;
+    }
+
+    public String getLastUserWsEventType() {
+        return lastUserWsEventType;
+    }
+
+    public String getLastUserWsStatus() {
+        return lastUserWsStatus;
+    }
+
+    public String getLastUserWsTradeId() {
+        return lastUserWsTradeId;
+    }
+
+    public Instant getLastUserWsEventAt() {
+        return lastUserWsEventAt;
+    }
+
+    public Long getLastUserWsGeneration() {
+        return lastUserWsGeneration;
     }
 
     public Instant getSubmittedAt() {
