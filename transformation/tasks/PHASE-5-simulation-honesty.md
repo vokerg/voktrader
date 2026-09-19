@@ -39,7 +39,7 @@ Replace synthetic one-level replay books with persisted full-depth levels.
 
 ## T061 - Persist normalized event log
 
-Status: BLOCKED
+Status: READY
 Priority: P1
 Phase: P5 - Simulation honesty
 Owner: unclaimed
